@@ -1166,7 +1166,7 @@ export default function App() {
                         label="MAX DRAWDOWN"
                         value={maxDD}
                         min={0}
-                        max={50}
+                        max={100}
                         onChange={setMaxDD}
                         detail=""
                         accent="risk"
