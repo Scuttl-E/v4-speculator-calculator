@@ -1830,3 +1830,57 @@ body {
   transform: rotate(-45deg);
 }
 .horizon-step .step-chevron.down { margin-top: -2px; transform: rotate(135deg); }
+
+/* The optimiser output is a compact destination, not another control row. */
+.optimisation-result .optimised-config {
+  position: relative;
+  margin-top: 11px;
+  padding: 13px 12px 12px;
+  border: 1px solid #bd74464d;
+  border-radius: 10px;
+  background:
+    linear-gradient(145deg, #2a2521, #171817 72%),
+    #1b1c1b;
+  box-shadow:
+    inset 0 2px 0 #d4874c55,
+    inset 0 0 0 1px #fff3e50b,
+    0 8px 22px #0005;
+}
+.optimisation-result .optimised-config.previous { opacity: .76; }
+.optimisation-result .optimised-config-head {
+  margin-bottom: 10px;
+  color: #f0e2d3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .085em;
+}
+.optimisation-result .optimised-allocation > div {
+  height: 9px;
+  box-shadow: inset 0 2px 5px #000b, 0 1px #fff3e50b;
+}
+.optimisation-result .optimised-allocation small {
+  margin-top: 7px;
+  color: #c3b5a7;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.optimisation-result .optimised-allocation small b {
+  color: var(--cream);
+  font-size: 15px;
+}
+.optimisation-result .optimised-values {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #f4e8da18;
+}
+.optimisation-result .optimised-values > span {
+  gap: 3px;
+  color: #a99d91;
+  font-size: 10px;
+  letter-spacing: .055em;
+}
+.optimisation-result .optimised-values b {
+  color: var(--cream);
+  font-size: 16px;
+}
+.optimisation-result .optimised-values span:last-child b { color: var(--bright); }

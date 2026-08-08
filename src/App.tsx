@@ -48,8 +48,8 @@ const objectives: Record<Objective, string> = {
 };
 const INITIAL_CONFIG: Config = {
   deposit: 10000,
-  longAllocation: 0.6,
-  longLtv: 0.75,
+  longAllocation: 0.5,
+  longLtv: 0.5,
   shortLtv: 0.5,
   cashbackMode: "spot",
 };
@@ -61,6 +61,7 @@ function Slider({
   onChange,
   detail,
   accent = "amber",
+  signedDisplay = false,
 }: {
   label: string;
   value: number;
@@ -69,34 +70,44 @@ function Slider({
   onChange: (v: number) => void;
   detail: string;
   accent?: string;
+  signedDisplay?: boolean;
 }) {
   const wholeMax = Math.floor(max),
     hasTerminalStop = max > wholeMax,
     sliderMax = hasTerminalStop ? wholeMax + 1 : max,
     sliderValue = hasTerminalStop && value > wholeMax ? sliderMax : value,
     displayValue = hasTerminalStop && value > wholeMax ? +max.toFixed(2) : value,
+    inputValue = signedDisplay ? -displayValue : displayValue,
     snapValue = (next: number) => {
       if (hasTerminalStop && next > wholeMax) return max;
       return Math.min(wholeMax, Math.max(min, Math.round(next)));
     },
     commitValue = (next: number) => onChange(snapValue(next)),
-    stepUp = () =>
-      onChange(
-        hasTerminalStop && value >= wholeMax
-          ? max
-          : Math.min(max, Math.round(value) + 1),
-      ),
-    stepDown = () =>
-      onChange(
-        hasTerminalStop && value > wholeMax
+    stepUp = () => {
+      const next = hasTerminalStop && value > wholeMax
           ? wholeMax
-          : Math.max(min, Math.round(value) - 1),
-      );
+          : signedDisplay
+          ? Math.min(max, Math.round(value) + 1)
+          : Math.min(max, Math.round(value) + 1);
+      onChange(next);
+    },
+    stepDown = () => {
+      const next = signedDisplay
+        ? Math.max(min, Math.round(value) - 1)
+        : hasTerminalStop && value > wholeMax
+          ? wholeMax
+          : Math.max(min, Math.round(value) - 1);
+      onChange(next);
+    },
+    commitInput = (next: number) => {
+      if (!Number.isFinite(next)) return;
+      onChange(signedDisplay ? Math.abs(next) : next);
+    };
   return (
     <div className={`slider-control ${accent}`}>
       <div className="control-label">
         <span>{label}</span>
-        <b>{detail}</b>
+        {detail && <b>{detail}</b>}
       </div>
       <div className="slider-line">
         <input
@@ -115,11 +126,11 @@ function Slider({
         <div className="number-step">
           <input
             type="number"
-            min={min}
-            max={max}
             step={hasTerminalStop ? "0.01" : "1"}
-            value={displayValue}
-            onChange={(e) => commitValue(+e.target.value)}
+            min={signedDisplay ? -max : min}
+            max={signedDisplay ? -min : max}
+            value={inputValue}
+            onChange={(e) => commitInput(+e.target.value)}
           />
           <button
             type="button"
@@ -281,7 +292,7 @@ export default function App() {
     [cashbackPreference, setCashbackPreference] =
       useState<OptimiserCashbackMode>("optimise"),
     [requireBreakeven, setRequireBreakeven] = useState(false),
-    [maxDD, setMaxDD] = useState(10),
+    [maxDD, setMaxDD] = useState(15),
     [advanced, setAdvanced] = useState(false),
     [minMove, setMinMove] = useState(-80),
     [maxMove, setMaxMove] = useState(150),
@@ -479,10 +490,7 @@ export default function App() {
         </div>
         <div className="topbar-actions">
           <div className="status">
-            <b>LOCAL</b>
-            <span>PRICE-ONLY</span>
-            <span>NO FEES</span>
-            <span>NO LIQUIDATION MODEL</span>
+            <span>LOCAL · BASE PRICE MODEL · YIELD &amp; LP FEES EXCLUDED</span>
           </div>
           <button
             type="button"
@@ -782,18 +790,15 @@ export default function App() {
                     </div>
                   ) : (
                     <>
-                      <div className="section-label">
-                        <b>DRAWDOWN LIMIT</b>
-                        <span>Maximum allowed</span>
-                      </div>
                       <Slider
-                        label="RISK LIMIT"
+                        label="MAX DRAWDOWN"
                         value={maxDD}
                         min={0}
                         max={50}
                         onChange={setMaxDD}
-                        detail={`−${maxDD}%`}
+                        detail=""
                         accent="risk"
+                        signedDisplay
                       />
                     </>
                   )}
@@ -1194,7 +1199,7 @@ export default function App() {
                   />
                   <Line
                     dataKey="spot"
-                    name="Held asset"
+                    name="Asset value - spot"
                     stroke="#b8aea3"
                     strokeOpacity={0.78}
                     strokeWidth={1.35}
@@ -1254,8 +1259,8 @@ export default function App() {
                 <span>ASSET MOVE</span>
                 <span className="v4-start">V4 VALUE</span>
                 <span className="v4-end">V4 RETURN</span>
-                <span className="spot-start">SPOT ASSET VALUE</span>
-                <span className="spot-end">SPOT ASSET RETURN</span>
+                <span className="spot-start">ASSET VALUE - SPOT</span>
+                <span className="spot-end">ASSET RETURN - SPOT</span>
                 <span className="edge-cell">V4 EDGE</span>
                 <span>POSITION MIX</span>
               </div>
@@ -1273,6 +1278,7 @@ export default function App() {
                     0.5 *
                     p ** effectiveLeverage(config.longLtv),
                   short = v - cash - long,
+                  settlementLabel = config.cashbackMode === "cash" ? "Cash" : "Spot",
                   compositionTotal =
                     Math.abs(cash) + Math.abs(long) + Math.abs(short) || 1,
                   cashWidth = (Math.abs(cash) / compositionTotal) * 100,
@@ -1297,7 +1303,7 @@ export default function App() {
                     </span>
                     <div
                       className="position-visual"
-                      title={`Cash ${money(cash)}, Long ${money(long)}, Short ${money(short)}`}
+                      title={`${settlementLabel} ${money(cash)}, Long ${money(long)}, Short ${money(short)}`}
                     >
                       <div className="position-stack" aria-hidden="true">
                         <span className="cash" style={{ width: `${cashWidth}%` }} />
@@ -1305,7 +1311,7 @@ export default function App() {
                         <span className="short" style={{ width: `${shortWidth}%` }} />
                       </div>
                       <small>
-                        <span><i className="cash" />{money(cash)}</span>
+                        <span><i className="cash" />{settlementLabel} {money(cash)}</span>
                         <span><i className="long" />{money(long)}</span>
                         <span><i className="short" />{money(short)}</span>
                       </small>
