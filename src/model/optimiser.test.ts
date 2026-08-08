@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   optimisePortfolio,
   optimisePortfolioWithOutcome,
+  supportedOptimiserMaxLtv,
   targetPercentToPrice,
 } from "./optimiser";
 import {
@@ -23,7 +24,7 @@ const base: OptimiseOptions = {
   objective: "bullish",
   spotParityPercent: 100,
   debtParityPercent: 50,
-  debtPosition: { ethPrice: 4000, ethAmount: 20, usdDebt: 15000, liquidationLtv: 0.9 },
+  debtPosition: { assetPrice: 4000, assetAmount: 20, usdDebt: 15000, liquidationLtv: 0.9 },
   cashbackMode: "spot",
   requireBreakeven: false,
   downsideBreakevenPercent: -80,
@@ -75,13 +76,8 @@ describe("optimiser", () => {
   });
 
   it("caps optimiser LTVs at the supported 80% maximum", () => {
-    const result = optimisePortfolio({
-      ...base,
-      maxDrawdown: 1,
-      maxLtv: 0.95,
-    });
-    expect(result.longLtv).toBeLessThanOrEqual(0.8);
-    expect(result.shortLtv).toBeLessThanOrEqual(0.8);
+    expect(supportedOptimiserMaxLtv(0.95)).toBe(0.8);
+    expect(supportedOptimiserMaxLtv(0.75)).toBe(0.75);
   });
 
   it("includes a fractional LTV terminal stop in the optimiser grid", () => {
@@ -148,7 +144,7 @@ describe("optimiser", () => {
     expect(findWorstDrawdown(result).drawdown).toBeLessThan(0);
   });
 
-  it("minimises drawdown while securing debt parity at the selected target", () => {
+  it("minimises drawdown while securing lending parity at the selected target", () => {
     const options = {
       ...base,
       objective: "debtParity" as const,

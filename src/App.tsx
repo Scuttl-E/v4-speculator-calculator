@@ -28,6 +28,13 @@ import {
   isDebtPositionLiquidated,
   type DebtPositionInput,
 } from "./model/debtPosition";
+import {
+  isPerpPositionLiquidated,
+  perpPositionReturn,
+  perpPositionSummary,
+  perpPositionValue,
+  type PerpPositionInput,
+} from "./model/perpPosition";
 import type {
   CashbackMode,
   Config,
@@ -51,7 +58,7 @@ const objectives: Record<Objective, string> = {
   bullish: "Maximise bullish exposure",
   bearish: "Maximise bearish exposure",
   spotParity: "Maximise protection at spot parity",
-  debtParity: "Maximise protection at debt parity",
+  debtParity: "Maximise protection at lending parity",
 };
 const INITIAL_CONFIG: Config = {
   deposit: 10000,
@@ -60,6 +67,21 @@ const INITIAL_CONFIG: Config = {
   shortLtv: 0.5,
   cashbackMode: "spot",
 };
+const DEFAULT_LENDING = {
+  assetPrice: 4000,
+  assetAmount: 20,
+  usdDebt: 15000,
+  liquidationLtv: 90,
+};
+const DEFAULT_PERP: PerpPositionInput = {
+  assetPrice: 1900,
+  averageEntryPrice: 1500,
+  positionSize: 20,
+  margin: 10000,
+  liquidationPrice: 1100,
+  side: "long",
+};
+type ComparisonMode = "base" | "lending" | "perp";
 function Slider({
   label,
   value,
@@ -244,12 +266,22 @@ function ChartTooltip({
   label,
   config,
   debtPosition,
+  comparisonMode,
+  perpPosition,
+  baseAssetValue,
+  showLong,
+  showShort,
 }: {
   active?: boolean;
   payload?: any[];
   label?: number;
   config: Config;
   debtPosition: DebtPositionInput;
+  comparisonMode: ComparisonMode;
+  perpPosition: PerpPositionInput;
+  baseAssetValue: number;
+  showLong: boolean;
+  showShort: boolean;
 }) {
   if (!active || !payload?.length) return null;
   const p = 1 + (label ?? 0) / 100,
@@ -257,28 +289,66 @@ function ChartTooltip({
     spot = config.deposit * p,
     edge = portfolioReturn(p, config) - (p - 1),
     debtReturn = debtPositionReturn(p, debtPosition),
-    liquidated = isDebtPositionLiquidated(p, debtPosition);
+    debtLiquidated = isDebtPositionLiquidated(p, debtPosition),
+    perpReturn = perpPositionReturn(p, perpPosition),
+    perpLiquidated = isPerpPositionLiquidated(p, perpPosition),
+    liquidated = comparisonMode === "perp" ? perpLiquidated : debtLiquidated,
+    assetPrice = comparisonMode === "base" && baseAssetValue > 0
+      ? baseAssetValue
+      : comparisonMode === "lending"
+      ? debtPosition.assetPrice
+      : comparisonMode === "perp"
+        ? perpPosition.assetPrice
+        : null;
   return (
     <div className="chart-tooltip">
-      <small>ASSET MOVE</small>
-      <strong>{pct(p - 1)}</strong>
-      <div>
-        <i className="teal" />
-        V4 STRATEGY <b>{pct(portfolioReturn(p, config))}</b>
-        <em>{money(v4)}</em>
+      <div className="tooltip-asset">
+        <small>ASSET</small>
+        <strong>{assetPrice === null ? `${p.toFixed(3)}×` : money(assetPrice * p)}</strong>
+        <span aria-hidden="true" />
+        <b>{pct(p - 1)}</b>
       </div>
-      <div>
-        <i className="slate" />
-        HELD ASSET <b>{pct(p - 1)}</b>
-        <em>{money(spot)}</em>
+      <div className="tooltip-values">
+        <div className="tooltip-value">
+          <i className="teal" />
+          V4 STRATEGY <b>{pct(portfolioReturn(p, config))}</b>
+          <em>{money(v4)}</em>
+        </div>
+        <div className="tooltip-value">
+          <i className="slate" />
+          HELD ASSET <b>{pct(p - 1)}</b>
+          <em>{money(spot)}</em>
+        </div>
       </div>
-      <div>
-        <i className="debt" />
-        ETH DEBT {liquidated ? <b>LIQUIDATED</b> : <b>{debtReturn === null ? "—" : pct(debtReturn)}</b>}
-      </div>
+      {(showLong || showShort) && (
+        <div className="tooltip-legs">
+          {showLong && <div className="tooltip-value">
+            <i className="long" />
+            LONG V4 <b>{pct(longValue(p, config.longLtv, config.cashbackMode) - 1)}</b>
+            <em>{money(config.deposit * longValue(p, config.longLtv, config.cashbackMode))}</em>
+          </div>}
+          {showShort && <div className="tooltip-value">
+            <i className="short" />
+            SHORT V4 <b>{pct(shortValue(p, config.shortLtv, config.cashbackMode) - 1)}</b>
+            <em>{money(config.deposit * shortValue(p, config.shortLtv, config.cashbackMode))}</em>
+          </div>}
+        </div>
+      )}
       <div className="edge">
-        EDGE VS SPOT <b>{pct(edge).replace("%", " pts")}</b>
+        V4 EDGE VS SPOT <b>{pct(edge).replace("%", " pts")}</b>
       </div>
+      {comparisonMode === "lending" && <div>
+        <i className="debt" />
+        LENDING POSITION {liquidated ? <b>LIQUIDATED</b> : <b>{debtReturn === null ? "—" : pct(debtReturn)}</b>}
+        {!liquidated && <em>{money(debtPositionValue(p, debtPosition))}</em>}
+      </div>}
+      {comparisonMode === "perp" && (
+        <div>
+          <i className="perp" />
+          PERP POSITION <b>{perpLiquidated ? "LIQUIDATED" : perpReturn === null ? "—" : pct(perpReturn)}</b>
+          {!perpLiquidated && <em>{money(perpPositionValue(p, perpPosition))}</em>}
+        </div>
+      )}
     </div>
   );
 }
@@ -290,6 +360,7 @@ export default function App() {
       ...INITIAL_CONFIG,
     }));
   const [mode, setMode] = useState<"manual" | "optimise">("manual"),
+    [comparisonMode, setComparisonMode] = useState<ComparisonMode>("base"),
     [objective, setObjective] = useState<Objective>("bullish"),
     [spotParityMagnitude, setSpotParityMagnitude] = useState(100),
     [debtParityMagnitude, setDebtParityMagnitude] = useState(50),
@@ -304,10 +375,15 @@ export default function App() {
     [showLong, setShowLong] = useState(false),
     [showShort, setShowShort] = useState(false),
     [showDebt, setShowDebt] = useState(true),
-    [ethPrice, setEthPrice] = useState(4000),
-    [ethAmount, setEthAmount] = useState(20),
-    [usdDebt, setUsdDebt] = useState(15000),
-    [liquidationLtv, setLiquidationLtv] = useState(90),
+    [showLiquidationLine, setShowLiquidationLine] = useState(true),
+    [showDrawdownLine, setShowDrawdownLine] = useState(true),
+    [baseAssetValue, setBaseAssetValue] = useState(0),
+    [assetPrice, setAssetPrice] = useState(DEFAULT_LENDING.assetPrice),
+    [assetAmount, setAssetAmount] = useState(DEFAULT_LENDING.assetAmount),
+    [usdDebt, setUsdDebt] = useState(DEFAULT_LENDING.usdDebt),
+    [liquidationLtv, setLiquidationLtv] = useState(DEFAULT_LENDING.liquidationLtv),
+    [perpState, setPerpState] = useState<PerpPositionInput>({ ...DEFAULT_PERP }),
+    [showPerp, setShowPerp] = useState(true),
     [showMaths, setShowMaths] = useState(false),
     [optimising, setOptimising] = useState(false),
     [lastRun, setLastRun] = useState<{
@@ -317,6 +393,9 @@ export default function App() {
       outcome: OptimiseOutcome;
     } | null>(null),
     [optimiseError, setOptimiseError] = useState<string | null>(null);
+  const [persistenceLoaded, setPersistenceLoaded] = useState(
+    () => !window.desktopWindow?.loadInputs,
+  );
   useEffect(() => {
     if (!showMaths) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -325,19 +404,113 @@ export default function App() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [showMaths]);
+  useEffect(() => {
+    const loadInputs = window.desktopWindow?.loadInputs;
+    if (!loadInputs) return;
+    let cancelled = false;
+    const isNumber = (value: unknown): value is number =>
+      typeof value === "number" && Number.isFinite(value);
+    const isConfig = (value: unknown): value is Config => {
+      if (!value || typeof value !== "object") return false;
+      const input = value as Record<string, unknown>;
+      return isNumber(input.deposit) && isNumber(input.longAllocation) &&
+        isNumber(input.longLtv) && isNumber(input.shortLtv) &&
+        (input.cashbackMode === "cash" || input.cashbackMode === "spot");
+    };
+    const isPerp = (value: unknown): value is PerpPositionInput => {
+      if (!value || typeof value !== "object") return false;
+      const input = value as Record<string, unknown>;
+      return isNumber(input.assetPrice) && isNumber(input.averageEntryPrice) &&
+        isNumber(input.positionSize) && isNumber(input.margin) &&
+        isNumber(input.liquidationPrice) &&
+        (input.side === "long" || input.side === "short");
+    };
+    void loadInputs().then((value) => {
+      if (cancelled || !value || typeof value !== "object") return;
+      const saved = value as Record<string, unknown>;
+      if (saved.comparisonMode === "base" || saved.comparisonMode === "lending" || saved.comparisonMode === "perp") setComparisonMode(saved.comparisonMode);
+      if (saved.mode === "manual" || saved.mode === "optimise") setMode(saved.mode);
+      if (isConfig(saved.manualConfig)) setManualConfig(saved.manualConfig);
+      if (isConfig(saved.optimisedConfig)) setOptimisedConfig(saved.optimisedConfig);
+      if (saved.objective === "bullish" || saved.objective === "bearish" || saved.objective === "spotParity" || saved.objective === "debtParity") setObjective(saved.objective);
+      if (isNumber(saved.spotParityMagnitude)) setSpotParityMagnitude(saved.spotParityMagnitude);
+      if (isNumber(saved.debtParityMagnitude)) setDebtParityMagnitude(saved.debtParityMagnitude);
+      if (isNumber(saved.downsideBreakevenMagnitude)) setDownsideBreakevenMagnitude(saved.downsideBreakevenMagnitude);
+      if (isNumber(saved.upsideBreakevenMagnitude)) setUpsideBreakevenMagnitude(saved.upsideBreakevenMagnitude);
+      if (saved.cashbackPreference === "cash" || saved.cashbackPreference === "spot" || saved.cashbackPreference === "optimise") setCashbackPreference(saved.cashbackPreference);
+      if (typeof saved.requireBreakeven === "boolean") setRequireBreakeven(saved.requireBreakeven);
+      if (isNumber(saved.maxDD)) setMaxDD(saved.maxDD);
+      if (isNumber(saved.minMove)) setMinMove(saved.minMove);
+      if (isNumber(saved.maxMove)) setMaxMove(saved.maxMove);
+      if (typeof saved.showLong === "boolean") setShowLong(saved.showLong);
+      if (typeof saved.showShort === "boolean") setShowShort(saved.showShort);
+      if (typeof saved.showDebt === "boolean") setShowDebt(saved.showDebt);
+      if (typeof saved.showPerp === "boolean") setShowPerp(saved.showPerp);
+      if (typeof saved.showLiquidationLine === "boolean") setShowLiquidationLine(saved.showLiquidationLine);
+      if (typeof saved.showDrawdownLine === "boolean") setShowDrawdownLine(saved.showDrawdownLine);
+      if (isNumber(saved.baseAssetValue)) setBaseAssetValue(Math.max(0, saved.baseAssetValue));
+      if (isNumber(saved.assetPrice)) setAssetPrice(saved.assetPrice);
+      if (isNumber(saved.assetAmount)) setAssetAmount(saved.assetAmount);
+      if (isNumber(saved.usdDebt)) setUsdDebt(saved.usdDebt);
+      if (isNumber(saved.liquidationLtv)) setLiquidationLtv(saved.liquidationLtv);
+      if (isPerp(saved.perpState)) setPerpState(saved.perpState);
+    }).finally(() => {
+      if (!cancelled) setPersistenceLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const debtPosition = useMemo<DebtPositionInput>(
-    () => ({ ethPrice, ethAmount, usdDebt, liquidationLtv: liquidationLtv / 100 }),
-    [ethPrice, ethAmount, usdDebt, liquidationLtv],
+    () => ({ assetPrice, assetAmount, usdDebt, liquidationLtv: liquidationLtv / 100 }),
+    [assetPrice, assetAmount, usdDebt, liquidationLtv],
   );
   const debtSummary = useMemo(
     () => debtPositionSummary(debtPosition),
     [debtPosition],
   );
-  const comparisonIsValid = debtSummary.netEquity > 0;
+  const perpSummary = useMemo(() => perpPositionSummary(perpState), [perpState]);
+  const perpInputsAreValid =
+    Number.isFinite(perpState.assetPrice) && perpState.assetPrice > 0 &&
+    Number.isFinite(perpState.averageEntryPrice) && perpState.averageEntryPrice > 0 &&
+    Number.isFinite(perpState.positionSize) && perpState.positionSize > 0 &&
+    Number.isFinite(perpState.margin) && perpState.margin >= 0 &&
+    Number.isFinite(perpState.liquidationPrice) && perpState.liquidationPrice > 0;
+  useEffect(() => {
+    const saveInputs = window.desktopWindow?.saveInputs;
+    if (!persistenceLoaded || !saveInputs) return;
+    const timer = window.setTimeout(() => {
+      void saveInputs({
+        comparisonMode, mode, manualConfig, optimisedConfig, objective,
+        spotParityMagnitude, debtParityMagnitude, downsideBreakevenMagnitude,
+        upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDD,
+        minMove, maxMove, showLong, showShort, showDebt, showPerp,
+        showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
+        usdDebt, liquidationLtv, perpState,
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    assetAmount, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, debtParityMagnitude,
+    downsideBreakevenMagnitude, liquidationLtv, manualConfig, maxDD, maxMove,
+    minMove, mode, objective, optimisedConfig, perpState, persistenceLoaded,
+    requireBreakeven, showDebt, showDrawdownLine, showLiquidationLine, showLong,
+    showPerp, showShort, spotParityMagnitude, upsideBreakevenMagnitude, usdDebt,
+  ]);
+  const comparisonIsValid = comparisonMode === "base"
+    ? true
+    : comparisonMode === "lending"
+      ? debtSummary.netEquity > 0
+      : perpInputsAreValid && perpSummary.currentEquity > 0;
   const baseConfig = mode === "manual" ? manualConfig : optimisedConfig;
   const config = useMemo(
-    () => ({ ...baseConfig, deposit: Math.max(0, debtSummary.netEquity) }),
-    [baseConfig, debtSummary.netEquity],
+    () => ({
+      ...baseConfig,
+      deposit: comparisonMode === "lending"
+        ? Math.max(0, debtSummary.netEquity)
+        : comparisonMode === "perp"
+          ? Math.max(0, perpSummary.currentEquity)
+          : baseConfig.deposit,
+    }),
+    [baseConfig, comparisonMode, debtSummary.netEquity, perpSummary.currentEquity],
   );
   const displayedCashbackMode =
     mode === "manual" || cashbackPreference === "optimise"
@@ -355,11 +528,16 @@ export default function App() {
         { length: 180 },
         (_, i) => minMove + ((maxMove - minMove) * i) / 179,
       );
+      const liquidationMove = comparisonMode === "lending"
+        ? debtSummary.liquidationAssetMove
+        : comparisonMode === "perp"
+          ? perpSummary.liquidationAssetMove
+          : null;
       if (
-        debtSummary.liquidationAssetMove !== null &&
-        debtSummary.liquidationAssetMove >= minMove &&
-        debtSummary.liquidationAssetMove <= maxMove
-      ) moves.push(debtSummary.liquidationAssetMove);
+        liquidationMove !== null &&
+        liquidationMove >= minMove &&
+        liquidationMove <= maxMove
+      ) moves.push(liquidationMove);
       return [...new Set(moves)].sort((a, b) => a - b).map((move) => {
         const
           p = 1 + move / 100;
@@ -371,19 +549,28 @@ export default function App() {
           short:
             (shortValue(p, config.shortLtv, config.cashbackMode) - 1) * 100,
           debt:
-            isDebtPositionLiquidated(p, debtPosition) &&
+            comparisonMode === "lending" && isDebtPositionLiquidated(p, debtPosition) &&
             move !== debtSummary.liquidationAssetMove
               ? null
-              : (debtPositionReturn(p, debtPosition) ?? 0) * 100,
+              : comparisonMode === "lending"
+                ? (debtPositionReturn(p, debtPosition) ?? 0) * 100
+                : null,
+          perp:
+            comparisonMode === "perp" && isPerpPositionLiquidated(p, perpState) &&
+            move !== perpSummary.liquidationAssetMove
+              ? null
+              : comparisonMode === "perp"
+                ? (perpPositionReturn(p, perpState) ?? 0) * 100
+                : null,
         };
       });
     },
-    [config, debtPosition, debtSummary.liquidationAssetMove, minMove, maxMove],
+    [comparisonMode, config, debtPosition, debtSummary.liquidationAssetMove, minMove, maxMove, perpState, perpSummary.liquidationAssetMove],
   );
   const yAxisMax = useMemo(() => {
     const highest = Math.max(
       0,
-      ...points.flatMap((point) => [point.v4, point.spot, point.long, point.short, point.debt ?? 0]),
+      ...points.flatMap((point) => [point.v4, point.spot, point.long, point.short, point.debt ?? 0, point.perp ?? 0]),
     );
     const step = highest <= 200 ? 50 : highest <= 500 ? 100 : highest <= 1000 ? 200 : 500;
     return Math.max(step, Math.ceil(highest / step) * step);
@@ -405,7 +592,52 @@ export default function App() {
     update("cashbackMode", cashbackMode);
     if (mode === "optimise") setCashbackPreference(cashbackMode);
   };
+  const activeComparisonIsDefault = comparisonMode === "base"
+    ? config.deposit === INITIAL_CONFIG.deposit && baseAssetValue === 0
+    : comparisonMode === "lending"
+      ? assetPrice === DEFAULT_LENDING.assetPrice &&
+        assetAmount === DEFAULT_LENDING.assetAmount &&
+        usdDebt === DEFAULT_LENDING.usdDebt &&
+        liquidationLtv === DEFAULT_LENDING.liquidationLtv
+      : perpState.assetPrice === DEFAULT_PERP.assetPrice &&
+        perpState.averageEntryPrice === DEFAULT_PERP.averageEntryPrice &&
+        perpState.positionSize === DEFAULT_PERP.positionSize &&
+        perpState.margin === DEFAULT_PERP.margin &&
+        perpState.liquidationPrice === DEFAULT_PERP.liquidationPrice &&
+        perpState.side === DEFAULT_PERP.side;
+  const resetActiveComparison = () => {
+    if (comparisonMode === "base") {
+      update("deposit", INITIAL_CONFIG.deposit);
+      setBaseAssetValue(0);
+      return;
+    }
+    if (comparisonMode === "lending") {
+      setAssetPrice(DEFAULT_LENDING.assetPrice);
+      setAssetAmount(DEFAULT_LENDING.assetAmount);
+      setUsdDebt(DEFAULT_LENDING.usdDebt);
+      setLiquidationLtv(DEFAULT_LENDING.liquidationLtv);
+      return;
+    }
+    setPerpState({ ...DEFAULT_PERP });
+  };
+  const persistInputsNow = () => window.desktopWindow?.saveInputs({
+    comparisonMode, mode, manualConfig, optimisedConfig, objective,
+    spotParityMagnitude, debtParityMagnitude, downsideBreakevenMagnitude,
+    upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDD,
+    minMove, maxMove, showLong, showShort, showDebt, showPerp,
+    showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
+    usdDebt, liquidationLtv, perpState,
+  });
+  const closeApplication = () => {
+    if (!persistenceLoaded) return window.desktopWindow?.close();
+    void persistInputsNow()?.catch(() => undefined).finally(() => window.desktopWindow?.close());
+  };
+  const selectComparisonMode = (nextMode: ComparisonMode) => {
+    setComparisonMode(nextMode);
+    if (nextMode !== "lending" && objective === "debtParity") setObjective("bullish");
+  };
   const optimisationInputs = {
+    comparisonMode,
     deposit: config.deposit,
     maxDrawdown: objective === "spotParity" || objective === "debtParity" ? null : maxDD,
     objective,
@@ -413,10 +645,11 @@ export default function App() {
       objective === "spotParity" ? spotParityMagnitude : null,
     debtParityPercent:
       objective === "debtParity" ? debtParityMagnitude : null,
-    ethPrice,
-    ethAmount,
-    usdDebt,
-    liquidationLtv,
+    assetPrice: comparisonMode === "lending" ? assetPrice : null,
+    assetAmount: comparisonMode === "lending" ? assetAmount : null,
+    usdDebt: comparisonMode === "lending" ? usdDebt : null,
+    liquidationLtv: comparisonMode === "lending" ? liquidationLtv : null,
+    perpState: comparisonMode === "perp" ? perpState : null,
     cashbackMode: cashbackPreference,
     requireBreakeven,
     downsideBreakevenPercent: requireBreakeven
@@ -460,7 +693,7 @@ export default function App() {
         : lastRun &&
             lastRun.inputs.debtParityPercent !==
               (objective === "debtParity" ? debtParityMagnitude : null)
-          ? "Debt parity target changed"
+          ? "Lending parity target changed"
       : lastRun &&
           lastRun.inputs.maxDrawdown !==
             (objective === "spotParity" || objective === "debtParity" ? null : maxDD)
@@ -549,9 +782,24 @@ export default function App() {
   return (
     <main>
       <header className="topbar">
-        <div className="wordmark">
-          <i />
-          V4 SPECULATOR <span>PRICE MODEL</span>
+        <div className="topbar-brand">
+          <div className="wordmark">
+            <i />
+            V4 SPECULATOR <span>PRICE MODEL</span>
+          </div>
+          <div className="comparison-modes" aria-label="Comparison mode">
+            <button className={comparisonMode === "base" ? "on" : ""} onClick={() => selectComparisonMode("base")}>BASE</button>
+            <button className={comparisonMode === "lending" ? "on" : ""} onClick={() => selectComparisonMode("lending")}>LENDING POSITION</button>
+            <button className={comparisonMode === "perp" ? "on" : ""} onClick={() => selectComparisonMode("perp")}>PERP POSITION</button>
+          </div>
+          <button
+            className="comparison-reset"
+            disabled={activeComparisonIsDefault}
+            onClick={resetActiveComparison}
+            title="Reset current comparison inputs"
+          >
+            RESET
+          </button>
         </div>
         <div className="topbar-actions">
           <div className="status">
@@ -573,7 +821,7 @@ export default function App() {
             className="window-close"
             aria-label="Close application"
             title="Close"
-            onClick={() => window.desktopWindow?.close()}
+            onClick={closeApplication}
           >
             <span />
           </button>
@@ -713,16 +961,35 @@ export default function App() {
           </div>
           <div className="control-group capital-settlement">
             <div className="control-group-title">CAPITAL &amp; SETTLEMENT</div>
+            {comparisonMode === "base" && (
+              <>
+                <section className="compact-control">
+                  <label className="field-label">V4 DEPOSIT</label>
+                  <div className="deposit-input">
+                    <span>$</span>
+                    <input type="number" min="0" value={config.deposit} onChange={(e) => update("deposit", Math.max(0, +e.target.value || 0))} />
+                  </div>
+                </section>
+                <section className="compact-control base-asset-value">
+                  <label className="field-label">ASSET VALUE <small>Optional</small></label>
+                  <div className="deposit-input">
+                    <span>$</span>
+                    <input type="number" min="0" value={baseAssetValue || ""} placeholder="Optional" aria-label="Optional current asset value" onChange={(e) => setBaseAssetValue(Math.max(0, +e.target.value || 0))} />
+                  </div>
+                </section>
+              </>
+            )}
+            {comparisonMode === "lending" && <>
             <section className="compact-control debt-input-row">
-              <label className="field-label">ETH PRICE
+              <label className="field-label">ASSET PRICE
                 <div className="deposit-input">
                   <span>$</span>
-                  <input type="number" min="0" value={ethPrice} onChange={(e) => setEthPrice(Math.max(0, +e.target.value || 0))} />
+                  <input type="number" min="0" value={assetPrice} onChange={(e) => setAssetPrice(Math.max(0, +e.target.value || 0))} />
                 </div>
               </label>
-              <label className="field-label">ETH AMOUNT
+              <label className="field-label">ASSET AMOUNT
                 <div className="deposit-input">
-                  <input type="number" min="0" step="0.01" value={ethAmount} onChange={(e) => setEthAmount(Math.max(0, +e.target.value || 0))} />
+                  <input type="number" min="0" step="0.01" value={assetAmount} onChange={(e) => setAssetAmount(Math.max(0, +e.target.value || 0))} />
                 </div>
               </label>
             </section>
@@ -744,6 +1011,41 @@ export default function App() {
               <label className="field-label">V4 DEPOSIT <small>Derived from net equity</small></label>
               <div className="deposit-input"><span>$</span><input type="number" value={Math.max(0, config.deposit)} readOnly aria-label="Derived V4 deposit" /></div>
             </section>
+            </>}
+            {comparisonMode === "perp" && <>
+              <section className="compact-control debt-input-row">
+                <label className="field-label">CURRENT ASSET PRICE
+                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.assetPrice} onChange={(e) => setPerpState((current) => ({ ...current, assetPrice: Math.max(0, +e.target.value || 0) }))} /></div>
+                </label>
+                <label className="field-label">POSITION SIZE
+                  <div className="deposit-input"><input type="number" min="0" step="0.01" value={perpState.positionSize} onChange={(e) => setPerpState((current) => ({ ...current, positionSize: Math.max(0, +e.target.value || 0) }))} /></div>
+                </label>
+              </section>
+              <section className="compact-control perp-position-row">
+                <div className="perp-side-control">
+                  <label className="field-label">POSITION</label>
+                  <div className="segments cashback-segments">
+                    <button className={perpState.side === "long" ? "on" : ""} onClick={() => setPerpState((current) => ({ ...current, side: "long" }))}>Long</button>
+                    <button className={perpState.side === "short" ? "on" : ""} onClick={() => setPerpState((current) => ({ ...current, side: "short" }))}>Short</button>
+                  </div>
+                </div>
+                <label className="field-label">AVERAGE ENTRY PRICE
+                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.averageEntryPrice} onChange={(e) => setPerpState((current) => ({ ...current, averageEntryPrice: Math.max(0, +e.target.value || 0) }))} /></div>
+                </label>
+              </section>
+              <section className="compact-control debt-inputs">
+                <label className="field-label">MARGIN / COLLATERAL
+                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.margin} onChange={(e) => setPerpState((current) => ({ ...current, margin: Math.max(0, +e.target.value || 0) }))} /></div>
+                </label>
+                <label className="field-label">LIQUIDATION PRICE
+                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.liquidationPrice} onChange={(e) => setPerpState((current) => ({ ...current, liquidationPrice: Math.max(0, +e.target.value || 0) }))} /></div>
+                </label>
+              </section>
+              <section className="compact-control derived-deposit">
+                <label className="field-label">V4 DEPOSIT <small>Derived from current equity</small></label>
+                <div className="deposit-input"><span>$</span><input type="number" value={Math.max(0, config.deposit)} readOnly aria-label="Derived V4 deposit" /></div>
+              </section>
+            </>}
             <section className="compact-control">
               <div className="section-label">
                 <b>CASHBACK</b>
@@ -854,7 +1156,7 @@ export default function App() {
                     <div className="risk-context">
                       <i>∿</i>
                       <span>
-                        <b>{objective === "debtParity" ? "Debt parity is setting drawdown." : "Spot parity is setting drawdown."}</b>
+                        <b>{objective === "debtParity" ? "Lending parity is setting drawdown." : "Spot parity is setting drawdown."}</b>
                         Choose Bullish or Bearish to set a hard limit.
                       </span>
                     </div>
@@ -921,11 +1223,13 @@ export default function App() {
                     value={objective}
                     onChange={(e) => setObjective(e.target.value as Objective)}
                   >
-                    {Object.entries(objectives).map(([v, n]) => (
+                    {Object.entries(objectives)
+                      .filter(([v]) => comparisonMode === "lending" || v !== "debtParity")
+                      .map(([v, n]) => (
                       <option value={v} key={v}>
                         {n}
                       </option>
-                    ))}
+                      ))}
                   </select>
                   {objective === "spotParity" && (
                     <div className="spot-parity-control">
@@ -1019,9 +1323,9 @@ export default function App() {
                         edge = parity.v4Value - parity.debtValue;
                       return (
                         <div className="spot-parity-result debt-parity-result">
-                          <b>DEBT PARITY SECURED</b>
+                          <b>LENDING PARITY SECURED</b>
                           <span>
-                            At +{parity.targetPercent}% ETH · debt {money(parity.debtValue)} · V4 {money(parity.v4Value)} · edge {money(edge)} / {pct(edge / parity.debtValue)}
+                            At +{parity.targetPercent}% asset move · lending position {money(parity.debtValue)} · V4 {money(parity.v4Value)} · edge {money(edge)} / {pct(edge / parity.debtValue)}
                           </span>
                         </div>
                       );
@@ -1120,7 +1424,7 @@ export default function App() {
           {!comparisonIsValid ? (
             <div className="panel invalid-comparison">
               <b>COMPARISON UNAVAILABLE</b>
-              <span>Repay enough USD debt or add ETH collateral so net equity is above $0.</span>
+              <span>{comparisonMode === "perp" ? "Enter valid mark, entry, size, margin and liquidation values; current perp equity must remain above $0 to compare with V4." : "Repay enough debt or add asset collateral so net equity is above $0."}</span>
             </div>
           ) : <>
           <div className="readouts">
@@ -1158,7 +1462,8 @@ export default function App() {
               <span><i className="spot" /> Asset value - spot</span>
               <span><i className="long" /> {longControlLabel}</span>
               <span><i className="short" /> {shortControlLabel}</span>
-              <span><i className="debt" /> ETH debt position</span>
+              {comparisonMode === "lending" && <span><i className="debt" /> Lending Position</span>}
+              {comparisonMode === "perp" && <span><i className="perp" /> Perp position</span>}
             </div>
           </div>
           <div className="panel chart-panel">
@@ -1186,14 +1491,38 @@ export default function App() {
                   />{" "}
                   {shortControlLabel}
                 </label>
-                <label>
+                {comparisonMode === "lending" && <label>
                   <input
                     type="checkbox"
                     checked={showDebt}
                     onChange={(e) => setShowDebt(e.target.checked)}
                   />{" "}
-                  ETH debt position
-                </label>
+                  Lending Position
+                </label>}
+                {comparisonMode === "perp" && <label>
+                  <input
+                    type="checkbox"
+                    checked={showPerp}
+                    onChange={(e) => setShowPerp(e.target.checked)}
+                  />{" "}
+                  Perp position
+                </label>}
+                {comparisonMode !== "base" && <label>
+                  <input
+                    type="checkbox"
+                    checked={showLiquidationLine}
+                    onChange={(e) => setShowLiquidationLine(e.target.checked)}
+                  />{" "}
+                  Liquidation line
+                </label>}
+                {mode === "optimise" && objective !== "spotParity" && objective !== "debtParity" && <label>
+                  <input
+                    type="checkbox"
+                    checked={showDrawdownLine}
+                    onChange={(e) => setShowDrawdownLine(e.target.checked)}
+                  />{" "}
+                  Drawdown limit
+                </label>}
                 <div className="chart-range-control">
                   <b>RANGE</b>
                   <ChartRangeInput
@@ -1260,7 +1589,7 @@ export default function App() {
                     tick={{ fontSize: 12, fill: "#9b9187" }}
                     label={{ value: "Portfolio return", angle: -90, position: "insideLeft", fill: "#9b9187", fontSize: 12 }}
                   />
-                  <Tooltip content={<ChartTooltip config={config} debtPosition={debtPosition} />} />
+                  <Tooltip content={<ChartTooltip config={config} debtPosition={debtPosition} comparisonMode={comparisonMode} perpPosition={perpState} baseAssetValue={baseAssetValue} showLong={showLong} showShort={showShort} />} />
                   <ReferenceLine y={0} stroke="#7e756c" strokeOpacity={0.72} />
                   <ReferenceLine
                     x={0}
@@ -1268,18 +1597,53 @@ export default function App() {
                     strokeOpacity={0.72}
                     strokeWidth={1.5}
                   />
-                  {showDebt && debtSummary.liquidationAssetMove !== null &&
+                  {comparisonMode === "lending" && showDebt && showLiquidationLine && debtSummary.liquidationAssetMove !== null &&
                     debtSummary.liquidationAssetMove >= minMove &&
                     debtSummary.liquidationAssetMove <= maxMove && (
-                      <ReferenceDot
-                        x={debtSummary.liquidationAssetMove}
-                        y={(debtPositionReturn(debtSummary.liquidationPriceRatio ?? 1, debtPosition) ?? 0) * 100}
-                        r={5}
-                        fill="#c4b17d"
-                        stroke="#151616"
-                      />
+                      <>
+                        <ReferenceLine
+                          x={debtSummary.liquidationAssetMove}
+                          stroke="#c4b17d"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: `LENDING LIQUIDATION · ${money(debtSummary.liquidationPrice ?? 0)} · ${pct(debtSummary.liquidationAssetMove / 100)}`,
+                            fill: "#c8b991",
+                            fontSize: 10,
+                          }}
+                        />
+                        <ReferenceDot
+                          x={debtSummary.liquidationAssetMove}
+                          y={(debtPositionReturn(debtSummary.liquidationPriceRatio ?? 1, debtPosition) ?? 0) * 100}
+                          r={5}
+                          fill="#c4b17d"
+                          stroke="#151616"
+                        />
+                      </>
                     )}
-                  {mode === "optimise" && objective !== "spotParity" && objective !== "debtParity" && (
+                  {comparisonMode === "perp" && showPerp && showLiquidationLine && perpSummary.liquidationAssetMove !== null &&
+                    perpSummary.liquidationAssetMove >= minMove &&
+                    perpSummary.liquidationAssetMove <= maxMove && (
+                      <>
+                        <ReferenceLine
+                          x={perpSummary.liquidationAssetMove}
+                          stroke="#c96d58"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: `PERP LIQUIDATION · ${perpState.side.toUpperCase()} · ${money(perpState.liquidationPrice)} · ${pct(perpSummary.liquidationAssetMove / 100)}`,
+                            fill: "#c98c78",
+                            fontSize: 10,
+                          }}
+                        />
+                        <ReferenceDot
+                          x={perpSummary.liquidationAssetMove}
+                          y={(perpPositionReturn(perpSummary.liquidationPriceRatio ?? 1, perpState) ?? 0) * 100}
+                          r={5}
+                          fill="#cf7961"
+                          stroke="#151616"
+                        />
+                      </>
+                    )}
+                  {mode === "optimise" && showDrawdownLine && objective !== "spotParity" && objective !== "debtParity" && (
                     <ReferenceLine
                       y={-maxDD}
                       stroke="#a55f47"
@@ -1335,13 +1699,13 @@ export default function App() {
                       <div className="spot-parity-note">
                         <i>≋</i>
                         <span>
-                          Match the ETH debt position at the selected target,
+                          Match the lending position at the selected target,
                           then maximise downside protection.
                         </span>
                       </div>
                       <HorizonInput
-                        label="DEBT PARITY TARGET"
-                        detail="Match the debt position if ETH rises"
+                        label="LENDING PARITY TARGET"
+                        detail="Match the lending position if the asset rises"
                         value={debtParityMagnitude}
                         min={1}
                         max={2000}
@@ -1350,11 +1714,22 @@ export default function App() {
                       />
                     </div>
                   )}
-                  {showDebt && (
+                  {comparisonMode === "lending" && showDebt && (
                     <Line
                       dataKey="debt"
-                      name="ETH debt position"
+                      name="Lending Position"
                       stroke="#c4b17d"
+                      strokeWidth={2.25}
+                      dot={false}
+                      connectNulls={false}
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {comparisonMode === "perp" && showPerp && (
+                    <Line
+                      dataKey="perp"
+                      name="Perp position"
+                      stroke="#cf7961"
                       strokeWidth={2.25}
                       dot={false}
                       connectNulls={false}
@@ -1379,12 +1754,16 @@ export default function App() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="panel scenarios">
+          <div className={`panel scenarios comparison-${comparisonMode}`}>
             <div className="panel-head">
               <div>
                 <b>SCENARIO ANALYSIS</b>
                 <span>
-                  V4 strategy, spot asset and ETH debt position compared at the same price moves
+                  {comparisonMode === "base"
+                    ? "V4 strategy compared with the underlying spot asset"
+                    : comparisonMode === "lending"
+                      ? "V4 strategy, spot asset and lending position compared at the same price moves"
+                      : "V4 strategy, spot asset and perp position compared at the same price moves"}
                 </span>
               </div>
             </div>
@@ -1396,7 +1775,8 @@ export default function App() {
                 <span className="spot-start">ASSET VALUE - SPOT</span>
                 <span className="spot-end">ASSET RETURN - SPOT</span>
                 <span className="edge-cell">V4 EDGE</span>
-                <span className="debt-cell">ETH DEBT POSITION</span>
+                {comparisonMode === "lending" && <span className="debt-cell">LENDING POSITION</span>}
+                {comparisonMode === "perp" && <span className="debt-cell">PERP POSITION</span>}
               </div>
               {scenarios.map((p) => {
                 const v = dollarValue(p, config),
@@ -1423,7 +1803,10 @@ export default function App() {
                     className={`scenario-row ${p < 1 ? "down" : "up"}`}
                     key={p}
                   >
-                    <strong>{pct(p - 1)}</strong>
+                    <span className="scenario-asset-move">
+                      <strong>{pct(p - 1)}</strong>
+                      {comparisonMode === "base" && baseAssetValue > 0 && <small>{money(baseAssetValue * p)}</small>}
+                    </span>
                     <b className="v4-start">{money(v)}</b>
                     <span className="v4-end">
                       {pct(portfolioReturn(p, config))}
@@ -1435,19 +1818,26 @@ export default function App() {
                     >
                       {pct(edge).replace("%", " pts")}
                     </span>
-                    <span className="debt-cell debt-scenario">
+                    {comparisonMode === "lending" && <span className="debt-cell debt-scenario">
                       {isDebtPositionLiquidated(p, debtPosition) ? (
                         <><b>LIQUIDATED</b><small>{liquidationLtv}% LTV reached</small></>
                       ) : (
                         <><b>{money(debtPositionValue(p, debtPosition))}</b><small>{pct(debtPositionReturn(p, debtPosition) ?? 0)}</small></>
                       )}
-                    </span>
+                    </span>}
+                    {comparisonMode === "perp" && <span className="debt-cell debt-scenario">
+                      {isPerpPositionLiquidated(p, perpState) ? (
+                        <><b>LIQUIDATED</b><small>Liquidation at {perpSummary.liquidationAssetMove === null ? "—" : pct(perpSummary.liquidationAssetMove / 100)}</small></>
+                      ) : (
+                        <><b>{money(perpPositionValue(p, perpState))}</b><small>{pct(perpPositionReturn(p, perpState) ?? 0)}</small></>
+                      )}
+                    </span>}
                   </div>
                 );
               })}
             </div>
-            <section className="scenario-debt-summary">
-              <div className="section-label"><b>ETH DEBT POSITION</b><span>{liquidationLtv}% liquidation LTV</span></div>
+            {comparisonMode === "lending" && <section className="scenario-debt-summary">
+              <div className="section-label"><b>LENDING POSITION</b><span>{liquidationLtv}% liquidation LTV</span></div>
               <div className="debt-summary-grid">
                 <span>COLLATERAL <b>{money(debtSummary.grossCollateral)}</b></span>
                 <span>DEBT <b>{money(usdDebt)}</b></span>
@@ -1457,7 +1847,21 @@ export default function App() {
                 <span>LIQUIDATION MOVE <b>{debtSummary.liquidationAssetMove === null ? "—" : pct(debtSummary.liquidationAssetMove / 100)}</b></span>
               </div>
               {!comparisonIsValid && <p className="debt-invalid">Net equity must remain above $0 to compare with V4.</p>}
-            </section>
+            </section>}
+            {comparisonMode === "perp" && <section className="scenario-debt-summary">
+              <div className="section-label"><b>PERP POSITION</b><span>{perpState.side.toUpperCase()}</span></div>
+              <div className="debt-summary-grid">
+                <span>NOTIONAL <b>{money(perpSummary.notional)}</b></span>
+                <span>MARGIN <b>{money(perpState.margin)}</b></span>
+                <span>UNREALISED PNL <b>{money(perpSummary.unrealisedPnl)}</b></span>
+                <span>CURRENT EQUITY <b>{money(perpSummary.currentEquity)}</b></span>
+                <span>EFFECTIVE EXPOSURE <b>{perpSummary.effectiveExposure === null ? "—" : `${perpSummary.effectiveExposure.toFixed(2)}×`}</b></span>
+                <span>LIQUIDATION PRICE <b>{money(perpState.liquidationPrice)}</b></span>
+                <span>LIQUIDATION MOVE <b>{perpSummary.liquidationAssetMove === null ? "—" : pct(perpSummary.liquidationAssetMove / 100)}</b></span>
+              </div>
+              {perpSummary.liquidationOnUnexpectedSide && <p className="debt-invalid">Liquidation price is on the unexpected side for this {perpState.side}.</p>}
+              {!comparisonIsValid && <p className="debt-invalid">Current equity must remain above $0 to compare with V4.</p>}
+            </section>}
           </div>
           </>}
         </section>

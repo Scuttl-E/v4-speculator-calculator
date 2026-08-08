@@ -6,9 +6,9 @@ import {
   isDebtPositionLiquidated,
 } from "./debtPosition";
 
-const position = { ethPrice: 4000, ethAmount: 20, usdDebt: 15000 };
+const position = { assetPrice: 4000, assetAmount: 20, usdDebt: 15000 };
 
-describe("ETH debt position", () => {
+describe("lending position", () => {
   it("derives collateral, net equity, LTV and liquidation threshold", () => {
     const summary = debtPositionSummary(position);
     expect(summary.grossCollateral).toBe(80000);

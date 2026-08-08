@@ -71,6 +71,9 @@ const steppedValues = (min: number, max: number, step: number) => {
   return values;
 };
 
+export const supportedOptimiserMaxLtv = (requestedMaxLtv: number) =>
+  Math.min(requestedMaxLtv, MAX_V4_LTV);
+
 export function optimisePortfolioWithOutcome(
   options: OptimiseOptions,
 ): OptimiseOutcome {
@@ -84,7 +87,7 @@ export function optimisePortfolioWithOutcome(
   if (options.spotParityPercent <= 0)
     throw new RangeError("Spot parity target must be greater than 0%");
   if (options.debtParityPercent <= -100)
-    throw new RangeError("Debt parity target must be greater than -100%");
+    throw new RangeError("Lending parity target must be greater than -100%");
 
   const bearishPrice = targetPercentToPrice(-75),
     bullishPrice = targetPercentToPrice(200),
@@ -97,7 +100,7 @@ export function optimisePortfolioWithOutcome(
       ? (["cash", "spot"] as const)
       : ([options.cashbackMode] as const);
   const step = 0.01;
-  const ltvValues = steppedValues(0.5, Math.min(options.maxLtv, MAX_V4_LTV), step);
+  const ltvValues = steppedValues(0.5, supportedOptimiserMaxLtv(options.maxLtv), step);
   let bestWithin: Config | undefined,
     bestWithinScore = -Infinity,
     bestWithinSecondaryScore = -Infinity,
@@ -262,7 +265,7 @@ export function optimisePortfolioWithOutcome(
           : null,
       failure:
         options.objective === "debtParity"
-          ? `Debt parity not reached at +${options.debtParityPercent}%. Best V4 value ${bestDebtAttempt ? `$${bestDebtAttempt.value.toFixed(0)}` : "is unavailable"}; debt position $${debtParityValue.toFixed(0)}; shortfall ${bestDebtAttempt ? `$${Math.max(0, debtParityValue - bestDebtAttempt.value).toFixed(0)}` : "unavailable"}.`
+          ? `Lending parity not reached at +${options.debtParityPercent}%. Best V4 value ${bestDebtAttempt ? `$${bestDebtAttempt.value.toFixed(0)}` : "is unavailable"}; lending position $${debtParityValue.toFixed(0)}; shortfall ${bestDebtAttempt ? `$${Math.max(0, debtParityValue - bestDebtAttempt.value).toFixed(0)}` : "unavailable"}.`
           : options.objective === "spotParity"
           ? `No configuration can match held spot at +${options.spotParityPercent}% while satisfying the active breakeven and strategy constraints. Try lowering the parity target, widening the breakeven horizon or changing cashback.`
           : options.requireBreakeven

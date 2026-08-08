@@ -20,8 +20,8 @@ export interface OptimiseOptions {
   spotParityPercent: number;
   debtParityPercent: number;
   debtPosition: {
-    ethPrice: number;
-    ethAmount: number;
+    assetPrice: number;
+    assetAmount: number;
     usdDebt: number;
     liquidationLtv: number;
   };

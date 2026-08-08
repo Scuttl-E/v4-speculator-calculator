@@ -1,6 +1,6 @@
 export interface DebtPositionInput {
-  ethPrice: number;
-  ethAmount: number;
+  assetPrice: number;
+  assetAmount: number;
   usdDebt: number;
   liquidationLtv?: number;
 }
@@ -18,13 +18,13 @@ export const LIQUIDATION_LTV = 0.9;
 
 export function debtPositionSummary(input: DebtPositionInput): DebtPositionSummary {
   const liquidationLtv = input.liquidationLtv ?? LIQUIDATION_LTV;
-  const grossCollateral = input.ethPrice * input.ethAmount;
+  const grossCollateral = input.assetPrice * input.assetAmount;
   const currentLtv = grossCollateral > 0 ? input.usdDebt / grossCollateral : null;
-  const liquidationPrice = input.ethAmount > 0 && input.usdDebt > 0
-    ? input.usdDebt / (liquidationLtv * input.ethAmount)
+  const liquidationPrice = input.assetAmount > 0 && input.usdDebt > 0
+    ? input.usdDebt / (liquidationLtv * input.assetAmount)
     : null;
-  const liquidationPriceRatio = liquidationPrice !== null && input.ethPrice > 0
-    ? liquidationPrice / input.ethPrice
+  const liquidationPriceRatio = liquidationPrice !== null && input.assetPrice > 0
+    ? liquidationPrice / input.assetPrice
     : null;
   return {
     grossCollateral,
@@ -39,7 +39,7 @@ export function debtPositionSummary(input: DebtPositionInput): DebtPositionSumma
 }
 
 export function debtPositionValue(priceRatio: number, input: DebtPositionInput) {
-  return input.ethAmount * input.ethPrice * priceRatio - input.usdDebt;
+  return input.assetAmount * input.assetPrice * priceRatio - input.usdDebt;
 }
 
 export function debtPositionReturn(priceRatio: number, input: DebtPositionInput) {
@@ -50,6 +50,6 @@ export function debtPositionReturn(priceRatio: number, input: DebtPositionInput)
 
 export function isDebtPositionLiquidated(priceRatio: number, input: DebtPositionInput) {
   const liquidationLtv = input.liquidationLtv ?? LIQUIDATION_LTV;
-  const collateralValue = input.ethAmount * input.ethPrice * priceRatio;
+  const collateralValue = input.assetAmount * input.assetPrice * priceRatio;
   return input.usdDebt > 0 && (collateralValue <= 0 || input.usdDebt / collateralValue >= liquidationLtv);
 }
