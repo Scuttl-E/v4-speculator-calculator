@@ -1916,6 +1916,7 @@ body {
 .workspace > .readouts strong { font-size: 24px; }
 .workspace > .readouts span { font-size: 11px; }
 .workspace > .readouts > div::before { display: none; }
+.workspace > .readouts::after { display: none; }
 .scenario-series-key { gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .scenario-series-key > span { display: inline-flex; align-items: center; gap: 5px; }
 .scenario-series-key i.v4 { background: #e18a4a; }

@@ -341,6 +341,22 @@ export default function App() {
       }),
     [config, minMove, maxMove],
   );
+  const yAxisMax = useMemo(() => {
+    const highest = Math.max(
+      0,
+      ...points.flatMap((point) => [point.v4, point.spot, point.long, point.short]),
+    );
+    const step = highest <= 200 ? 50 : highest <= 500 ? 100 : highest <= 1000 ? 200 : 500;
+    return Math.max(step, Math.ceil(highest / step) * step);
+  }, [points]);
+  const yAxisTicks = useMemo(() => {
+    const step = yAxisMax <= 200 ? 50 : yAxisMax <= 500 ? 100 : yAxisMax <= 1000 ? 200 : 500;
+    const ticks = [-100];
+    for (let value = -100 + step; value <= yAxisMax; value += step) ticks.push(value);
+    if (!ticks.includes(0)) ticks.push(0);
+    if (!ticks.includes(yAxisMax)) ticks.push(yAxisMax);
+    return [...new Set(ticks)].sort((a, b) => a - b);
+  }, [yAxisMax]);
   const update = (key: keyof Config, v: number | CashbackMode) => {
     const updateConfig = (current: Config) => ({ ...current, [key]: v });
     if (mode === "manual") setManualConfig(updateConfig);
@@ -1085,7 +1101,7 @@ export default function App() {
           <div className="panel chart-panel">
             <div className="panel-head">
               <div>
-                <b>PAYOFF SURFACE</b>
+                <b>STRATEGY RESPONSE</b>
                 <span>
                   V4 strategy return against underlying asset movement
                 </span>
@@ -1162,15 +1178,16 @@ export default function App() {
                     stroke="#4f4a45"
                     tick={{ fontSize: 12, fill: "#9b9187" }}
                     allowDecimals={false}
-                    label={{ value: "Asset move", position: "insideBottom", offset: -8, fill: "#9b9187", fontSize: 12 }}
+                    label={{ value: "Asset price change", position: "insideBottom", offset: -8, fill: "#9b9187", fontSize: 12 }}
                   />
                   <YAxis
-                    domain={[-100, "auto"]}
+                    domain={[-100, yAxisMax]}
                     allowDataOverflow
+                    ticks={yAxisTicks}
                     tickFormatter={(v) => `${Math.round(v)}%`}
                     stroke="#4f4a45"
                     tick={{ fontSize: 12, fill: "#9b9187" }}
-                    label={{ value: "Return", angle: -90, position: "insideLeft", fill: "#9b9187", fontSize: 12 }}
+                    label={{ value: "Portfolio return", angle: -90, position: "insideLeft", fill: "#9b9187", fontSize: 12 }}
                   />
                   <Tooltip content={<ChartTooltip config={config} />} />
                   <ReferenceLine y={0} stroke="#7e756c" strokeOpacity={0.72} />
