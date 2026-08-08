@@ -194,6 +194,42 @@ function HorizonInput({
     </div>
   );
 }
+function ChartRangeInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const commitValue = (next: number) => onChange(Math.round(next / 10) * 10);
+  return (
+    <div className="chart-range-step">
+      <input
+        aria-label={label}
+        type="number"
+        step="10"
+        value={value}
+        onChange={(event) => commitValue(+event.target.value)}
+      />
+      <button
+        type="button"
+        aria-label={`Increase ${label}`}
+        onClick={() => commitValue(value + 10)}
+      >
+        <span className="step-chevron" />
+      </button>
+      <button
+        type="button"
+        aria-label={`Decrease ${label}`}
+        onClick={() => commitValue(value - 10)}
+      >
+        <span className="step-chevron down" />
+      </button>
+    </div>
+  );
+}
 function ChartTooltip({
   active,
   payload,
@@ -340,6 +376,10 @@ export default function App() {
       : lastRun.statusKey === currentStatusKey
         ? "current"
         : "stale";
+  const longReferenceLabel = `Long V4 · ${formatLtv(config.longLtv)} LTV · ${effectiveLeverage(config.longLtv).toFixed(2)}×`;
+  const shortReferenceLabel = `Short V4 · ${formatLtv(config.shortLtv)} LTV · ${effectiveLeverage(config.shortLtv).toFixed(2)}×`;
+  const longControlLabel = `Long V4 · ${formatLtv(config.longLtv)} · ${effectiveLeverage(config.longLtv).toFixed(2)}×`;
+  const shortControlLabel = `Short V4 · ${formatLtv(config.shortLtv)} · ${effectiveLeverage(config.shortLtv).toFixed(2)}×`;
   const staleReason =
     lastRun && lastRun.inputs.objective !== objective
       ? "Objective changed"
@@ -435,7 +475,7 @@ export default function App() {
       <header className="topbar">
         <div className="wordmark">
           <i />
-          PEAPODS <span>V4 / PRICE MODEL</span>
+          V4 SPECULATOR <span>PRICE MODEL</span>
         </div>
         <div className="topbar-actions">
           <div className="status">
@@ -599,268 +639,299 @@ export default function App() {
               </button>
             </div>
           </div>
-          <section>
-            <label className="field-label">DEPOSIT</label>
-            <div className="deposit-input">
-              <span>$</span>
-              <input
-                type="number"
-                value={config.deposit}
-                onChange={(e) =>
-                  update("deposit", Math.max(1, +e.target.value))
-                }
-              />
-            </div>
-          </section>
-          {mode === "manual" && (
-            <>
-          <section>
-            <div className="section-label">
-              <b>ALLOCATION</b>
-              <span>Capital split</span>
-            </div>
-            <div className="split">
-              <span
-                className="long"
-                style={{ width: `${config.longAllocation * 100}%` }}
-              >
-                LONG <b>{(config.longAllocation * 100).toFixed(0)}%</b>
-              </span>
-              <span className="short">
-                SHORT <b>{((1 - config.longAllocation) * 100).toFixed(0)}%</b>
-              </span>
-            </div>
-            <Slider
-              label="Adjust allocation"
-              value={config.longAllocation * 100}
-              min={0}
-              max={100}
-              onChange={(v) => update("longAllocation", v / 100)}
-              detail="LONG ↔ SHORT"
-            />
-          </section>
-          <section>
-            <div className="section-label">
-              <b>LEVERAGE</b>
-              <span>Experimental above 75%</span>
-            </div>
-            <Slider
-              label="LONG"
-              value={config.longLtv * 100}
-              min={50}
-              max={maxLtv}
-              onChange={(v) => update("longLtv", v / 100)}
-              detail={`${effectiveLeverage(config.longLtv).toFixed(2)}× effective`}
-              accent="amber"
-            />
-            <Slider
-              label="SHORT"
-              value={config.shortLtv * 100}
-              min={50}
-              max={maxLtv}
-              onChange={(v) => update("shortLtv", v / 100)}
-              detail={`${effectiveLeverage(config.shortLtv).toFixed(2)}× effective`}
-              accent="violet"
-            />
-          </section>
-            </>
-          )}
-          {mode === "optimise" && (
-            <section
-              className={`risk-target ${
-                objective === "spotParity" ? "objective-owned" : ""
-              }`}
-            >
-              {objective === "spotParity" ? (
-                <>
-                  <div className="section-label">
-                    <b>DRAWDOWN</b>
-                    <span>Set by selected objective</span>
-                  </div>
-                  <div className="objective-owned-control">
-                    <i>∿</i>
-                    <div>
-                      <b>SPOT PARITY IS OPTIMISING DRAWDOWN</b>
-                      <small>
-                        The lowest achievable downside drawdown will be selected.
-                        Choose Bullish or Bearish to set a hard drawdown limit.
-                      </small>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="section-label">
-                    <b>RISK TARGET</b>
-                    <span>Maximum allowed drawdown</span>
-                  </div>
-                  <Slider
-                    label="DRAWDOWN LIMIT"
-                    value={maxDD}
-                    min={0}
-                    max={50}
-                    onChange={setMaxDD}
-                    detail={`−${maxDD}%`}
-                    accent="risk"
-                  />
-                </>
-              )}
-            </section>
-          )}
-          <section>
-            <div className="section-label">
-              <b>CASHBACK</b>
-              <span>Settlement preference</span>
-            </div>
-            <div className="segments wide">
-              <button
-                className={displayedCashbackMode === "cash" ? "on" : ""}
-                onClick={() => setCashbackMode("cash")}
-              >
-                Hold as cash
-              </button>
-              <button
-                className={displayedCashbackMode === "spot" ? "on" : ""}
-                onClick={() => setCashbackMode("spot")}
-              >
-                Reinvest in spot
-              </button>
-            </div>
-          </section>
-          {mode === "optimise" && (
-            <label className="switch cashback-optimise">
-              <input
-                type="checkbox"
-                checked={cashbackPreference === "optimise"}
-                onChange={(e) =>
-                  setCashbackPreference(
-                    e.target.checked ? "optimise" : config.cashbackMode,
-                  )
-                }
-              />
-              <span />
-              <div>
-                Optimise cashback
-                <small>Allow Cash or Spot to be selected</small>
+          <div className="control-group capital-settlement">
+            <div className="control-group-title">CAPITAL &amp; SETTLEMENT</div>
+            <section className="compact-control">
+              <label className="field-label">DEPOSIT</label>
+              <div className="deposit-input">
+                <span>$</span>
+                <input
+                  type="number"
+                  value={config.deposit}
+                  onChange={(e) =>
+                    update("deposit", Math.max(1, +e.target.value))
+                  }
+                />
               </div>
-            </label>
-          )}
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={advanced}
-              onChange={(e) => setAdvanced(e.target.checked)}
-            />
-            <span />
-            Advanced experimental range
-          </label>
-          {mode === "optimise" && (
-            <section className="optimise">
-              <label className="field-label">OPTIMISATION OBJECTIVE</label>
-              <select
-                value={objective}
-                onChange={(e) => setObjective(e.target.value as Objective)}
-              >
-                {Object.entries(objectives).map(([v, n]) => (
-                  <option value={v} key={v}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              {objective === "spotParity" && (
-                <div className="spot-parity-control">
-                  <div className="spot-parity-note">
-                    <i>≋</i>
-                    <span>
-                      Match or outperform held spot at the target. Drawdown then
-                      becomes the primary optimisation target.
-                    </span>
-                  </div>
-                  <HorizonInput
-                    label="SPOT PARITY TARGET"
-                    detail="Match spot if the asset rises"
-                    value={spotParityMagnitude}
-                    min={1}
-                    max={2000}
-                    sign="+"
-                    onChange={setSpotParityMagnitude}
-                  />
+            </section>
+            <section className="compact-control">
+              <div className="section-label">
+                <b>CASHBACK</b>
+                <span>Settlement preference</span>
+              </div>
+              <div className="segments wide cashback-segments">
+                <button
+                  className={
+                    (mode === "manual"
+                      ? displayedCashbackMode === "cash"
+                      : cashbackPreference === "cash")
+                      ? "on"
+                      : ""
+                  }
+                  onClick={() => setCashbackMode("cash")}
+                >
+                  Hold as cash
+                </button>
+                <button
+                  className={
+                    (mode === "manual"
+                      ? displayedCashbackMode === "spot"
+                      : cashbackPreference === "spot")
+                      ? "on"
+                      : ""
+                  }
+                  onClick={() => setCashbackMode("spot")}
+                >
+                  Reinvest in spot
+                </button>
+                {mode === "optimise" && (
+                  <button
+                    className={cashbackPreference === "optimise" ? "on" : ""}
+                    onClick={() => setCashbackPreference("optimise")}
+                  >
+                    Auto
+                  </button>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {mode === "manual" && (
+            <div className="control-group manual-position">
+              <div className="control-group-title">POSITION &amp; LEVERAGE</div>
+              <section>
+                <div className="section-label">
+                  <b>ALLOCATION</b>
+                  <span>Capital split</span>
                 </div>
-              )}
-              <label className="switch breakeven-required">
+                <div className="split">
+                  <span
+                    className="long"
+                    style={{ width: `${config.longAllocation * 100}%` }}
+                  >
+                    LONG <b>{(config.longAllocation * 100).toFixed(0)}%</b>
+                  </span>
+                  <span className="short">
+                    SHORT <b>{((1 - config.longAllocation) * 100).toFixed(0)}%</b>
+                  </span>
+                </div>
+                <Slider
+                  label="Adjust allocation"
+                  value={config.longAllocation * 100}
+                  min={0}
+                  max={100}
+                  onChange={(v) => update("longAllocation", v / 100)}
+                  detail="LONG ↔ SHORT"
+                />
+              </section>
+              <section>
+                <div className="section-label">
+                  <b>LEVERAGE</b>
+                  <span>Experimental above 75%</span>
+                </div>
+                <Slider
+                  label="LONG"
+                  value={config.longLtv * 100}
+                  min={50}
+                  max={maxLtv}
+                  onChange={(v) => update("longLtv", v / 100)}
+                  detail={`${effectiveLeverage(config.longLtv).toFixed(2)}× effective`}
+                  accent="amber"
+                />
+                <Slider
+                  label="SHORT"
+                  value={config.shortLtv * 100}
+                  min={50}
+                  max={maxLtv}
+                  onChange={(v) => update("shortLtv", v / 100)}
+                  detail={`${effectiveLeverage(config.shortLtv).toFixed(2)}× effective`}
+                  accent="violet"
+                />
+              </section>
+              <label className="switch precision-switch">
                 <input
                   type="checkbox"
-                  checked={requireBreakeven}
-                  onChange={(e) => setRequireBreakeven(e.target.checked)}
+                  checked={advanced}
+                  onChange={(e) => setAdvanced(e.target.checked)}
                 />
                 <span />
                 <div>
-                  Require adverse-side breakeven
-                  <small>Allow the smallest necessary risk relaxation</small>
+                  Advanced experimental range
+                  <small>Extend controls to 83.33% LTV</small>
                 </div>
               </label>
-              {requireBreakeven && (
-                <div className="breakeven-horizons">
-                  {objective !== "bearish" && (
-                    <HorizonInput
-                      label="DOWNSIDE RECOVERY"
-                      detail="Breakeven before asset falls"
-                      value={downsideBreakevenMagnitude}
-                      min={1}
-                      max={99}
-                      sign="−"
-                      onChange={setDownsideBreakevenMagnitude}
-                    />
-                  )}
-                  {objective === "bearish" && (
-                    <HorizonInput
-                      label="UPSIDE RECOVERY"
-                      detail="Breakeven before asset rises"
-                      value={upsideBreakevenMagnitude}
-                      min={1}
-                      max={2000}
-                      sign="+"
-                      onChange={setUpsideBreakevenMagnitude}
-                    />
-                  )}
-                </div>
-              )}
-              <div className={`optimisation-state ${optimisationStatus}`}>
-                <i>{optimisationStatus === "current" ? "✓" : "●"}</i>
-                <span>
-                  {optimisationStatus === "not-run"
-                    ? "Optimisation required"
-                    : optimisationStatus === "current"
-                      ? "Optimised"
-                      : optimisationStatus === "stale"
-                        ? `${staleReason} — re-run optimisation`
-                        : "Optimising…"}
-                </span>
-              </div>
-              {optimiseError && (
-                <small className="optimise-error">{optimiseError}</small>
-              )}
-              <button
-                className={`optimise-action ${optimisationStatus}`}
-                onClick={runOptimisation}
-                disabled={optimising || optimisationStatus === "current"}
-              >
-                RUN OPTIMISATION <b>→</b>
-              </button>
-              <button
-                type="button"
-                className="send-manual"
-                onClick={sendToManual}
-                disabled={!lastRun || optimising}
-              >
-                Send current settings to Manual <b>→</b>
-              </button>
-              {lastRun && (
-                <div
-                  className={`optimised-config ${
-                    optimisationStatus === "current" ? "current" : "previous"
+            </div>
+          )}
+
+          {mode === "optimise" && (
+            <>
+              <div className="control-group risk-constraints">
+                <div className="control-group-title">RISK &amp; CONSTRAINTS</div>
+                <section
+                  className={`risk-target ${
+                    objective === "spotParity" ? "objective-owned" : ""
                   }`}
                 >
+                  {objective === "spotParity" ? (
+                    <div className="risk-context">
+                      <i>∿</i>
+                      <span>
+                        <b>Spot parity is setting drawdown.</b>
+                        Choose Bullish or Bearish to set a hard limit.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="section-label">
+                        <b>DRAWDOWN LIMIT</b>
+                        <span>Maximum allowed</span>
+                      </div>
+                      <Slider
+                        label="RISK LIMIT"
+                        value={maxDD}
+                        min={0}
+                        max={50}
+                        onChange={setMaxDD}
+                        detail={`−${maxDD}%`}
+                        accent="risk"
+                      />
+                    </>
+                  )}
+                </section>
+                <label className="switch precision-switch">
+                  <input
+                    type="checkbox"
+                    checked={advanced}
+                    onChange={(e) => setAdvanced(e.target.checked)}
+                  />
+                  <span />
+                  <div>
+                    Advanced experimental range
+                    <small>Permit LTVs up to 83.33%</small>
+                  </div>
+                </label>
+                <label className="switch precision-switch breakeven-required">
+                  <input
+                    type="checkbox"
+                    checked={requireBreakeven}
+                    onChange={(e) => setRequireBreakeven(e.target.checked)}
+                  />
+                  <span />
+                  <div>
+                    Require adverse-side breakeven
+                    <small>Allow the smallest necessary risk relaxation</small>
+                  </div>
+                </label>
+                {requireBreakeven && (
+                  <div className="breakeven-horizons">
+                    {objective !== "bearish" && (
+                      <HorizonInput
+                        label="DOWNSIDE RECOVERY"
+                        detail="Breakeven before asset falls"
+                        value={downsideBreakevenMagnitude}
+                        min={1}
+                        max={99}
+                        sign="−"
+                        onChange={setDownsideBreakevenMagnitude}
+                      />
+                    )}
+                    {objective === "bearish" && (
+                      <HorizonInput
+                        label="UPSIDE RECOVERY"
+                        detail="Breakeven before asset rises"
+                        value={upsideBreakevenMagnitude}
+                        min={1}
+                        max={2000}
+                        sign="+"
+                        onChange={setUpsideBreakevenMagnitude}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="control-group optimisation-target">
+                <div className="control-group-title">OPTIMISATION TARGET</div>
+                <section className="optimise target-control">
+                  <label className="field-label">OBJECTIVE</label>
+                  <select
+                    value={objective}
+                    onChange={(e) => setObjective(e.target.value as Objective)}
+                  >
+                    {Object.entries(objectives).map(([v, n]) => (
+                      <option value={v} key={v}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  {objective === "spotParity" && (
+                    <div className="spot-parity-control">
+                      <div className="spot-parity-note">
+                        <i>≋</i>
+                        <span>
+                          Match or outperform held spot at the selected target,
+                          then maximise downside protection.
+                        </span>
+                      </div>
+                      <HorizonInput
+                        label="SPOT PARITY TARGET"
+                        detail="Match spot if the asset rises"
+                        value={spotParityMagnitude}
+                        min={1}
+                        max={2000}
+                        sign="+"
+                        onChange={setSpotParityMagnitude}
+                      />
+                    </div>
+                  )}
+                </section>
+              </div>
+
+              <div className="control-group optimisation-result">
+                <div className="control-group-title">OPTIMISATION RESULT</div>
+                <section className="optimise result-control">
+                  <div className="optimisation-command">
+                    <div className={`optimisation-state ${optimisationStatus}`}>
+                      <i>
+                        {optimisationStatus === "current"
+                          ? "✓"
+                          : optimisationStatus === "not-run"
+                            ? "○"
+                            : "●"}
+                      </i>
+                      <span>
+                        {optimisationStatus === "not-run"
+                          ? "Optimisation required"
+                          : optimisationStatus === "current"
+                            ? "Optimised"
+                            : optimisationStatus === "stale"
+                              ? staleReason
+                              : "Optimising…"}
+                      </span>
+                    </div>
+                    <button
+                      className={`optimise-action ${optimisationStatus}`}
+                      onClick={runOptimisation}
+                      disabled={optimising}
+                    >
+                      {optimising
+                        ? "Optimising…"
+                        : optimisationStatus === "current"
+                          ? "Re-run"
+                          : optimisationStatus === "stale"
+                            ? "Re-run optimisation"
+                            : "Optimise"}
+                    </button>
+                  </div>
+                  {optimiseError && (
+                    <small className="optimise-error">{optimiseError}</small>
+                  )}
+                  {lastRun && (
+                    <div
+                      className={`optimised-config ${
+                        optimisationStatus === "current" ? "current" : "previous"
+                      }`}
+                    >
                   {lastRun.inputs.objective === "spotParity" && (() => {
                     const parityPercent = Number(
                         lastRun.inputs.spotParityPercent,
@@ -954,9 +1025,19 @@ export default function App() {
                       </b>
                     </span>
                   </div>
-                </div>
-              )}
-            </section>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="send-manual"
+                    onClick={sendToManual}
+                    disabled={!lastRun || optimising}
+                  >
+                    Send current settings to Manual <b>→</b>
+                  </button>
+                </section>
+              </div>
+            </>
           )}
         </aside>
         <section className="workspace">
@@ -1007,7 +1088,7 @@ export default function App() {
                     checked={showLong}
                     onChange={(e) => setShowLong(e.target.checked)}
                   />{" "}
-                  Long
+                  {longControlLabel}
                 </label>
                 <label>
                   <input
@@ -1015,23 +1096,23 @@ export default function App() {
                     checked={showShort}
                     onChange={(e) => setShowShort(e.target.checked)}
                   />{" "}
-                  Short
+                  {shortControlLabel}
                 </label>
-                <span>
-                  RANGE{" "}
-                  <input
+                <div className="chart-range-control">
+                  <b>RANGE</b>
+                  <ChartRangeInput
+                    label="Minimum asset move"
                     value={minMove}
-                    type="number"
-                    onChange={(e) => setMinMove(+e.target.value)}
-                  />{" "}
-                  <i>to</i>{" "}
-                  <input
-                    value={maxMove}
-                    type="number"
-                    onChange={(e) => setMaxMove(+e.target.value)}
+                    onChange={setMinMove}
                   />
-                  %
-                </span>
+                  <i>to</i>
+                  <ChartRangeInput
+                    label="Maximum asset move"
+                    value={maxMove}
+                    onChange={setMaxMove}
+                  />
+                  <em>%</em>
+                </div>
               </div>
             </div>
             <div className="chart">
@@ -1074,6 +1155,8 @@ export default function App() {
                     allowDecimals={false}
                   />
                   <YAxis
+                    domain={[-100, "auto"]}
+                    allowDataOverflow
                     tickFormatter={(v) => `${Math.round(v)}%`}
                     stroke="#4f4a45"
                     tick={{ fontSize: 12, fill: "#9b9187" }}
@@ -1121,7 +1204,7 @@ export default function App() {
                   {showLong && (
                     <Line
                       dataKey="long"
-                      name="Long V4"
+                      name={longReferenceLabel}
                       stroke="#db8b4c"
                       dot={false}
                       isAnimationActive={false}
@@ -1130,7 +1213,7 @@ export default function App() {
                   {showShort && (
                     <Line
                       dataKey="short"
-                      name="Short V4"
+                      name={shortReferenceLabel}
                       stroke="#837a70"
                       dot={false}
                       isAnimationActive={false}

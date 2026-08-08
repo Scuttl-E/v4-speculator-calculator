@@ -1,4 +1,4 @@
-# Peapods V4 Price Calculator
+# V4 Speculator Calculator
 
 Desktop Electron calculator for exploring the supplied two-sided V4 **price-only** payoff model. It intentionally excludes fees, yield, borrow/funding rates, LP fees, liquidations and protocol risk.
 
