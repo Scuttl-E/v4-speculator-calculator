@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-electron/
+
+*.tsbuildinfo
+*.log
+
+# Local visual QA captures
+artifacts/
+electron-app-screenshot.png
+visual-check-*.png

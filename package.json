@@ -1,0 +1,15 @@
+{
+  "name": "peapods-v4-calculator",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --port 5173 --strictPort\" \"wait-on tcp:5173 && electron .\"",
+    "build": "tsc -b && vite build && tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron",
+    "test": "vitest run",
+    "package": "npm run build && electron-builder --win"
+  },
+  "dependencies": { "@vitejs/plugin-react": "latest", "electron": "latest", "recharts": "latest", "react": "latest", "react-dom": "latest" },
+  "devDependencies": { "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest", "concurrently": "latest", "electron-builder": "latest", "tsup": "latest", "typescript": "latest", "vite": "latest", "vitest": "latest", "wait-on": "latest" },
+  "build": { "appId": "com.peapods.v4calculator", "productName": "Peapods V4 Calculator", "files": ["dist/**", "dist-electron/**", "package.json"] }
+}
