@@ -5,10 +5,10 @@ const WINDOW_CLOSE_CHANNEL = "window:close";
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 1500,
-    height: 1060,
-    minWidth: 1180,
-    minHeight: 860,
+    width: 1800,
+    height: 1320,
+    minWidth: 1400,
+    minHeight: 1100,
     frame: false,
     backgroundColor: "#1f2022",
     autoHideMenuBar: true,

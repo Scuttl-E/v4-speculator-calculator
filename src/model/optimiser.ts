@@ -2,8 +2,11 @@ import {
   findDownsideBreakeven,
   findUpsideBreakeven,
   findWorstDrawdown,
+  dollarValue,
   portfolioValue,
+  MAX_V4_LTV,
 } from "./v4Math";
+import { debtPositionValue } from "./debtPosition";
 import type {
   AdverseDirection,
   Config,
@@ -80,24 +83,34 @@ export function optimisePortfolioWithOutcome(
     throw new RangeError("Upside breakeven limit must be greater than 0%");
   if (options.spotParityPercent <= 0)
     throw new RangeError("Spot parity target must be greater than 0%");
+  if (options.debtParityPercent <= -100)
+    throw new RangeError("Debt parity target must be greater than -100%");
 
   const bearishPrice = targetPercentToPrice(-75),
     bullishPrice = targetPercentToPrice(200),
     parityPrice = targetPercentToPrice(options.spotParityPercent),
+    debtParityPrice = targetPercentToPrice(options.debtParityPercent),
+    debtParityValue = debtPositionValue(debtParityPrice, options.debtPosition),
     adverseDirection = adverseDirectionFor(options.objective);
   const cashbackModes =
     options.cashbackMode === "optimise"
       ? (["cash", "spot"] as const)
       : ([options.cashbackMode] as const);
   const step = 0.01;
-  const ltvValues = steppedValues(0.5, options.maxLtv, step);
+  const ltvValues = steppedValues(0.5, Math.min(options.maxLtv, MAX_V4_LTV), step);
   let bestWithin: Config | undefined,
     bestWithinScore = -Infinity,
     bestWithinSecondaryScore = -Infinity,
     bestRelaxed: Config | undefined,
     bestRelaxedScore = -Infinity,
     bestRelaxedSecondaryScore = -Infinity,
-    smallestRelaxedLimit = Infinity;
+    smallestRelaxedLimit = Infinity,
+    bestDebtParity: Config | undefined,
+    bestDebtTrough = -Infinity,
+    bestDebtExcess = Infinity,
+    bestDebtLeverage = Infinity,
+    bestDebtSimplicity = Infinity,
+    bestDebtAttempt: { config: Config; value: number } | undefined;
 
   const scoresFor = (config: Config, troughDrawdown: number) => {
     const bearishValue = portfolioValue(bearishPrice, config),
@@ -133,7 +146,7 @@ export function optimisePortfolioWithOutcome(
     )
       return;
     const withinRequestedLimit =
-      options.objective === "spotParity" ||
+      options.objective === "spotParity" || options.objective === "debtParity" ||
       trough.drawdown >= -options.maxDrawdown - 1e-8;
     if (!options.requireBreakeven) {
       if (!withinRequestedLimit) return;
@@ -145,6 +158,34 @@ export function optimisePortfolioWithOutcome(
         options.upsideBreakevenPercent,
       )
     ) {
+      return;
+    }
+
+    if (options.objective === "debtParity") {
+      const targetValue = dollarValue(debtParityPrice, config);
+      if (!bestDebtAttempt || targetValue > bestDebtAttempt.value)
+        bestDebtAttempt = { config, value: targetValue };
+      if (targetValue + 1e-8 < debtParityValue) return;
+
+      const excess = targetValue - debtParityValue;
+      const leverage =
+        config.longLtv + config.shortLtv;
+      const simplicity = Math.abs(config.longAllocation - 0.5);
+      const isBetterDebtParity =
+        trough.drawdown > bestDebtTrough + 1e-10 ||
+        (Math.abs(trough.drawdown - bestDebtTrough) <= 1e-10 &&
+          (excess < bestDebtExcess - 1e-8 ||
+            (Math.abs(excess - bestDebtExcess) <= 1e-8 &&
+              (leverage < bestDebtLeverage - 1e-10 ||
+                (Math.abs(leverage - bestDebtLeverage) <= 1e-10 &&
+                  simplicity < bestDebtSimplicity - 1e-10)))));
+      if (isBetterDebtParity) {
+        bestDebtParity = config;
+        bestDebtTrough = trough.drawdown;
+        bestDebtExcess = excess;
+        bestDebtLeverage = leverage;
+        bestDebtSimplicity = simplicity;
+      }
       return;
     }
 
@@ -198,7 +239,9 @@ export function optimisePortfolioWithOutcome(
             cashbackMode,
           });
 
-  const config = bestWithin ?? bestRelaxed ?? null;
+  const config = options.objective === "debtParity"
+    ? bestDebtParity ?? null
+    : bestWithin ?? bestRelaxed ?? null;
   if (!config) {
     return {
       config: null,
@@ -208,11 +251,22 @@ export function optimisePortfolioWithOutcome(
       adverseDirection,
       downsideBreakeven: null,
       upsideBreakeven: null,
+      debtParity:
+        options.objective === "debtParity"
+          ? {
+              targetPercent: options.debtParityPercent,
+              debtValue: debtParityValue,
+              v4Value: bestDebtAttempt?.value ?? 0,
+              secured: false,
+            }
+          : null,
       failure:
-        options.objective === "spotParity"
-          ? `No configuration can match held spot at +${options.spotParityPercent}% while satisfying the active breakeven and strategy constraints. Try lowering the parity target, widening the breakeven horizon, enabling the experimental LTV range or changing cashback.`
+        options.objective === "debtParity"
+          ? `Debt parity not reached at +${options.debtParityPercent}%. Best V4 value ${bestDebtAttempt ? `$${bestDebtAttempt.value.toFixed(0)}` : "is unavailable"}; debt position $${debtParityValue.toFixed(0)}; shortfall ${bestDebtAttempt ? `$${Math.max(0, debtParityValue - bestDebtAttempt.value).toFixed(0)}` : "unavailable"}.`
+          : options.objective === "spotParity"
+          ? `No configuration can match held spot at +${options.spotParityPercent}% while satisfying the active breakeven and strategy constraints. Try lowering the parity target, widening the breakeven horizon or changing cashback.`
           : options.requireBreakeven
-            ? "No configuration in the allowed allocation, LTV and cashback ranges can recover within the selected breakeven horizon. Try widening the recovery limit, changing the objective, enabling the experimental LTV range or changing cashback."
+            ? "No configuration in the allowed allocation, LTV and cashback ranges can recover within the selected breakeven horizon. Try widening the recovery limit, changing the objective or changing cashback."
             : "No configuration satisfies the active optimisation constraints.",
     };
   }
@@ -239,6 +293,15 @@ export function optimisePortfolioWithOutcome(
     adverseDirection,
     downsideBreakeven,
     upsideBreakeven,
+    debtParity:
+      options.objective === "debtParity"
+        ? {
+            targetPercent: options.debtParityPercent,
+            debtValue: debtParityValue,
+            v4Value: dollarValue(debtParityPrice, config),
+            secured: true,
+          }
+        : null,
     failure: null,
   };
 }

@@ -1,6 +1,6 @@
 export type CashbackMode = "cash" | "spot";
 export type OptimiserCashbackMode = CashbackMode | "optimise";
-export type Objective = "bullish" | "bearish" | "spotParity";
+export type Objective = "bullish" | "bearish" | "spotParity" | "debtParity";
 export interface Config {
   deposit: number;
   longAllocation: number;
@@ -18,6 +18,13 @@ export interface OptimiseOptions {
   maxLtv: number;
   objective: Objective;
   spotParityPercent: number;
+  debtParityPercent: number;
+  debtPosition: {
+    ethPrice: number;
+    ethAmount: number;
+    usdDebt: number;
+    liquidationLtv: number;
+  };
   cashbackMode: OptimiserCashbackMode;
   requireBreakeven: boolean;
   downsideBreakevenPercent: number;
@@ -33,5 +40,11 @@ export interface OptimiseOutcome {
   adverseDirection: AdverseDirection;
   downsideBreakeven: number | null;
   upsideBreakeven: number | null;
+  debtParity: {
+    targetPercent: number;
+    debtValue: number;
+    v4Value: number;
+    secured: boolean;
+  } | null;
   failure: string | null;
 }

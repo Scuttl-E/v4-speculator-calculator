@@ -6,8 +6,10 @@ import {
 } from "./optimiser";
 import {
   findWorstDrawdown,
+  dollarValue,
   portfolioValue,
 } from "./v4Math";
+import { debtPositionValue } from "./debtPosition";
 import type {
   CashbackMode,
   Config,
@@ -20,6 +22,8 @@ const base: OptimiseOptions = {
   maxLtv: 0.51,
   objective: "bullish",
   spotParityPercent: 100,
+  debtParityPercent: 50,
+  debtPosition: { ethPrice: 4000, ethAmount: 20, usdDebt: 15000, liquidationLtv: 0.9 },
   cashbackMode: "spot",
   requireBreakeven: false,
   downsideBreakevenPercent: -80,
@@ -28,7 +32,7 @@ const base: OptimiseOptions = {
 };
 
 function bestFeasibleValue(
-  objective: Exclude<Objective, "spotParity">,
+  objective: Exclude<Objective, "spotParity" | "debtParity">,
   cashbackMode: CashbackMode = "spot",
 ) {
   const p = targetPercentToPrice(objective === "bullish" ? 200 : -75);
@@ -68,6 +72,16 @@ describe("optimiser", () => {
     expect(findWorstDrawdown(result).drawdown).toBeGreaterThanOrEqual(-0.10001);
     expect(result.longLtv).toBeLessThanOrEqual(0.75);
     expect(result.shortLtv).toBeLessThanOrEqual(0.75);
+  });
+
+  it("caps optimiser LTVs at the supported 80% maximum", () => {
+    const result = optimisePortfolio({
+      ...base,
+      maxDrawdown: 1,
+      maxLtv: 0.95,
+    });
+    expect(result.longLtv).toBeLessThanOrEqual(0.8);
+    expect(result.shortLtv).toBeLessThanOrEqual(0.8);
   });
 
   it("includes a fractional LTV terminal stop in the optimiser grid", () => {
@@ -132,6 +146,23 @@ describe("optimiser", () => {
       10,
     );
     expect(findWorstDrawdown(result).drawdown).toBeLessThan(0);
+  });
+
+  it("minimises drawdown while securing debt parity at the selected target", () => {
+    const options = {
+      ...base,
+      objective: "debtParity" as const,
+      debtParityPercent: 50,
+      maxLtv: 0.75,
+      deposit: 65000,
+    };
+    const outcome = optimisePortfolioWithOutcome(options);
+    expect(outcome.config).not.toBeNull();
+    expect(outcome.debtParity?.secured).toBe(true);
+    const p = targetPercentToPrice(options.debtParityPercent);
+    expect(dollarValue(p, outcome.config!)).toBeGreaterThanOrEqual(
+      debtPositionValue(p, options.debtPosition),
+    );
   });
 
   it("chooses the better cashback treatment when requested", () => {
