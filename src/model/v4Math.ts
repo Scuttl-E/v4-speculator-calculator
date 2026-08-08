@@ -1,6 +1,7 @@
 import type { CashbackMode, Config, Trough } from "./types";
-export const ADVANCED_MAX_LTV = 0.8333;
+export const MAX_V4_LTV = 0.8;
 export const effectiveLeverage = (ltv: number) => 0.5 / (1 - ltv);
+export const MAX_V4_EFFECTIVE_LEVERAGE = effectiveLeverage(MAX_V4_LTV);
 export const validP = (p: number) => Math.max(0.000001, p);
 export const longValue = (p: number, ltv: number, mode: CashbackMode) => {
   p = validP(p);

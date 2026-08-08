@@ -70,6 +70,16 @@ describe("optimiser", () => {
     expect(result.shortLtv).toBeLessThanOrEqual(0.75);
   });
 
+  it("caps optimiser LTVs at the supported 80% maximum", () => {
+    const result = optimisePortfolio({
+      ...base,
+      maxDrawdown: 1,
+      maxLtv: 0.95,
+    });
+    expect(result.longLtv).toBeLessThanOrEqual(0.8);
+    expect(result.shortLtv).toBeLessThanOrEqual(0.8);
+  });
+
   it("includes a fractional LTV terminal stop in the optimiser grid", () => {
     const fractionalMaxLtv = 0.5033;
     const result = optimisePortfolio({

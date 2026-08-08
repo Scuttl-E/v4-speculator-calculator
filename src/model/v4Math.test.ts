@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADVANCED_MAX_LTV, effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, shortValue } from "./v4Math";
+import { effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, MAX_V4_EFFECTIVE_LEVERAGE, MAX_V4_LTV, shortValue } from "./v4Math";
 import type { Config } from "./types";
 describe("published V4 anchors", () => {
   it("reproduces the 75% long curve", () => {
@@ -16,15 +16,15 @@ describe("published V4 anchors", () => {
   it("calculates leverage", () => {
     expect(effectiveLeverage(0.5)).toBe(1);
     expect(effectiveLeverage(0.75)).toBe(2);
-    expect(effectiveLeverage(0.833333333)).toBeCloseTo(3, 6);
-    expect(effectiveLeverage(ADVANCED_MAX_LTV).toFixed(2)).toBe("3.00");
+    expect(effectiveLeverage(MAX_V4_LTV)).toBeCloseTo(2.5, 10);
+    expect(MAX_V4_EFFECTIVE_LEVERAGE).toBeCloseTo(2.5, 10);
   });
   it("all selected models start at one", () => {
-    for (const ltv of [0.5, 0.6, 0.75, 0.833333333]) {
-      expect(longValue(1, ltv, "cash")).toBe(1);
-      expect(longValue(1, ltv, "spot")).toBe(1);
-      expect(shortValue(1, ltv, "cash")).toBe(1);
-      expect(shortValue(1, ltv, "spot")).toBe(1);
+    for (const ltv of [0.5, 0.6, 0.75, MAX_V4_LTV]) {
+      expect(longValue(1, ltv, "cash")).toBeCloseTo(1, 12);
+      expect(longValue(1, ltv, "spot")).toBeCloseTo(1, 12);
+      expect(shortValue(1, ltv, "cash")).toBeCloseTo(1, 12);
+      expect(shortValue(1, ltv, "spot")).toBeCloseTo(1, 12);
     }
   });
   it("finds the lower-price breakeven beyond a downside trough", () => {

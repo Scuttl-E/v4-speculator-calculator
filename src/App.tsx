@@ -12,12 +12,12 @@ import {
   YAxis,
 } from "recharts";
 import {
-  ADVANCED_MAX_LTV,
   dollarValue,
   effectiveLeverage,
   findDownsideBreakeven,
   findWorstDrawdown,
   longValue,
+  MAX_V4_LTV,
   portfolioReturn,
   shortValue,
 } from "./model/v4Math";
@@ -71,21 +71,13 @@ function Slider({
   accent?: string;
   signedDisplay?: boolean;
 }) {
-  const wholeMax = Math.floor(max),
-    hasTerminalStop = max > wholeMax,
-    sliderMax = hasTerminalStop ? wholeMax + 1 : max,
-    sliderValue = hasTerminalStop && value > wholeMax ? sliderMax : value,
-    displayValue = hasTerminalStop && value > wholeMax ? +max.toFixed(2) : value,
+  const sliderValue = value,
+    displayValue = value,
     inputValue = signedDisplay ? -displayValue : displayValue,
-    snapValue = (next: number) => {
-      if (hasTerminalStop && next > wholeMax) return max;
-      return Math.min(wholeMax, Math.max(min, Math.round(next)));
-    },
+    snapValue = (next: number) => Math.min(max, Math.max(min, Math.round(next))),
     commitValue = (next: number) => onChange(snapValue(next)),
     stepUp = () => {
-      const next = hasTerminalStop && value > wholeMax
-          ? wholeMax
-          : signedDisplay
+      const next = signedDisplay
           ? Math.min(max, Math.round(value) + 1)
           : Math.min(max, Math.round(value) + 1);
       onChange(next);
@@ -93,14 +85,12 @@ function Slider({
     stepDown = () => {
       const next = signedDisplay
         ? Math.max(min, Math.round(value) - 1)
-        : hasTerminalStop && value > wholeMax
-          ? wholeMax
-          : Math.max(min, Math.round(value) - 1);
+        : Math.max(min, Math.round(value) - 1);
       onChange(next);
     },
     commitInput = (next: number) => {
       if (!Number.isFinite(next)) return;
-      onChange(signedDisplay ? Math.abs(next) : next);
+      onChange(snapValue(signedDisplay ? Math.abs(next) : next));
     };
   return (
     <div className={`slider-control ${accent}`}>
@@ -112,12 +102,12 @@ function Slider({
         <input
           type="range"
           min={min}
-          max={sliderMax}
+          max={max}
           step="1"
           value={sliderValue}
           style={
             {
-              "--fill": `${((sliderValue - min) / (sliderMax - min)) * 100}%`,
+              "--fill": `${((sliderValue - min) / (max - min)) * 100}%`,
             } as React.CSSProperties
           }
           onChange={(e) => commitValue(+e.target.value)}
@@ -125,7 +115,7 @@ function Slider({
         <div className="number-step">
           <input
             type="number"
-            step={hasTerminalStop ? "0.01" : "1"}
+            step="1"
             min={signedDisplay ? -max : min}
             max={signedDisplay ? -min : max}
             value={inputValue}
@@ -292,7 +282,6 @@ export default function App() {
       useState<OptimiserCashbackMode>("optimise"),
     [requireBreakeven, setRequireBreakeven] = useState(false),
     [maxDD, setMaxDD] = useState(15),
-    [advanced, setAdvanced] = useState(false),
     [minMove, setMinMove] = useState(-80),
     [maxMove, setMaxMove] = useState(150),
     [showLong, setShowLong] = useState(false),
@@ -320,7 +309,7 @@ export default function App() {
       ? config.cashbackMode
       : cashbackPreference;
   const optimisationCache = useRef(new Map<string, OptimiseOutcome>());
-  const maxLtv = advanced ? ADVANCED_MAX_LTV * 100 : 75;
+  const maxLtv = MAX_V4_LTV * 100;
   const risk = useMemo(() => {
     const t = findWorstDrawdown(config);
     return { ...t, breakeven: findDownsideBreakeven(config, t) };
@@ -381,7 +370,6 @@ export default function App() {
       ? upsideBreakevenMagnitude
       : null,
     maxLtv,
-    advanced,
   };
   const searchKey = JSON.stringify(optimisationInputs);
   const statusKeyFor = (
@@ -611,8 +599,7 @@ export default function App() {
                   <small>LEVERAGE REFERENCE</small>
                   <strong>50% LTV → 1.00×</strong>
                   <strong>75% LTV → 2.00×</strong>
-                  <strong>83% LTV → 2.94×</strong>
-                  <strong>83.33% LTV → 3.00×</strong>
+                  <strong>80% LTV → 2.50×</strong>
                 </div>
                 <div>
                   <small>MODEL ASSUMPTIONS</small>
@@ -750,7 +737,7 @@ export default function App() {
               <section>
                 <div className="section-label">
                   <b>LEVERAGE</b>
-                  <span>Experimental above 75%</span>
+                  <span>Up to 80% LTV / 2.50×</span>
                 </div>
                 <Slider
                   label="LONG"
@@ -771,18 +758,6 @@ export default function App() {
                   accent="violet"
                 />
               </section>
-              <label className="switch precision-switch">
-                <input
-                  type="checkbox"
-                  checked={advanced}
-                  onChange={(e) => setAdvanced(e.target.checked)}
-                />
-                <span />
-                <div>
-                  Advanced experimental range
-                  <small>Extend controls to 83.33% LTV</small>
-                </div>
-              </label>
             </div>
           )}
 
@@ -818,18 +793,6 @@ export default function App() {
                     </>
                   )}
                 </section>
-                <label className="switch precision-switch">
-                  <input
-                    type="checkbox"
-                    checked={advanced}
-                    onChange={(e) => setAdvanced(e.target.checked)}
-                  />
-                  <span />
-                  <div>
-                    Advanced experimental range
-                    <small>Permit LTVs up to 83.33%</small>
-                  </div>
-                </label>
                 <label className="switch precision-switch breakeven-required">
                   <input
                     type="checkbox"

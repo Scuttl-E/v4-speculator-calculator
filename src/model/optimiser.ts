@@ -3,6 +3,7 @@ import {
   findUpsideBreakeven,
   findWorstDrawdown,
   portfolioValue,
+  MAX_V4_LTV,
 } from "./v4Math";
 import type {
   AdverseDirection,
@@ -90,7 +91,7 @@ export function optimisePortfolioWithOutcome(
       ? (["cash", "spot"] as const)
       : ([options.cashbackMode] as const);
   const step = 0.01;
-  const ltvValues = steppedValues(0.5, options.maxLtv, step);
+  const ltvValues = steppedValues(0.5, Math.min(options.maxLtv, MAX_V4_LTV), step);
   let bestWithin: Config | undefined,
     bestWithinScore = -Infinity,
     bestWithinSecondaryScore = -Infinity,
@@ -210,9 +211,9 @@ export function optimisePortfolioWithOutcome(
       upsideBreakeven: null,
       failure:
         options.objective === "spotParity"
-          ? `No configuration can match held spot at +${options.spotParityPercent}% while satisfying the active breakeven and strategy constraints. Try lowering the parity target, widening the breakeven horizon, enabling the experimental LTV range or changing cashback.`
+          ? `No configuration can match held spot at +${options.spotParityPercent}% while satisfying the active breakeven and strategy constraints. Try lowering the parity target, widening the breakeven horizon or changing cashback.`
           : options.requireBreakeven
-            ? "No configuration in the allowed allocation, LTV and cashback ranges can recover within the selected breakeven horizon. Try widening the recovery limit, changing the objective, enabling the experimental LTV range or changing cashback."
+            ? "No configuration in the allowed allocation, LTV and cashback ranges can recover within the selected breakeven horizon. Try widening the recovery limit, changing the objective or changing cashback."
             : "No configuration satisfies the active optimisation constraints.",
     };
   }
