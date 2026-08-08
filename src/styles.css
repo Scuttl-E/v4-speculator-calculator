@@ -1797,10 +1797,12 @@ body {
 
 .chart-panel .panel-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
 }
-.chart-panel .chart-controls { width: 100%; justify-content: flex-end; }
+.chart-panel .chart-controls { width: auto; justify-content: flex-end; gap: 20px; }
+.chart-panel .chart-range-control { gap: 8px; }
 .optimisation-command .optimise-action { width: 150px; }
 .optimisation-command .optimise-action.not-run { width: 82px; }
 .optimisation-command .optimise-action.current { width: 72px; }
@@ -1884,3 +1886,70 @@ body {
   font-size: 16px;
 }
 .optimisation-result .optimised-values span:last-child b { color: var(--bright); }
+
+/* Keep scenario headings and values on the same measured column tracks. */
+.scenario-row {
+  grid-template-columns: 90px 110px 105px 125px 125px 100px;
+  align-items: center;
+}
+.scenario-row.headings > span { align-self: center; }
+.scenario-row > :last-child { display: none; }
+
+/* The chart gets the full upper span; readouts sit in the lower-right beside scenarios. */
+.workspace {
+  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-rows: minmax(360px, 1fr) auto;
+}
+.workspace > .chart-panel { grid-column: 1 / -1; grid-row: 1; }
+.workspace > .scenarios { grid-column: 1; grid-row: 2; }
+.workspace > .readouts {
+  grid-column: 2;
+  grid-row: 2;
+  grid-template-columns: 1fr;
+  min-width: 0;
+  min-height: 0;
+}
+.workspace > .readouts > div {
+  min-height: 0;
+  padding: 10px 16px;
+}
+.workspace > .readouts strong { font-size: 24px; }
+.workspace > .readouts span { font-size: 11px; }
+.workspace > .readouts > div::before { display: none; }
+.scenario-series-key { gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.scenario-series-key > span { display: inline-flex; align-items: center; gap: 5px; }
+.scenario-series-key i.v4 { background: #e18a4a; }
+.scenario-series-key i.spot { background: #b8aea3; }
+.scenario-series-key i.long { background: #e18a4a; }
+.scenario-series-key i.short { background: #aa9481; }
+.workspace > .readouts .scenario-series-key {
+  order: -1;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-auto-rows: minmax(18px, auto);
+  align-items: center;
+  justify-content: center;
+  column-gap: 16px;
+  row-gap: 5px;
+  text-align: left;
+}
+.workspace > .readouts .scenario-series-key > span {
+  justify-self: stretch;
+  justify-content: flex-start;
+}
+.scenario-series-key > span > i {
+  flex: 0 0 16px;
+  display: inline-block;
+  height: 3px !important;
+  border: 0;
+  border-radius: 2px;
+  background: currentColor !important;
+}
+.scenario-series-key > span > i.v4 { color: #e18a4a; }
+.scenario-series-key > span > i.spot { color: #b8aea3; }
+.scenario-series-key > span > i.long,
+.scenario-series-key > span > i.short {
+  background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px) !important;
+}
+.scenario-series-key > span > i.long { color: #e18a4a; }
+.scenario-series-key > span > i.short { color: #aa9481; }

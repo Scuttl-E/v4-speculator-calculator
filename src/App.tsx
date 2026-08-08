@@ -3,7 +3,6 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
-  Legend,
   Line,
   ReferenceDot,
   ReferenceLine,
@@ -1048,15 +1047,14 @@ export default function App() {
         <section className="workspace">
           <div className="readouts">
             <div>
-              <label>PORTFOLIO</label>
-              <strong>{money(config.deposit)}</strong>
-              <span>
-                {(config.longAllocation * 100).toFixed(0)}% long /{" "}
-                {((1 - config.longAllocation) * 100).toFixed(0)}% short
-              </span>
+              <label>LONG / SHORT RATIO</label>
+              <strong>
+                {(config.longAllocation * 100).toFixed(0)}% / {((1 - config.longAllocation) * 100).toFixed(0)}%
+              </strong>
+              <span>capital split</span>
             </div>
             <div className="risk">
-              <label>WORST DRAWDOWN</label>
+              <label>MAX DRAWDOWN</label>
               <strong>{pct(risk.drawdown)}</strong>
               <span>at {pct(risk.p - 1)} underlying</span>
             </div>
@@ -1076,6 +1074,12 @@ export default function App() {
                 {effectiveLeverage(config.shortLtv).toFixed(2)}×
               </strong>
               <span>long / short effective</span>
+            </div>
+            <div className="scenario-key scenario-series-key">
+              <span><i className="v4" /> V4 strategy</span>
+              <span><i className="spot" /> Asset value - spot</span>
+              <span><i className="long" /> {longControlLabel}</span>
+              <span><i className="short" /> {shortControlLabel}</span>
             </div>
           </div>
           <div className="panel chart-panel">
@@ -1158,6 +1162,7 @@ export default function App() {
                     stroke="#4f4a45"
                     tick={{ fontSize: 12, fill: "#9b9187" }}
                     allowDecimals={false}
+                    label={{ value: "Asset move", position: "insideBottom", offset: -8, fill: "#9b9187", fontSize: 12 }}
                   />
                   <YAxis
                     domain={[-100, "auto"]}
@@ -1165,9 +1170,9 @@ export default function App() {
                     tickFormatter={(v) => `${Math.round(v)}%`}
                     stroke="#4f4a45"
                     tick={{ fontSize: 12, fill: "#9b9187" }}
+                    label={{ value: "Return", angle: -90, position: "insideLeft", fill: "#9b9187", fontSize: 12 }}
                   />
                   <Tooltip content={<ChartTooltip config={config} />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine y={0} stroke="#7e756c" strokeOpacity={0.72} />
                   <ReferenceLine
                     x={0}
@@ -1210,7 +1215,8 @@ export default function App() {
                     <Line
                       dataKey="long"
                       name={longReferenceLabel}
-                      stroke="#db8b4c"
+                      stroke="#e18a4a"
+                      strokeDasharray="3 3"
                       dot={false}
                       isAnimationActive={false}
                     />
@@ -1219,7 +1225,8 @@ export default function App() {
                     <Line
                       dataKey="short"
                       name={shortReferenceLabel}
-                      stroke="#837a70"
+                      stroke="#aa9481"
+                      strokeDasharray="3 3"
                       dot={false}
                       isAnimationActive={false}
                     />
@@ -1249,9 +1256,6 @@ export default function App() {
                 <span>
                   V4 strategy compared with the underlying spot asset
                 </span>
-              </div>
-              <div className="scenario-key">
-                <i /> V4 strategy <i /> spot asset
               </div>
             </div>
             <div className="scenario-table">
