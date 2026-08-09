@@ -65,6 +65,11 @@ import {
   type OptimiserRunState,
   type SuccessfulOptimisationResult,
 } from "./model/optimisationState";
+import {
+  isDesktopShell,
+  loadCalculatorInputs,
+  saveCalculatorInputs,
+} from "./persistence";
 
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", {
@@ -780,9 +785,8 @@ export default function App() {
     setRailCanScrollUp(rail.scrollTop > 1);
     setRailCanScrollDown(rail.scrollTop + rail.clientHeight < rail.scrollHeight - 1);
   };
-  const [persistenceLoaded, setPersistenceLoaded] = useState(
-    () => !window.desktopWindow?.loadInputs,
-  );
+  const [persistenceLoaded, setPersistenceLoaded] = useState(false);
+  const isDesktopApp = isDesktopShell();
   useEffect(() => {
     if (!showMaths) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -808,8 +812,6 @@ export default function App() {
     };
   }, [comparisonMode, mode, leverageLimitsExpanded, requireBreakeven, displayedResult]);
   useEffect(() => {
-    const loadInputs = window.desktopWindow?.loadInputs;
-    if (!loadInputs) return;
     let cancelled = false;
     const isNumber = (value: unknown): value is number =>
       typeof value === "number" && Number.isFinite(value);
@@ -847,7 +849,7 @@ export default function App() {
         isNumber(limits[modeName]) && limits[modeName] >= 0 && limits[modeName] <= 100,
       );
     };
-    void loadInputs().then((value) => {
+    void loadCalculatorInputs().then((value) => {
       if (cancelled || !value || typeof value !== "object") return;
       const saved = value as Record<string, unknown>;
       if (saved.comparisonMode === "base" || saved.comparisonMode === "lending" || saved.comparisonMode === "perp") setComparisonMode(saved.comparisonMode);
@@ -909,10 +911,9 @@ export default function App() {
     Number.isFinite(perpState.margin) && perpState.margin >= 0 &&
     Number.isFinite(perpState.liquidationPrice) && perpState.liquidationPrice > 0;
   useEffect(() => {
-    const saveInputs = window.desktopWindow?.saveInputs;
-    if (!persistenceLoaded || !saveInputs) return;
+    if (!persistenceLoaded) return;
     const timer = window.setTimeout(() => {
-      void saveInputs({
+      void saveCalculatorInputs({
         inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
         comparisonMode, mode, manualConfig, optimiserDeposit, objective,
         spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
@@ -1137,7 +1138,7 @@ export default function App() {
     }
     setPerpState({ ...DEFAULT_PERP });
   };
-  const persistInputsNow = () => window.desktopWindow?.saveInputs({
+  const persistInputsNow = () => saveCalculatorInputs({
     inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
     comparisonMode, mode, manualConfig, optimiserDeposit, objective,
     spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
@@ -1147,6 +1148,7 @@ export default function App() {
     usdDebt, liquidationLtv, perpState, assetName,
   });
   const closeApplication = () => {
+    if (!isDesktopApp) return;
     if (!persistenceLoaded) return window.desktopWindow?.close();
     void persistInputsNow()?.catch(() => undefined).finally(() => window.desktopWindow?.close());
   };
@@ -1494,7 +1496,7 @@ export default function App() {
             <span>ƒ</span>
             Show me the maths
           </button>
-          <button
+          {isDesktopApp && <button
             type="button"
             className="window-close"
             aria-label="Close application"
@@ -1502,7 +1504,7 @@ export default function App() {
             onClick={closeApplication}
           >
             <span />
-          </button>
+          </button>}
         </div>
       </header>
       {showSettings && (
