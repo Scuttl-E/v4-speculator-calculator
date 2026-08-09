@@ -302,6 +302,10 @@ Depending on the selected mode and controls, it can display:
 
 The **PEA-NILE Enhancement** toolbar control expands this same live chart into an immersive analytical view without changing the underlying result or chart settings.
 
+![PEA-NILE Enhancement Mode showing an expanded Strategy Response chart](docs/screenshots/pea-nile-enhancement-mode.png)
+
+*PEA-NILE Enhancement Mode — an expanded, focused view of the live Strategy Response chart for close payoff-curve inspection.*
+
 ### Scenario Analysis
 
 Shows exact values at a selection of underlying asset moves, allowing the V4 strategy and comparator to be inspected numerically rather than only visually.
