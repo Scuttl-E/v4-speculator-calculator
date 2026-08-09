@@ -2675,32 +2675,42 @@ body {
    Narrow viewports scroll the page instead of compressing controls and data. */
 html.web-build,
 body.web-build {
-  min-width: 1420px;
+  min-width: 1820px;
   min-height: 1100px;
   height: auto;
   overflow: auto;
 }
 body.web-build #root {
-  min-width: 1420px;
+  min-width: 1820px;
   min-height: 1100px;
   height: auto;
   overflow: visible;
 }
 main.web-app {
-  min-width: 1420px;
+  min-width: 1820px;
   min-height: 1100px;
   height: auto;
   overflow: visible;
 }
 main.web-app .shell {
-  min-width: 1420px;
+  min-width: 1820px;
   min-height: 1046px;
   height: calc(100vh - 54px);
-  grid-template-columns: 368px minmax(1000px, 1fr);
+  grid-template-columns: 368px minmax(1404px, 1fr);
   overflow: visible;
 }
 main.web-app .workspace {
-  min-width: 1000px;
+  min-width: 1404px;
+}
+main.web-app .workspace > .chart-panel {
+  min-width: 1404px;
+}
+main.web-app .workspace > .scenarios {
+  min-width: 1040px;
+}
+main.web-app .shell.pea-nile-enhanced {
+  grid-template-columns: 0 minmax(0, 1fr);
+  gap: 0;
 }
 
 /* The web viewport has less chart height than the desktop window. Keep the
