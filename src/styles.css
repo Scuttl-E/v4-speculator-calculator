@@ -2402,6 +2402,28 @@ body {
 .crossover-outcome-grid { margin-top: 9px; }
 .objective-analysis-subheading { margin-top: 2px; }
 .objective-analysis-grid { margin-top: 9px; }
+.objective-analysis .crossover-output-arrow {
+  color: #d5a981;
+  font-weight: 400;
+  opacity: .68;
+}
+.objective-analysis-range {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 8px;
+  color: #aaa096;
+  font-size: 14px;
+}
+.objective-analysis-range > b {
+  color: var(--cream);
+  font: 600 14px var(--mono);
+}
+.objective-analysis-range .crossover-percent,
+.objective-analysis-range .crossover-sign {
+  font-weight: 400;
+  opacity: .68;
+}
 .liquidation-subheading { margin-top: 22px; }
 .crossover-tradeoff {
   margin: 8px 0 0;

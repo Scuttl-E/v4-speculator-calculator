@@ -13,6 +13,7 @@ import {
 } from "./v4Math";
 import { debtPositionValue } from "./debtPosition";
 import { perpPositionValue } from "./perpPosition";
+import { createBenchmarkDominanceEvaluator } from "./benchmarkDominance";
 import type {
   CashbackMode,
   Config,
@@ -44,7 +45,7 @@ const base: OptimiseOptions = {
 };
 
 function bestFeasibleValue(
-  objective: Exclude<Objective, "spotParity" | "debtParity">,
+  objective: Exclude<Objective, "spotParity" | "debtParity" | "perpParity" | "benchmarkDominance">,
   cashbackMode: CashbackMode = "spot",
 ) {
   const p = targetPercentToPrice(objective === "bullish" ? 200 : -75);
@@ -119,6 +120,36 @@ describe("optimiser", () => {
 
   it("maximises bearish exposure at the -75% scenario extreme", () => {
     bestFeasibleValue("bearish");
+  });
+
+  it("maximises the worst relative edge for Benchmark Dominance", () => {
+    const options: OptimiseOptions = {
+      ...base,
+      objective: "benchmarkDominance",
+      comparisonMode: "base",
+      maxDrawdown: 1,
+      maxLtv: 0.5,
+      searchStepPercent: 50,
+      analysisMinPercent: -80,
+      analysisMaxPercent: 200,
+    };
+    const evaluator = createBenchmarkDominanceEvaluator({
+      comparisonMode: "base",
+      requestedMinMove: -80,
+      requestedMaxMove: 200,
+      debtPosition: options.debtPosition,
+      perpPosition: options.perpPosition,
+    })!;
+    const candidates = [0, 0.5, 1].map((longAllocation) => ({
+      deposit: options.deposit,
+      longAllocation,
+      longLtv: 0.5,
+      shortLtv: 0.5,
+      cashbackMode: "spot" as const,
+    }));
+    const bestWorstEdge = Math.max(...candidates.map((candidate) => evaluator.analyse(candidate).worstEdgePts));
+    const result = optimisePortfolio(options);
+    expect(evaluator.analyse(result).worstEdgePts).toBeCloseTo(bestWorstEdge, 8);
   });
 
   it("minimises downside drawdown while matching spot at the parity target", () => {

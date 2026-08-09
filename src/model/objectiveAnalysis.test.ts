@@ -11,6 +11,10 @@ const config: Config = {
 };
 const common = {
   config,
+  comparisonMode: "base" as const,
+  bearishTargetPercent: -80,
+  analysisMinPercent: -80,
+  analysisMaxPercent: 200,
   spotParityPercent: 100,
   debtParityPercent: 50,
   perpParityPercent: 25,
@@ -83,7 +87,22 @@ describe("objective-specific analysis", () => {
   it("returns no parity analysis for manual objectives", () => {
     expect(createObjectiveAnalysis({ ...common, objective: "bullish" }))
       .toBeNull();
-    expect(createObjectiveAnalysis({ ...common, objective: "bearish" }))
-      .toBeNull();
+  });
+
+  it("reports a downside trough and percentage-point recovery before the bearish target", () => {
+    const result = createObjectiveAnalysis({ ...common, objective: "bearish" });
+    expect(result?.kind).toBe("bearish");
+    if (!result || result.kind !== "bearish") return;
+    expect(result.troughMove).toBeGreaterThan(result.targetMove);
+    expect(result.recoveryPts).toBeCloseTo(result.targetReturn - result.troughReturn, 10);
+  });
+
+  it("reports benchmark dominance using the active comparison mode", () => {
+    const result = createObjectiveAnalysis({ ...common, objective: "benchmarkDominance" });
+    expect(result?.kind).toBe("dominance");
+    if (!result || result.kind !== "dominance") return;
+    expect(result.result.benchmark).toBe("spot");
+    expect(result.result.effectiveMinMove).toBeCloseTo(-80, 10);
+    expect(result.result.effectiveMaxMove).toBeCloseTo(200, 10);
   });
 });

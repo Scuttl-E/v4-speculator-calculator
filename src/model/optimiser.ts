@@ -8,6 +8,11 @@ import {
 } from "./v4Math";
 import { debtPositionValue } from "./debtPosition";
 import { perpPositionValue } from "./perpPosition";
+import {
+  createBenchmarkDominanceEvaluator,
+  isBetterBenchmarkDominanceScore,
+  type BenchmarkDominanceScore,
+} from "./benchmarkDominance";
 import type { CashbackFrontierCandidate } from "./cashbackCrossover";
 import type {
   AdverseDirection,
@@ -114,6 +119,17 @@ function optimisePortfolioInternal(
     isBenchmarkParity = options.objective === "debtParity" ||
       options.objective === "perpParity",
     adverseDirection = adverseDirectionFor(options.objective);
+  const dominanceEvaluator = options.objective === "benchmarkDominance"
+    ? createBenchmarkDominanceEvaluator({
+        comparisonMode: options.comparisonMode ?? "base",
+        requestedMinMove: options.analysisMinPercent ?? options.downsideBreakevenPercent,
+        requestedMaxMove: options.analysisMaxPercent ?? options.bullishTargetPercent ?? 200,
+        debtPosition: options.debtPosition,
+        perpPosition: options.perpPosition,
+      })
+    : null;
+  if (options.objective === "benchmarkDominance" && !dominanceEvaluator)
+    throw new RangeError("Benchmark dominance range is unavailable for the active comparison");
   const cashbackModes =
     frontierCandidates || options.cashbackMode === "optimise"
       ? (["cash", "spot"] as const)
@@ -135,6 +151,8 @@ function optimisePortfolioInternal(
     bestRelaxed: Config | undefined,
     bestRelaxedScore = -Infinity,
     bestRelaxedSecondaryScore = -Infinity,
+    bestWithinDominanceScore: BenchmarkDominanceScore | null = null,
+    bestRelaxedDominanceScore: BenchmarkDominanceScore | null = null,
     smallestRelaxedLimit = Infinity,
     bestBenchmarkParity: Config | undefined,
     bestBenchmarkTrough = -Infinity,
@@ -150,6 +168,14 @@ function optimisePortfolioInternal(
       return { primary: bullishValue, secondary: bullishValue };
     if (options.objective === "bearish")
       return { primary: bearishValue, secondary: bearishValue };
+    if (options.objective === "benchmarkDominance") {
+      const dominance = dominanceEvaluator!.analyse(config, troughDrawdown);
+      return {
+        primary: dominance.worstEdgePts,
+        secondary: dominance.averageEdgePts,
+        dominance,
+      };
+    }
     return { primary: troughDrawdown, secondary: bearishValue };
   };
 
@@ -238,21 +264,23 @@ function optimisePortfolioInternal(
       return;
     }
 
-    const { primary: score, secondary: secondaryScore } = scoresFor(
+    const { primary: score, secondary: secondaryScore, dominance } = scoresFor(
       config,
       trough.drawdown,
     );
     if (withinRequestedLimit) {
-      if (
-        isBetter(
+      const better = dominance
+        ? isBetterBenchmarkDominanceScore(dominance, bestWithinDominanceScore)
+        : isBetter(
           score,
           secondaryScore,
           bestWithinScore,
           bestWithinSecondaryScore,
-        )
-      ) {
+        );
+      if (better) {
         bestWithinScore = score;
         bestWithinSecondaryScore = secondaryScore;
+        if (dominance) bestWithinDominanceScore = dominance;
         bestWithin = config;
       }
       return;
@@ -262,16 +290,14 @@ function optimisePortfolioInternal(
     if (
       requiredLimit < smallestRelaxedLimit - 1e-9 ||
       (Math.abs(requiredLimit - smallestRelaxedLimit) < 1e-9 &&
-        isBetter(
-          score,
-          secondaryScore,
-          bestRelaxedScore,
-          bestRelaxedSecondaryScore,
-        ))
+        (dominance
+          ? isBetterBenchmarkDominanceScore(dominance, bestRelaxedDominanceScore)
+          : isBetter(score, secondaryScore, bestRelaxedScore, bestRelaxedSecondaryScore)))
     ) {
       smallestRelaxedLimit = requiredLimit;
       bestRelaxedScore = score;
       bestRelaxedSecondaryScore = secondaryScore;
+      if (dominance) bestRelaxedDominanceScore = dominance;
       bestRelaxed = config;
     }
   };

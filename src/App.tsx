@@ -37,6 +37,7 @@ import {
 } from "./model/perpPosition";
 import type {
   CashbackMode,
+  ComparisonMode,
   Config,
   Objective,
   OptimiserCashbackMode,
@@ -90,6 +91,56 @@ const crossoverTradeoffText = (result: CashbackCrossoverResult) => {
 };
 
 function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
+  if (analysis.kind === "bearish") return (
+    <section className="analytical-section objective-analysis" aria-label="Downside recovery analysis">
+      <div className="crossover-section-heading">
+        <h3>DOWNSIDE RECOVERY</h3>
+        <span className="comparison-settings crossover-objective-tag">BEARISH</span>
+      </div>
+      <h4 className="objective-analysis-subheading">TROUGH <span className="crossover-output-arrow">&rarr;</span> TARGET</h4>
+      <div className="analytical-stat-grid objective-analysis-grid">
+        <span>Asset move</span>
+        <b><CrossoverValue value={analysis.troughMove} suffix="%" />{" "}<span className="crossover-output-arrow">&rarr;</span>{" "}<CrossoverValue value={analysis.targetMove} suffix="%" /></b>
+        <span>V4 return</span>
+        <b><CrossoverValue value={analysis.troughReturn} suffix="%" />{" "}<span className="crossover-output-arrow">&rarr;</span>{" "}<CrossoverValue value={analysis.targetReturn} suffix="%" /></b>
+      </div>
+      <h4 className="crossover-subheading">RECOVERY</h4>
+      <div className="analytical-stat-grid objective-analysis-grid objective-analysis-emphasis">
+        <span>Return recovered</span>
+        <b><CrossoverValue value={analysis.recoveryPts} suffix="pts" /></b>
+      </div>
+    </section>
+  );
+
+  if (analysis.kind === "dominance") {
+    const benchmark = analysis.result.benchmark;
+    const tag = benchmark === "lending" ? "LENDING" : benchmark === "perp" ? "PERP" : "SPOT";
+    const benchmarkLabel = benchmark === "lending" ? "lending position" : benchmark === "perp" ? "perp position" : "spot";
+    return (
+      <section className="analytical-section objective-analysis" aria-label="Benchmark dominance analysis">
+        <div className="crossover-section-heading">
+          <h3>BENCHMARK DOMINANCE</h3>
+          <span className="comparison-settings crossover-objective-tag">{tag}</span>
+        </div>
+        <h4 className="objective-analysis-subheading">TESTED RANGE</h4>
+        <div className="objective-analysis-range">
+          <b><CrossoverValue value={analysis.result.effectiveMinMove} suffix="%" />{" "}<span className="crossover-output-arrow">&rarr;</span>{" "}<CrossoverValue value={analysis.result.effectiveMaxMove} suffix="%" /></b>
+        </div>
+        <h4 className="crossover-subheading">WORST EDGE</h4>
+        <div className="analytical-stat-grid objective-analysis-grid">
+          <span>V4 vs {benchmarkLabel}</span>
+          <b><CrossoverValue value={analysis.result.worstEdgePts} suffix="pts" /></b>
+          <span>Occurs at</span>
+          <b><CrossoverValue value={analysis.result.worstMove} suffix="%" /> move</b>
+        </div>
+        <h4 className="crossover-subheading">V4 AHEAD</h4>
+        <div className="objective-analysis-range"><b>{analysis.result.aheadPercent.toFixed(1)}<span className="crossover-percent">%</span></b><span> of tested range</span></div>
+        <h4 className="crossover-subheading">AVERAGE EDGE</h4>
+        <div className="objective-analysis-range"><b><CrossoverValue value={analysis.result.averageEdgePts} suffix="pts" /></b></div>
+      </section>
+    );
+  }
+
   const isSpot = analysis.kind === "spot";
   const benchmarkLabel = analysis.kind === "lending"
     ? "Lending position"
@@ -152,6 +203,7 @@ const objectives: Record<Objective, string> = {
   spotParity: "Maximise protection at spot parity",
   debtParity: "Maximise protection at lending parity",
   perpParity: "Maximise protection at perp parity",
+  benchmarkDominance: "Benchmark dominance",
 };
 const INITIAL_CONFIG: Config = {
   deposit: 10000,
@@ -174,7 +226,6 @@ const DEFAULT_PERP: PerpPositionInput = {
   liquidationPrice: 1100,
   side: "long",
 };
-type ComparisonMode = "base" | "lending" | "perp";
 function NumericInput({
   value,
   onValueChange,
@@ -641,7 +692,7 @@ export default function App() {
       if (saved.mode === "manual" || saved.mode === "optimise") setMode(saved.mode);
       if (isConfig(saved.manualConfig)) setManualConfig(saved.manualConfig);
       if (isConfig(saved.optimisedConfig)) setOptimisedConfig(saved.optimisedConfig);
-      if (saved.objective === "bullish" || saved.objective === "bearish" || saved.objective === "spotParity" || saved.objective === "debtParity" || saved.objective === "perpParity") setObjective(saved.objective);
+      if (saved.objective === "bullish" || saved.objective === "bearish" || saved.objective === "spotParity" || saved.objective === "debtParity" || saved.objective === "perpParity" || saved.objective === "benchmarkDominance") setObjective(saved.objective);
       if (isNumber(saved.spotParityMagnitude)) setSpotParityMagnitude(saved.spotParityMagnitude);
       if (isNumber(saved.debtParityMagnitude)) setDebtParityMagnitude(saved.debtParityMagnitude);
       if (isNumber(saved.perpParityMagnitude)) setPerpParityMagnitude(saved.perpParityMagnitude);
@@ -920,6 +971,8 @@ export default function App() {
     shortLtvLimit,
     bullishTarget,
     bearishTarget,
+    analysisMinPercent: -downsideBreakevenMagnitude,
+    analysisMaxPercent: bullishTarget,
     searchStep,
   };
   const searchKey = JSON.stringify(optimisationInputs);
@@ -957,12 +1010,20 @@ export default function App() {
           perpParityPercent: perpParityMagnitude,
           debtPosition,
           perpPosition: perpState,
+          bearishTargetPercent: bearishTarget,
+          analysisMinPercent: -downsideBreakevenMagnitude,
+          analysisMaxPercent: bullishTarget,
+          comparisonMode,
         })
       : null,
     [
       config,
+      bearishTarget,
+      bullishTarget,
+      comparisonMode,
       debtParityMagnitude,
       debtPosition,
+      downsideBreakevenMagnitude,
       mode,
       objective,
       optimisationStatus,
@@ -1085,6 +1146,9 @@ export default function App() {
       bearishTargetPercent: bearishTarget,
       searchStepPercent: searchStep,
       objective,
+      comparisonMode,
+      analysisMinPercent: -downsideBreakevenMagnitude,
+      analysisMaxPercent: bullishTarget,
       spotParityPercent: spotParityMagnitude,
       debtParityPercent: debtParityMagnitude,
       perpParityPercent: perpParityMagnitude,
