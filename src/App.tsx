@@ -145,6 +145,8 @@ function Slider({
   detail,
   accent = "amber",
   signedDisplay = false,
+  autoWhenMax = false,
+  disabled = false,
 }: {
   label: string;
   value: number;
@@ -154,10 +156,13 @@ function Slider({
   detail: string;
   accent?: string;
   signedDisplay?: boolean;
+  autoWhenMax?: boolean;
+  disabled?: boolean;
 }) {
   const sliderValue = value,
     displayValue = value,
     inputValue = signedDisplay ? -displayValue : displayValue,
+    isAuto = autoWhenMax && value >= max,
     snapValue = (next: number) => Math.min(max, Math.max(min, Math.round(next))),
     commitValue = (next: number) => onChange(snapValue(next)),
     stepUp = () => {
@@ -195,19 +200,26 @@ function Slider({
             } as React.CSSProperties
           }
           onChange={(e) => commitValue(+e.target.value)}
+          disabled={disabled}
         />
         <div className="number-step">
-          <NumericInput
-            step="1"
-            min={signedDisplay ? -max : min}
-            max={signedDisplay ? -min : max}
-            value={inputValue}
-            onValueChange={commitInput}
-          />
+          {isAuto ? (
+            <input type="text" value="AUTO" readOnly aria-label={`${label} automatic`} />
+          ) : (
+            <NumericInput
+              step="1"
+              min={signedDisplay ? -max : min}
+              max={signedDisplay ? -min : max}
+              value={inputValue}
+              onValueChange={commitInput}
+              readOnly={disabled}
+            />
+          )}
           <button
             type="button"
             aria-label={`Increase ${label}`}
             onClick={stepUp}
+            disabled={disabled}
           >
             <span className="step-chevron" />
           </button>
@@ -215,6 +227,7 @@ function Slider({
             type="button"
             aria-label={`Decrease ${label}`}
             onClick={stepDown}
+            disabled={disabled}
           >
             <span className="step-chevron down" />
           </button>
@@ -423,6 +436,7 @@ export default function App() {
     [maxDD, setMaxDD] = useState(15),
     [longLtvLimit, setLongLtvLimit] = useState(MAX_V4_LTV * 100),
     [shortLtvLimit, setShortLtvLimit] = useState(MAX_V4_LTV * 100),
+    [leverageLimitsExpanded, setLeverageLimitsExpanded] = useState(false),
     [bullishTarget, setBullishTarget] = useState(200),
     [bearishTarget, setBearishTarget] = useState(-75),
     [searchStep, setSearchStep] = useState(1),
@@ -451,6 +465,15 @@ export default function App() {
       outcome: OptimiseOutcome;
     } | null>(null),
     [optimiseError, setOptimiseError] = useState<string | null>(null);
+  const railScrollRef = useRef<HTMLDivElement>(null);
+  const [railCanScrollUp, setRailCanScrollUp] = useState(false);
+  const [railCanScrollDown, setRailCanScrollDown] = useState(false);
+  const updateRailScrollIndicators = () => {
+    const rail = railScrollRef.current;
+    if (!rail) return;
+    setRailCanScrollUp(rail.scrollTop > 1);
+    setRailCanScrollDown(rail.scrollTop + rail.clientHeight < rail.scrollHeight - 1);
+  };
   const [persistenceLoaded, setPersistenceLoaded] = useState(
     () => !window.desktopWindow?.loadInputs,
   );
@@ -462,6 +485,14 @@ export default function App() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [showMaths]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(updateRailScrollIndicators);
+    window.addEventListener("resize", updateRailScrollIndicators);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateRailScrollIndicators);
+    };
+  }, [comparisonMode, mode, leverageLimitsExpanded, requireBreakeven, lastRun]);
   useEffect(() => {
     const loadInputs = window.desktopWindow?.loadInputs;
     if (!loadInputs) return;
@@ -881,7 +912,7 @@ export default function App() {
               aria-expanded={showSettings}
               aria-controls="calculation-settings"
             >
-              SETTINGS
+              OPTIMISER SETTINGS
             </button>
           </div>
         </div>
@@ -1096,6 +1127,11 @@ export default function App() {
               </button>
             </div>
           </div>
+          <div
+            className="rail-scroll"
+            ref={railScrollRef}
+            onScroll={updateRailScrollIndicators}
+          >
           <div className="control-group capital-settlement">
             {comparisonMode === "base" && (
               <>
@@ -1287,46 +1323,70 @@ export default function App() {
                   }`}
                 >
                   <div className="optimise-leverage-limits">
-                    <Slider
-                      label="LONG LEVERAGE LIMIT"
-                      value={longLtvLimit}
-                      min={50}
-                      max={maxLtv}
-                      onChange={setLongLtvLimit}
-                      detail={longLtvLimit >= maxLtv ? "AUTO" : `${effectiveLeverage(longLtvLimit / 100).toFixed(2)}× max`}
-                      accent="amber"
-                    />
-                    <Slider
-                      label="SHORT LEVERAGE LIMIT"
-                      value={shortLtvLimit}
-                      min={50}
-                      max={maxLtv}
-                      onChange={setShortLtvLimit}
-                      detail={shortLtvLimit >= maxLtv ? "AUTO" : `${effectiveLeverage(shortLtvLimit / 100).toFixed(2)}× max`}
-                      accent="violet"
-                    />
+                    <div className="leverage-limits-header">
+                      <span>LEVERAGE LIMITS</span>
+                      <button
+                        type="button"
+                        className={`leverage-limits-toggle ${leverageLimitsExpanded ? "expanded" : ""}`}
+                        onClick={() => setLeverageLimitsExpanded((expanded) => !expanded)}
+                        aria-expanded={leverageLimitsExpanded}
+                      >
+                        <b>{longLtvLimit >= maxLtv && shortLtvLimit >= maxLtv ? "AUTO" : "CUSTOM"}</b>
+                        <i aria-hidden="true" />
+                      </button>
+                    </div>
+                    {leverageLimitsExpanded && <div className="leverage-limit-editor">
+                      <Slider
+                        label="LONG"
+                        value={longLtvLimit}
+                        min={50}
+                        max={maxLtv}
+                        onChange={setLongLtvLimit}
+                        detail={longLtvLimit >= maxLtv ? "" : `${effectiveLeverage(longLtvLimit / 100).toFixed(2)}× max`}
+                        accent="amber"
+                        autoWhenMax
+                      />
+                      <Slider
+                        label="SHORT"
+                        value={shortLtvLimit}
+                        min={50}
+                        max={maxLtv}
+                        onChange={setShortLtvLimit}
+                        detail={shortLtvLimit >= maxLtv ? "" : `${effectiveLeverage(shortLtvLimit / 100).toFixed(2)}× max`}
+                        accent="violet"
+                        autoWhenMax
+                      />
+                      <button
+                        type="button"
+                        className="reset-leverage-limits"
+                        onClick={() => {
+                          setLongLtvLimit(maxLtv);
+                          setShortLtvLimit(maxLtv);
+                        }}
+                      >
+                        RESET TO AUTO
+                      </button>
+                    </div>}
                   </div>
-                  {objective === "spotParity" || objective === "debtParity" ? (
-                    <div className="risk-context">
+                  <Slider
+                    label="MAX DRAWDOWN"
+                    value={maxDD}
+                    min={0}
+                    max={100}
+                    onChange={setMaxDD}
+                    detail={objective === "spotParity" || objective === "debtParity" ? "SET BY PARITY" : ""}
+                    accent="risk"
+                    signedDisplay
+                    disabled={objective === "spotParity" || objective === "debtParity"}
+                  />
+                  {(objective === "spotParity" || objective === "debtParity") && (
+                    <div className="risk-context compact">
                       <i>∿</i>
                       <span>
                         <b>{objective === "debtParity" ? "Lending parity is setting drawdown." : "Spot parity is setting drawdown."}</b>
                         Choose Bullish or Bearish to set a hard limit.
                       </span>
                     </div>
-                  ) : (
-                    <>
-                      <Slider
-                        label="MAX DRAWDOWN"
-                        value={maxDD}
-                        min={0}
-                        max={100}
-                        onChange={setMaxDD}
-                        detail=""
-                        accent="risk"
-                        signedDisplay
-                      />
-                    </>
                   )}
                 </section>
                 <label className="switch precision-switch breakeven-required">
@@ -1572,6 +1632,9 @@ export default function App() {
               </div>
             </>
           )}
+          </div>
+          {railCanScrollUp && <div className="rail-scroll-indicator top" aria-hidden="true"><i /></div>}
+          {railCanScrollDown && <div className="rail-scroll-indicator bottom" aria-hidden="true"><i /></div>}
         </aside>
         <section className="workspace">
           {!comparisonIsValid ? (
