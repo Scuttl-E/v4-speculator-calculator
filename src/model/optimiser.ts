@@ -88,9 +88,13 @@ export function optimisePortfolioWithOutcome(
     throw new RangeError("Spot parity target must be greater than 0%");
   if (options.debtParityPercent <= -100)
     throw new RangeError("Lending parity target must be greater than -100%");
+  if ((options.bearishTargetPercent ?? -75) <= -100)
+    throw new RangeError("Bearish target must be greater than -100%");
+  if ((options.searchStepPercent ?? 1) <= 0)
+    throw new RangeError("Search step must be greater than 0%");
 
-  const bearishPrice = targetPercentToPrice(-75),
-    bullishPrice = targetPercentToPrice(200),
+  const bearishPrice = targetPercentToPrice(options.bearishTargetPercent ?? -75),
+    bullishPrice = targetPercentToPrice(options.bullishTargetPercent ?? 200),
     parityPrice = targetPercentToPrice(options.spotParityPercent),
     debtParityPrice = targetPercentToPrice(options.debtParityPercent),
     debtParityValue = debtPositionValue(debtParityPrice, options.debtPosition),
@@ -99,8 +103,17 @@ export function optimisePortfolioWithOutcome(
     options.cashbackMode === "optimise"
       ? (["cash", "spot"] as const)
       : ([options.cashbackMode] as const);
-  const step = 0.01;
-  const ltvValues = steppedValues(0.5, supportedOptimiserMaxLtv(options.maxLtv), step);
+  const step = (options.searchStepPercent ?? 1) / 100;
+  const longLtvValues = steppedValues(
+    0.5,
+    supportedOptimiserMaxLtv(options.longMaxLtv ?? options.maxLtv),
+    step,
+  );
+  const shortLtvValues = steppedValues(
+    0.5,
+    supportedOptimiserMaxLtv(options.shortMaxLtv ?? options.maxLtv),
+    step,
+  );
   let bestWithin: Config | undefined,
     bestWithinScore = -Infinity,
     bestWithinSecondaryScore = -Infinity,
@@ -232,8 +245,8 @@ export function optimisePortfolioWithOutcome(
 
   for (const cashbackMode of cashbackModes)
     for (let allocation = 0; allocation <= 1; allocation += step)
-      for (const longLtv of ltvValues)
-        for (const shortLtv of ltvValues)
+      for (const longLtv of longLtvValues)
+        for (const shortLtv of shortLtvValues)
           evaluate({
             deposit: options.deposit,
             longAllocation: allocation,

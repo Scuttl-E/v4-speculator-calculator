@@ -16,6 +16,11 @@ export interface Trough {
 export interface OptimiseOptions {
   maxDrawdown: number;
   maxLtv: number;
+  longMaxLtv?: number;
+  shortMaxLtv?: number;
+  bullishTargetPercent?: number;
+  bearishTargetPercent?: number;
+  searchStepPercent?: number;
   objective: Objective;
   spotParityPercent: number;
   debtParityPercent: number;

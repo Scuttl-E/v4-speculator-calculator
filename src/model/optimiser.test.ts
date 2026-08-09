@@ -80,6 +80,17 @@ describe("optimiser", () => {
     expect(supportedOptimiserMaxLtv(0.75)).toBe(0.75);
   });
 
+  it("respects independent long and short leverage limits", () => {
+    const result = optimisePortfolio({
+      ...base,
+      maxLtv: 0.8,
+      longMaxLtv: 0.55,
+      shortMaxLtv: 0.65,
+    });
+    expect(result.longLtv).toBeLessThanOrEqual(0.55);
+    expect(result.shortLtv).toBeLessThanOrEqual(0.65);
+  });
+
   it("includes a fractional LTV terminal stop in the optimiser grid", () => {
     const fractionalMaxLtv = 0.5033;
     const result = optimisePortfolio({

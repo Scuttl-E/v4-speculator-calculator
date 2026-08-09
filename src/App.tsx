@@ -82,6 +82,60 @@ const DEFAULT_PERP: PerpPositionInput = {
   side: "long",
 };
 type ComparisonMode = "base" | "lending" | "perp";
+function NumericInput({
+  value,
+  onValueChange,
+  emptyWhenZero = false,
+  min,
+  max,
+  step,
+  placeholder,
+  readOnly = false,
+  className,
+  "aria-label": ariaLabel,
+}: {
+  value: number;
+  onValueChange: (value: number) => void;
+  emptyWhenZero?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | string;
+  placeholder?: string;
+  readOnly?: boolean;
+  className?: string;
+  "aria-label"?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const formattedValue = () => emptyWhenZero && value === 0 ? "" : String(value);
+  const [draft, setDraft] = useState(formattedValue);
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(formattedValue());
+  }, [value, emptyWhenZero]);
+  const commit = (next: string) => {
+    setDraft(next);
+    if (next.trim() === "") return;
+    const parsed = Number(next);
+    if (Number.isFinite(parsed)) onValueChange(parsed);
+  };
+  return (
+    <input
+      ref={inputRef}
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      placeholder={placeholder}
+      className={className}
+      aria-label={ariaLabel}
+      readOnly={readOnly}
+      value={draft}
+      onChange={(event) => commit(event.target.value)}
+      onBlur={() => {
+        if (draft.trim() === "") setDraft(formattedValue());
+      }}
+    />
+  );
+}
 function Slider({
   label,
   value,
@@ -143,13 +197,12 @@ function Slider({
           onChange={(e) => commitValue(+e.target.value)}
         />
         <div className="number-step">
-          <input
-            type="number"
+          <NumericInput
             step="1"
             min={signedDisplay ? -max : min}
             max={signedDisplay ? -min : max}
             value={inputValue}
-            onChange={(e) => commitInput(+e.target.value)}
+            onValueChange={commitInput}
           />
           <button
             type="button"
@@ -197,13 +250,12 @@ function HorizonInput({
       </div>
       <div className="horizon-step">
         <span>{sign}</span>
-        <input
-          type="number"
+        <NumericInput
           min={min}
           max={max}
           step="1"
           value={value}
-          onChange={(event) => commitValue(+event.target.value)}
+          onValueChange={commitValue}
         />
         <em>%</em>
         <button
@@ -236,12 +288,11 @@ function ChartRangeInput({
   const commitValue = (next: number) => onChange(Math.round(next / 10) * 10);
   return (
     <div className="chart-range-step">
-      <input
+      <NumericInput
         aria-label={label}
-        type="number"
         step="10"
         value={value}
-        onChange={(event) => commitValue(+event.target.value)}
+        onValueChange={commitValue}
       />
       <button
         type="button"
@@ -370,10 +421,16 @@ export default function App() {
       useState<OptimiserCashbackMode>("optimise"),
     [requireBreakeven, setRequireBreakeven] = useState(false),
     [maxDD, setMaxDD] = useState(15),
+    [longLtvLimit, setLongLtvLimit] = useState(MAX_V4_LTV * 100),
+    [shortLtvLimit, setShortLtvLimit] = useState(MAX_V4_LTV * 100),
+    [bullishTarget, setBullishTarget] = useState(200),
+    [bearishTarget, setBearishTarget] = useState(-75),
+    [searchStep, setSearchStep] = useState(1),
     [minMove, setMinMove] = useState(-80),
     [maxMove, setMaxMove] = useState(150),
     [showLong, setShowLong] = useState(false),
     [showShort, setShowShort] = useState(false),
+    [showSpot, setShowSpot] = useState(true),
     [showDebt, setShowDebt] = useState(true),
     [showLiquidationLine, setShowLiquidationLine] = useState(true),
     [showDrawdownLine, setShowDrawdownLine] = useState(true),
@@ -385,6 +442,7 @@ export default function App() {
     [perpState, setPerpState] = useState<PerpPositionInput>({ ...DEFAULT_PERP }),
     [showPerp, setShowPerp] = useState(true),
     [showMaths, setShowMaths] = useState(false),
+    [showSettings, setShowSettings] = useState(false),
     [optimising, setOptimising] = useState(false),
     [lastRun, setLastRun] = useState<{
       statusKey: string;
@@ -440,10 +498,16 @@ export default function App() {
       if (saved.cashbackPreference === "cash" || saved.cashbackPreference === "spot" || saved.cashbackPreference === "optimise") setCashbackPreference(saved.cashbackPreference);
       if (typeof saved.requireBreakeven === "boolean") setRequireBreakeven(saved.requireBreakeven);
       if (isNumber(saved.maxDD)) setMaxDD(saved.maxDD);
+      if (isNumber(saved.longLtvLimit)) setLongLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.longLtvLimit)));
+      if (isNumber(saved.shortLtvLimit)) setShortLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.shortLtvLimit)));
+      if (isNumber(saved.bullishTarget)) setBullishTarget(Math.max(1, saved.bullishTarget));
+      if (isNumber(saved.bearishTarget)) setBearishTarget(Math.min(-1, Math.max(-99, saved.bearishTarget)));
+      if (isNumber(saved.searchStep)) setSearchStep(Math.min(5, Math.max(0.25, saved.searchStep)));
       if (isNumber(saved.minMove)) setMinMove(saved.minMove);
       if (isNumber(saved.maxMove)) setMaxMove(saved.maxMove);
       if (typeof saved.showLong === "boolean") setShowLong(saved.showLong);
       if (typeof saved.showShort === "boolean") setShowShort(saved.showShort);
+      if (typeof saved.showSpot === "boolean") setShowSpot(saved.showSpot);
       if (typeof saved.showDebt === "boolean") setShowDebt(saved.showDebt);
       if (typeof saved.showPerp === "boolean") setShowPerp(saved.showPerp);
       if (typeof saved.showLiquidationLine === "boolean") setShowLiquidationLine(saved.showLiquidationLine);
@@ -481,8 +545,8 @@ export default function App() {
       void saveInputs({
         comparisonMode, mode, manualConfig, optimisedConfig, objective,
         spotParityMagnitude, debtParityMagnitude, downsideBreakevenMagnitude,
-        upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDD,
-        minMove, maxMove, showLong, showShort, showDebt, showPerp,
+        upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDD, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+        minMove, maxMove, showLong, showShort, showSpot, showDebt, showPerp,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState,
       });
@@ -490,9 +554,9 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [
     assetAmount, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, debtParityMagnitude,
-    downsideBreakevenMagnitude, liquidationLtv, manualConfig, maxDD, maxMove,
+    bearishTarget, bullishTarget, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDD, maxMove,
     minMove, mode, objective, optimisedConfig, perpState, persistenceLoaded,
-    requireBreakeven, showDebt, showDrawdownLine, showLiquidationLine, showLong,
+    requireBreakeven, searchStep, shortLtvLimit, showDebt, showDrawdownLine, showLiquidationLine, showLong, showSpot,
     showPerp, showShort, spotParityMagnitude, upsideBreakevenMagnitude, usdDebt,
   ]);
   const comparisonIsValid = comparisonMode === "base"
@@ -623,8 +687,8 @@ export default function App() {
   const persistInputsNow = () => window.desktopWindow?.saveInputs({
     comparisonMode, mode, manualConfig, optimisedConfig, objective,
     spotParityMagnitude, debtParityMagnitude, downsideBreakevenMagnitude,
-    upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDD,
-    minMove, maxMove, showLong, showShort, showDebt, showPerp,
+    upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDD, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+    minMove, maxMove, showLong, showShort, showSpot, showDebt, showPerp,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState,
   });
@@ -659,6 +723,11 @@ export default function App() {
       ? upsideBreakevenMagnitude
       : null,
     maxLtv,
+    longLtvLimit,
+    shortLtvLimit,
+    bullishTarget,
+    bearishTarget,
+    searchStep,
   };
   const searchKey = JSON.stringify(optimisationInputs);
   const statusKeyFor = (
@@ -767,6 +836,11 @@ export default function App() {
     worker.postMessage({
       maxDrawdown: maxDD / 100,
       maxLtv: maxLtv / 100,
+      longMaxLtv: longLtvLimit / 100,
+      shortMaxLtv: shortLtvLimit / 100,
+      bullishTargetPercent: bullishTarget,
+      bearishTargetPercent: bearishTarget,
+      searchStepPercent: searchStep,
       objective,
       spotParityPercent: spotParityMagnitude,
       debtParityPercent: debtParityMagnitude,
@@ -787,19 +861,29 @@ export default function App() {
             <i />
             V4 SPECULATOR <span>PRICE MODEL</span>
           </div>
-          <div className="comparison-modes" aria-label="Comparison mode">
-            <button className={comparisonMode === "base" ? "on" : ""} onClick={() => selectComparisonMode("base")}>BASE</button>
-            <button className={comparisonMode === "lending" ? "on" : ""} onClick={() => selectComparisonMode("lending")}>LENDING POSITION</button>
-            <button className={comparisonMode === "perp" ? "on" : ""} onClick={() => selectComparisonMode("perp")}>PERP POSITION</button>
+          <div className="topbar-mode-actions">
+            <div className="comparison-modes" aria-label="Comparison mode">
+              <button className={comparisonMode === "base" ? "on" : ""} onClick={() => selectComparisonMode("base")}>BASE</button>
+              <button className={comparisonMode === "lending" ? "on" : ""} onClick={() => selectComparisonMode("lending")}>LENDING POSITION</button>
+              <button className={comparisonMode === "perp" ? "on" : ""} onClick={() => selectComparisonMode("perp")}>PERP POSITION</button>
+            </div>
+            <button
+              className="comparison-reset"
+              disabled={activeComparisonIsDefault}
+              onClick={resetActiveComparison}
+              title="Reset current comparison inputs"
+            >
+              RESET
+            </button>
+            <button
+              className={`comparison-settings ${showSettings ? "active" : ""}`}
+              onClick={() => setShowSettings((visible) => !visible)}
+              aria-expanded={showSettings}
+              aria-controls="calculation-settings"
+            >
+              SETTINGS
+            </button>
           </div>
-          <button
-            className="comparison-reset"
-            disabled={activeComparisonIsDefault}
-            onClick={resetActiveComparison}
-            title="Reset current comparison inputs"
-          >
-            RESET
-          </button>
         </div>
         <div className="topbar-actions">
           <div className="status">
@@ -827,6 +911,59 @@ export default function App() {
           </button>
         </div>
       </header>
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <section
+            id="calculation-settings"
+            className="settings-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <small>CALCULATION ASSUMPTIONS</small>
+                <h2 id="settings-title">Settings</h2>
+              </div>
+              <button type="button" aria-label="Close settings" onClick={() => setShowSettings(false)}>×</button>
+            </header>
+            <div className="settings-grid">
+              <label>
+                <span>BULLISH TARGET</span>
+                <small>Used by Maximise bullish exposure</small>
+                <NumericInput className="settings-number" value={bullishTarget} min={1} max={2000} onValueChange={(value) => setBullishTarget(Math.min(2000, Math.max(1, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>BEARISH TARGET</span>
+                <small>Used by Maximise bearish exposure</small>
+                <NumericInput className="settings-number" value={bearishTarget} min={-99} max={-1} onValueChange={(value) => setBearishTarget(Math.min(-1, Math.max(-99, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>SEARCH RESOLUTION</span>
+                <small>Allocation and LTV search increment</small>
+                <NumericInput className="settings-number" value={searchStep} min={0.25} max={5} step="0.25" onValueChange={(value) => setSearchStep(Math.min(5, Math.max(0.25, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>DOWNSIDE RECOVERY</span>
+                <small>Adverse-side breakeven horizon</small>
+                <NumericInput className="settings-number" value={downsideBreakevenMagnitude} min={1} max={99} onValueChange={(value) => setDownsideBreakevenMagnitude(Math.min(99, Math.max(1, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>UPSIDE RECOVERY</span>
+                <small>Adverse-side breakeven horizon</small>
+                <NumericInput className="settings-number" value={upsideBreakevenMagnitude} min={1} max={2000} onValueChange={(value) => setUpsideBreakevenMagnitude(Math.min(2000, Math.max(1, value)))} />
+                <em>%</em>
+              </label>
+            </div>
+            <p>V4 leverage remains capped at 80% LTV / 2.50×.</p>
+          </section>
+        </div>
+      )}
       {showMaths && (
         <div className="maths-overlay" onClick={() => setShowMaths(false)}>
           <article
@@ -960,21 +1097,20 @@ export default function App() {
             </div>
           </div>
           <div className="control-group capital-settlement">
-            <div className="control-group-title">CAPITAL &amp; SETTLEMENT</div>
             {comparisonMode === "base" && (
               <>
                 <section className="compact-control">
                   <label className="field-label">V4 DEPOSIT</label>
                   <div className="deposit-input">
                     <span>$</span>
-                    <input type="number" min="0" value={config.deposit} onChange={(e) => update("deposit", Math.max(0, +e.target.value || 0))} />
+                    <NumericInput min={0} value={config.deposit} onValueChange={(value) => update("deposit", Math.max(0, value))} />
                   </div>
                 </section>
                 <section className="compact-control base-asset-value">
                   <label className="field-label">ASSET VALUE <small>Optional</small></label>
                   <div className="deposit-input">
                     <span>$</span>
-                    <input type="number" min="0" value={baseAssetValue || ""} placeholder="Optional" aria-label="Optional current asset value" onChange={(e) => setBaseAssetValue(Math.max(0, +e.target.value || 0))} />
+                    <NumericInput min={0} value={baseAssetValue} emptyWhenZero placeholder="Optional" aria-label="Optional current asset value" onValueChange={(value) => setBaseAssetValue(Math.max(0, value))} />
                   </div>
                 </section>
               </>
@@ -984,12 +1120,12 @@ export default function App() {
               <label className="field-label">ASSET PRICE
                 <div className="deposit-input">
                   <span>$</span>
-                  <input type="number" min="0" value={assetPrice} onChange={(e) => setAssetPrice(Math.max(0, +e.target.value || 0))} />
+                  <NumericInput min={0} value={assetPrice} onValueChange={(value) => setAssetPrice(Math.max(0, value))} />
                 </div>
               </label>
               <label className="field-label">ASSET AMOUNT
                 <div className="deposit-input">
-                  <input type="number" min="0" step="0.01" value={assetAmount} onChange={(e) => setAssetAmount(Math.max(0, +e.target.value || 0))} />
+                  <NumericInput min={0} step="0.01" value={assetAmount} onValueChange={(value) => setAssetAmount(Math.max(0, value))} />
                 </div>
               </label>
             </section>
@@ -997,28 +1133,28 @@ export default function App() {
               <label className="field-label">USD DEBT
                 <div className="deposit-input">
                   <span>$</span>
-                  <input type="number" min="0" value={usdDebt} onChange={(e) => setUsdDebt(Math.max(0, +e.target.value || 0))} />
+                  <NumericInput min={0} value={usdDebt} onValueChange={(value) => setUsdDebt(Math.max(0, value))} />
                 </div>
               </label>
               <label className="field-label">LIQUIDATION LTV
                 <div className="deposit-input">
-                  <input type="number" min="1" max="99" step="1" value={liquidationLtv} onChange={(e) => setLiquidationLtv(Math.min(99, Math.max(1, +e.target.value || 1)))} />
+                  <NumericInput min={1} max={99} step="1" value={liquidationLtv} onValueChange={(value) => setLiquidationLtv(Math.min(99, Math.max(1, value)))} />
                   <span>%</span>
                 </div>
               </label>
             </section>
             <section className="compact-control derived-deposit">
               <label className="field-label">V4 DEPOSIT <small>Derived from net equity</small></label>
-              <div className="deposit-input"><span>$</span><input type="number" value={Math.max(0, config.deposit)} readOnly aria-label="Derived V4 deposit" /></div>
+              <div className="deposit-input"><span>$</span><NumericInput value={Math.max(0, config.deposit)} onValueChange={() => undefined} readOnly aria-label="Derived V4 deposit" /></div>
             </section>
             </>}
             {comparisonMode === "perp" && <>
               <section className="compact-control debt-input-row">
                 <label className="field-label">CURRENT ASSET PRICE
-                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.assetPrice} onChange={(e) => setPerpState((current) => ({ ...current, assetPrice: Math.max(0, +e.target.value || 0) }))} /></div>
+                  <div className="deposit-input"><span>$</span><NumericInput min={0} value={perpState.assetPrice} onValueChange={(value) => setPerpState((current) => ({ ...current, assetPrice: Math.max(0, value) }))} /></div>
                 </label>
                 <label className="field-label">POSITION SIZE
-                  <div className="deposit-input"><input type="number" min="0" step="0.01" value={perpState.positionSize} onChange={(e) => setPerpState((current) => ({ ...current, positionSize: Math.max(0, +e.target.value || 0) }))} /></div>
+                  <div className="deposit-input"><NumericInput min={0} step="0.01" value={perpState.positionSize} onValueChange={(value) => setPerpState((current) => ({ ...current, positionSize: Math.max(0, value) }))} /></div>
                 </label>
               </section>
               <section className="compact-control perp-position-row">
@@ -1030,26 +1166,25 @@ export default function App() {
                   </div>
                 </div>
                 <label className="field-label">AVERAGE ENTRY PRICE
-                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.averageEntryPrice} onChange={(e) => setPerpState((current) => ({ ...current, averageEntryPrice: Math.max(0, +e.target.value || 0) }))} /></div>
+                  <div className="deposit-input"><span>$</span><NumericInput min={0} value={perpState.averageEntryPrice} onValueChange={(value) => setPerpState((current) => ({ ...current, averageEntryPrice: Math.max(0, value) }))} /></div>
                 </label>
               </section>
               <section className="compact-control debt-inputs">
                 <label className="field-label">MARGIN / COLLATERAL
-                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.margin} onChange={(e) => setPerpState((current) => ({ ...current, margin: Math.max(0, +e.target.value || 0) }))} /></div>
+                  <div className="deposit-input"><span>$</span><NumericInput min={0} value={perpState.margin} onValueChange={(value) => setPerpState((current) => ({ ...current, margin: Math.max(0, value) }))} /></div>
                 </label>
                 <label className="field-label">LIQUIDATION PRICE
-                  <div className="deposit-input"><span>$</span><input type="number" min="0" value={perpState.liquidationPrice} onChange={(e) => setPerpState((current) => ({ ...current, liquidationPrice: Math.max(0, +e.target.value || 0) }))} /></div>
+                  <div className="deposit-input"><span>$</span><NumericInput min={0} value={perpState.liquidationPrice} onValueChange={(value) => setPerpState((current) => ({ ...current, liquidationPrice: Math.max(0, value) }))} /></div>
                 </label>
               </section>
               <section className="compact-control derived-deposit">
                 <label className="field-label">V4 DEPOSIT <small>Derived from current equity</small></label>
-                <div className="deposit-input"><span>$</span><input type="number" value={Math.max(0, config.deposit)} readOnly aria-label="Derived V4 deposit" /></div>
+                <div className="deposit-input"><span>$</span><NumericInput value={Math.max(0, config.deposit)} onValueChange={() => undefined} readOnly aria-label="Derived V4 deposit" /></div>
               </section>
             </>}
             <section className="compact-control">
               <div className="section-label">
-                <b>CASHBACK</b>
-                <span>Settlement preference</span>
+                <b>CASHBACK PREFERENCE</b>
               </div>
               <div className="segments wide cashback-segments">
                 <button
@@ -1146,12 +1281,31 @@ export default function App() {
           {mode === "optimise" && (
             <>
               <div className="control-group risk-constraints">
-                <div className="control-group-title">RISK &amp; CONSTRAINTS</div>
                 <section
                   className={`risk-target ${
                     objective === "spotParity" || objective === "debtParity" ? "objective-owned" : ""
                   }`}
                 >
+                  <div className="optimise-leverage-limits">
+                    <Slider
+                      label="LONG LEVERAGE LIMIT"
+                      value={longLtvLimit}
+                      min={50}
+                      max={maxLtv}
+                      onChange={setLongLtvLimit}
+                      detail={longLtvLimit >= maxLtv ? "AUTO" : `${effectiveLeverage(longLtvLimit / 100).toFixed(2)}× max`}
+                      accent="amber"
+                    />
+                    <Slider
+                      label="SHORT LEVERAGE LIMIT"
+                      value={shortLtvLimit}
+                      min={50}
+                      max={maxLtv}
+                      onChange={setShortLtvLimit}
+                      detail={shortLtvLimit >= maxLtv ? "AUTO" : `${effectiveLeverage(shortLtvLimit / 100).toFixed(2)}× max`}
+                      accent="violet"
+                    />
+                  </div>
                   {objective === "spotParity" || objective === "debtParity" ? (
                     <div className="risk-context">
                       <i>∿</i>
@@ -1216,7 +1370,6 @@ export default function App() {
               </div>
 
               <div className="control-group optimisation-target">
-                <div className="control-group-title">OPTIMISATION TARGET</div>
                 <section className="optimise target-control">
                   <label className="field-label">OBJECTIVE</label>
                   <select
@@ -1475,54 +1628,64 @@ export default function App() {
                 </span>
               </div>
               <div className="chart-controls">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showLong}
-                    onChange={(e) => setShowLong(e.target.checked)}
-                  />{" "}
-                  {longControlLabel}
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showShort}
-                    onChange={(e) => setShowShort(e.target.checked)}
-                  />{" "}
-                  {shortControlLabel}
-                </label>
-                {comparisonMode === "lending" && <label>
-                  <input
-                    type="checkbox"
-                    checked={showDebt}
-                    onChange={(e) => setShowDebt(e.target.checked)}
-                  />{" "}
-                  Lending Position
-                </label>}
-                {comparisonMode === "perp" && <label>
-                  <input
-                    type="checkbox"
-                    checked={showPerp}
-                    onChange={(e) => setShowPerp(e.target.checked)}
-                  />{" "}
-                  Perp position
-                </label>}
-                {comparisonMode !== "base" && <label>
-                  <input
-                    type="checkbox"
-                    checked={showLiquidationLine}
-                    onChange={(e) => setShowLiquidationLine(e.target.checked)}
-                  />{" "}
-                  Liquidation line
-                </label>}
-                {mode === "optimise" && objective !== "spotParity" && objective !== "debtParity" && <label>
-                  <input
-                    type="checkbox"
-                    checked={showDrawdownLine}
-                    onChange={(e) => setShowDrawdownLine(e.target.checked)}
-                  />{" "}
-                  Drawdown limit
-                </label>}
+                <div className="chart-series-controls">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showLong}
+                      onChange={(e) => setShowLong(e.target.checked)}
+                    />{" "}
+                    {longControlLabel}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showShort}
+                      onChange={(e) => setShowShort(e.target.checked)}
+                    />{" "}
+                    {shortControlLabel}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showSpot}
+                      onChange={(e) => setShowSpot(e.target.checked)}
+                    />{" "}
+                    Asset value - spot
+                  </label>
+                  {comparisonMode === "lending" && <label>
+                    <input
+                      type="checkbox"
+                      checked={showDebt}
+                      onChange={(e) => setShowDebt(e.target.checked)}
+                    />{" "}
+                    Lending Position
+                  </label>}
+                  {comparisonMode === "perp" && <label>
+                    <input
+                      type="checkbox"
+                      checked={showPerp}
+                      onChange={(e) => setShowPerp(e.target.checked)}
+                    />{" "}
+                    Perp position
+                  </label>}
+                  {comparisonMode !== "base" && <label>
+                    <input
+                      type="checkbox"
+                      checked={showLiquidationLine}
+                      onChange={(e) => setShowLiquidationLine(e.target.checked)}
+                    />{" "}
+                    Liquidation line
+                  </label>}
+                  {mode === "optimise" && objective !== "spotParity" && objective !== "debtParity" && <label>
+                    <input
+                      type="checkbox"
+                      checked={showDrawdownLine}
+                      onChange={(e) => setShowDrawdownLine(e.target.checked)}
+                    />{" "}
+                    Drawdown limit
+                  </label>}
+                </div>
                 <div className="chart-range-control">
                   <b>RANGE</b>
                   <ChartRangeInput
@@ -1665,7 +1828,7 @@ export default function App() {
                     dot={false}
                     isAnimationActive={false}
                   />
-                  <Line
+                  {showSpot && <Line
                     dataKey="spot"
                     name="Asset value - spot"
                     stroke="#b8aea3"
@@ -1673,7 +1836,7 @@ export default function App() {
                     strokeWidth={1.35}
                     dot={false}
                     isAnimationActive={false}
-                  />
+                  />}
                   {showLong && (
                     <Line
                       dataKey="long"
