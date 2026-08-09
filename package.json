@@ -1,15 +1,18 @@
 {
   "name": "v4-speculator-calculator",
   "version": "1.0.0",
+  "description": "Independent, unofficial Peapods Finance V4 price-model desktop calculator.",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite --port 5173 --strictPort\" \"wait-on tcp:5173 && electron .\"",
     "build": "tsc -b && vite build && tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron",
     "test": "vitest run",
-    "package": "npm run build && electron-builder --win"
+    "dist": "npm run dist:win",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
-  "dependencies": { "@vitejs/plugin-react": "latest", "electron": "latest", "recharts": "latest", "react": "latest", "react-dom": "latest" },
-  "devDependencies": { "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest", "concurrently": "latest", "electron-builder": "latest", "tsup": "latest", "typescript": "latest", "vite": "latest", "vitest": "latest", "wait-on": "latest" },
+  "dependencies": { "@vitejs/plugin-react": "latest", "recharts": "latest", "react": "latest", "react-dom": "latest" },
+  "devDependencies": { "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest", "concurrently": "latest", "electron": "latest", "electron-builder": "latest", "tsup": "latest", "typescript": "latest", "vite": "latest", "vitest": "latest", "wait-on": "latest" },
   "build": { "appId": "com.v4speculator.calculator", "productName": "V4 Speculator Calculator", "files": ["dist/**", "dist-electron/**", "package.json"] }
 }

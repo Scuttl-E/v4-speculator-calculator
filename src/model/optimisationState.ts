@@ -1,0 +1,112 @@
+import type { CashbackCrossoverResult } from "./cashbackCrossover";
+import type { ObjectiveAnalysis } from "./objectiveAnalysis";
+import type { Config, OptimiseOptions, OptimiseOutcome } from "./types";
+
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-dominance-1";
+
+const canonicalise = (value: unknown): unknown => {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new RangeError("Optimisation inputs must be finite");
+    const normalised = Math.round(value * 1e12) / 1e12;
+    return Object.is(normalised, -0) ? 0 : normalised;
+  }
+  if (Array.isArray(value)) return value.map(canonicalise);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, entry]) => [key, canonicalise(entry)]),
+    );
+  return value;
+};
+
+export function createOptimisationSignature(options: OptimiseOptions) {
+  const isParity = options.objective === "spotParity" ||
+    options.objective === "debtParity" || options.objective === "perpParity";
+  const materialInputs = {
+    comparisonMode: options.comparisonMode ?? "base",
+    baseAssetValue: (options.comparisonMode ?? "base") === "base"
+      ? options.baseAssetValue ?? 0
+      : null,
+    objective: options.objective,
+    deposit: options.deposit,
+    maxDrawdown: isParity ? null : options.maxDrawdown,
+    maxLtv: options.maxLtv,
+    longMaxLtv: options.longMaxLtv ?? options.maxLtv,
+    shortMaxLtv: options.shortMaxLtv ?? options.maxLtv,
+    cashbackMode: options.cashbackMode,
+    requireBreakeven: options.requireBreakeven,
+    adverseBreakevenPercent: !options.requireBreakeven
+      ? null
+      : options.objective === "bearish"
+        ? options.upsideBreakevenPercent
+        : options.downsideBreakevenPercent,
+    searchStepPercent: options.searchStepPercent ?? 1,
+    bullishTargetPercent: options.objective === "bullish" || options.objective === "benchmarkDominance"
+      ? options.bullishTargetPercent ?? 200
+      : null,
+    bearishTargetPercent: options.objective === "bearish"
+      ? options.bearishTargetPercent ?? -75
+      : null,
+    spotParityPercent: options.objective === "spotParity" ? options.spotParityPercent : null,
+    debtParityPercent: options.objective === "debtParity" ? options.debtParityPercent : null,
+    perpParityPercent: options.objective === "perpParity" ? options.perpParityPercent : null,
+    analysisMinPercent: options.objective === "benchmarkDominance" ? options.analysisMinPercent : null,
+    analysisMaxPercent: options.objective === "benchmarkDominance" ? options.analysisMaxPercent : null,
+    debtPosition: options.comparisonMode === "lending" ? options.debtPosition : null,
+    perpPosition: options.comparisonMode === "perp" ? options.perpPosition : null,
+  };
+  return JSON.stringify(canonicalise({
+    modelVersion: OPTIMISER_STATE_MODEL_VERSION,
+    inputs: materialInputs,
+  }));
+}
+
+export interface SuccessfulOptimisationResult {
+  signature: string;
+  options: OptimiseOptions;
+  inputs: Record<string, unknown>;
+  result: Config;
+  outcome: OptimiseOutcome;
+  crossover: CashbackCrossoverResult | null;
+  objectiveAnalysis: ObjectiveAnalysis | null;
+  baseAssetValue: number;
+}
+
+export type OptimiserRunState =
+  | { kind: "idle" }
+  | { kind: "running"; signature: string }
+  | { kind: "failed"; signature: string; message: string }
+  | { kind: "cancelled"; signature: string };
+
+export type OptimisationStatus = "not-run" | "current" | "stale" | "calculating" | "failed";
+
+export function restoreCachedResult(
+  displayed: SuccessfulOptimisationResult | null,
+  cache: ReadonlyMap<string, SuccessfulOptimisationResult>,
+  pendingSignature: string,
+) {
+  return cache.get(pendingSignature) ?? displayed;
+}
+
+export function optimisationStatusFor(
+  displayed: SuccessfulOptimisationResult | null,
+  pendingSignature: string,
+  runState: OptimiserRunState,
+): OptimisationStatus {
+  if (runState.kind === "running") return "calculating";
+  if (runState.kind === "failed" && runState.signature === pendingSignature) return "failed";
+  if (!displayed) return "not-run";
+  return displayed.signature === pendingSignature ? "current" : "stale";
+}
+
+export function completeOptimisation(
+  displayed: SuccessfulOptimisationResult | null,
+  cache: Map<string, SuccessfulOptimisationResult>,
+  completed: SuccessfulOptimisationResult,
+  pendingSignature: string,
+) {
+  cache.set(completed.signature, completed);
+  return completed.signature === pendingSignature ? completed : displayed;
+}

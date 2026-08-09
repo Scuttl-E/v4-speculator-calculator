@@ -28,6 +28,7 @@ export interface OptimiseOptions {
   searchStepPercent?: number;
   objective: Objective;
   comparisonMode?: ComparisonMode;
+  baseAssetValue?: number;
   spotParityPercent: number;
   debtParityPercent: number;
   perpParityPercent: number;
