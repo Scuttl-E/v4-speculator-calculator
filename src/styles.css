@@ -2052,6 +2052,7 @@ body {
   padding: 8px 0 7px;
   border-top: 1px solid #ffffff10;
 }
+.chart-tooltip .tooltip-values.single { grid-template-columns: minmax(0, 1fr); }
 .chart-tooltip .tooltip-legs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2399,6 +2400,9 @@ body {
 }
 .crossover-subheading { margin-top: 16px; }
 .crossover-outcome-grid { margin-top: 9px; }
+.objective-analysis-subheading { margin-top: 2px; }
+.objective-analysis-grid { margin-top: 9px; }
+.liquidation-subheading { margin-top: 22px; }
 .crossover-tradeoff {
   margin: 8px 0 0;
   color: #aaa096;

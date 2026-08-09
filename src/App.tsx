@@ -46,6 +46,10 @@ import {
   supportsCashbackCrossover,
   type CashbackCrossoverResult,
 } from "./model/cashbackCrossover";
+import {
+  createObjectiveAnalysis,
+  type ObjectiveAnalysis,
+} from "./model/objectiveAnalysis";
 
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", {
@@ -84,6 +88,60 @@ const crossoverTradeoffText = (result: CashbackCrossoverResult) => {
   const payoffEffect = result.payoffDeltaPts < -0.05 ? "costs" : "buys";
   return `1 pt ${drawdownDirection} drawdown ${payoffEffect} ${ratio} payoff pts`;
 };
+
+function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
+  const isSpot = analysis.kind === "spot";
+  const benchmarkLabel = analysis.kind === "lending"
+    ? "Lending position"
+    : analysis.kind === "perp"
+      ? "Perp position"
+      : "Spot";
+  const tag = analysis.kind === "spot"
+    ? "SPOT"
+    : analysis.kind === "lending"
+      ? "LENDING"
+      : "PERP";
+  return (
+    <section className="analytical-section objective-analysis" aria-label={`${tag.toLowerCase()} parity analysis`}>
+      <div className="crossover-section-heading">
+        <h3>{isSpot ? "PROTECTION AT PARITY" : "BENCHMARK PROTECTION"}</h3>
+        <span className="comparison-settings crossover-objective-tag">{tag}</span>
+      </div>
+      <h4 className="objective-analysis-subheading">AT PARITY TARGET</h4>
+      <div className="analytical-stat-grid objective-analysis-grid">
+        <span>V4</span>
+        <b><CrossoverValue value={analysis.target.v4Return} suffix="%" /></b>
+        <span>{benchmarkLabel}</span>
+        <b><CrossoverValue value={analysis.target.benchmarkReturn} suffix="%" /></b>
+        <span>Margin</span>
+        <b><CrossoverValue value={analysis.target.parityMargin} suffix="pts" /></b>
+      </div>
+      {analysis.kind === "spot" ? <>
+        <h4 className="crossover-subheading">DOWNSIDE PROTECTION</h4>
+        <div className="analytical-stat-grid objective-analysis-grid">
+          <span>V4 max drawdown</span>
+          <b><CrossoverValue value={analysis.v4MaxDrawdown} suffix="%" /></b>
+          <span>Spot max drawdown</span>
+          <b><CrossoverValue value={analysis.spotMaxDrawdown} suffix="%" /></b>
+          <span>Protection gained</span>
+          <b><CrossoverValue value={analysis.protectionGained} suffix="pts" /></b>
+        </div>
+      </> : analysis.liquidation && <>
+        <h4 className="liquidation-subheading">
+          {analysis.kind === "lending" ? "LENDING POSITION LIQUIDATION LEVEL" : "PERP POSITION LIQUIDATION LEVEL"}
+        </h4>
+        <div className="analytical-stat-grid objective-analysis-grid">
+          <span>Liquidates at</span>
+          <b><CrossoverValue value={analysis.liquidation.assetMove} suffix="%" /></b>
+          <span>V4 return at that point</span>
+          <b><CrossoverValue value={analysis.liquidation.v4Return} suffix="%" /></b>
+          <span>V4 value at that point</span>
+          <b>{money(analysis.liquidation.v4Value)}</b>
+        </div>
+      </>}
+    </section>
+  );
+}
 const formatLtv = (ltv: number) => {
   const percent = ltv * 100;
   return `${Math.abs(percent - Math.round(percent)) < 1e-8 ? percent.toFixed(0) : percent.toFixed(2)}%`;
@@ -374,17 +432,8 @@ function ChartRangeInput({
   );
 }
 function ChartTooltip({
-  active,
-  payload,
-  label,
-  config,
-  debtPosition,
-  comparisonMode,
-  perpPosition,
-  baseAssetValue,
-  assetLabel,
-  showLong,
-  showShort,
+  active, payload, label, config, debtPosition, comparisonMode, perpPosition,
+  baseAssetValue, assetLabel, showLong, showShort, showSpot, showDebt, showPerp,
 }: {
   active?: boolean;
   payload?: any[];
@@ -397,24 +446,67 @@ function ChartTooltip({
   assetLabel: string;
   showLong: boolean;
   showShort: boolean;
+  showSpot: boolean;
+  showDebt: boolean;
+  showPerp: boolean;
 }) {
   if (!active || !payload?.length) return null;
-  const p = 1 + (label ?? 0) / 100,
-    v4 = dollarValue(p, config),
-    spot = config.deposit * p,
-    edge = portfolioReturn(p, config) - (p - 1),
-    debtReturn = debtPositionReturn(p, debtPosition),
-    debtLiquidated = isDebtPositionLiquidated(p, debtPosition),
-    perpReturn = perpPositionReturn(p, perpPosition),
-    perpLiquidated = isPerpPositionLiquidated(p, perpPosition),
-    liquidated = comparisonMode === "perp" ? perpLiquidated : debtLiquidated,
-    assetPrice = comparisonMode === "base" && baseAssetValue > 0
-      ? baseAssetValue
-      : comparisonMode === "lending"
+
+  const p = 1 + (label ?? 0) / 100;
+  const v4 = dollarValue(p, config);
+  const v4Return = portfolioReturn(p, config);
+  const debtReturn = debtPositionReturn(p, debtPosition);
+  const debtLiquidated = isDebtPositionLiquidated(p, debtPosition);
+  const perpReturn = perpPositionReturn(p, perpPosition);
+  const perpLiquidated = isPerpPositionLiquidated(p, perpPosition);
+  const assetPrice = comparisonMode === "base" && baseAssetValue > 0
+    ? baseAssetValue
+    : comparisonMode === "lending"
       ? debtPosition.assetPrice
       : comparisonMode === "perp"
         ? perpPosition.assetPrice
         : null;
+
+  type TooltipMetric = {
+    key: "lending" | "perp" | "spot" | "long" | "short";
+    label: string;
+    edgeLabel: string;
+    icon: string;
+    returnValue: number | null;
+    dollarValue: number | null;
+    liquidated?: boolean;
+  };
+  const metrics: TooltipMetric[] = [];
+
+  if (comparisonMode === "lending" && showDebt) {
+    metrics.push({ key: "lending", label: "LENDING POSITION", edgeLabel: "LENDING", icon: "debt", returnValue: debtLiquidated ? null : debtReturn, dollarValue: debtLiquidated ? null : debtPositionValue(p, debtPosition), liquidated: debtLiquidated });
+  }
+  if (comparisonMode === "perp" && showPerp) {
+    metrics.push({ key: "perp", label: "PERP POSITION", edgeLabel: "PERP", icon: "perp", returnValue: perpLiquidated ? null : perpReturn, dollarValue: perpLiquidated ? null : perpPositionValue(p, perpPosition), liquidated: perpLiquidated });
+  }
+  if (showSpot) {
+    metrics.push({ key: "spot", label: `HELD ${assetLabel}`, edgeLabel: assetLabel, icon: "slate", returnValue: p - 1, dollarValue: config.deposit * p });
+  }
+  if (showLong) {
+    const value = longValue(p, config.longLtv, config.cashbackMode);
+    metrics.push({ key: "long", label: "LONG V4", edgeLabel: "LONG V4", icon: "long", returnValue: value - 1, dollarValue: config.deposit * value });
+  }
+  if (showShort) {
+    const value = shortValue(p, config.shortLtv, config.cashbackMode);
+    metrics.push({ key: "short", label: "SHORT V4", edgeLabel: "SHORT V4", icon: "short", returnValue: value - 1, dollarValue: config.deposit * value });
+  }
+
+  const primaryMetric = metrics.find((metric) => metric.returnValue !== null) ?? metrics[0] ?? null;
+  const secondaryMetrics = primaryMetric ? metrics.filter((metric) => metric.key !== primaryMetric.key) : [];
+  const renderMetric = (metric: TooltipMetric) => (
+    <div className="tooltip-value" key={metric.key}>
+      <i className={metric.icon} />
+      {metric.label}
+      <b>{metric.liquidated ? "LIQUIDATED" : metric.returnValue === null ? "—" : pct(metric.returnValue)}</b>
+      {metric.dollarValue !== null && <em>{money(metric.dollarValue)}</em>}
+    </div>
+  );
+
   return (
     <div className="chart-tooltip">
       <div className="tooltip-asset">
@@ -423,47 +515,20 @@ function ChartTooltip({
         <span aria-hidden="true" />
         <b>{pct(p - 1)}</b>
       </div>
-      <div className="tooltip-values">
+      <div className={`tooltip-values${primaryMetric ? "" : " single"}`}>
         <div className="tooltip-value">
           <i className="teal" />
-          V4 STRATEGY <b>{pct(portfolioReturn(p, config))}</b>
+          V4 STRATEGY <b>{pct(v4Return)}</b>
           <em>{money(v4)}</em>
         </div>
-        <div className="tooltip-value">
-          <i className="slate" />
-          HELD {assetLabel} <b>{pct(p - 1)}</b>
-          <em>{money(spot)}</em>
-        </div>
+        {primaryMetric && renderMetric(primaryMetric)}
       </div>
-      {(showLong || showShort) && (
-        <div className="tooltip-legs">
-          {showLong && <div className="tooltip-value">
-            <i className="long" />
-            LONG V4 <b>{pct(longValue(p, config.longLtv, config.cashbackMode) - 1)}</b>
-            <em>{money(config.deposit * longValue(p, config.longLtv, config.cashbackMode))}</em>
-          </div>}
-          {showShort && <div className="tooltip-value">
-            <i className="short" />
-            SHORT V4 <b>{pct(shortValue(p, config.shortLtv, config.cashbackMode) - 1)}</b>
-            <em>{money(config.deposit * shortValue(p, config.shortLtv, config.cashbackMode))}</em>
-          </div>}
+      {primaryMetric && primaryMetric.returnValue !== null && (
+        <div className="edge">
+          V4 EDGE VS {primaryMetric.edgeLabel} <b>{pct(v4Return - primaryMetric.returnValue).replace("%", " pts")}</b>
         </div>
       )}
-      <div className="edge">
-        V4 EDGE VS {assetLabel} <b>{pct(edge).replace("%", " pts")}</b>
-      </div>
-      {comparisonMode === "lending" && <div>
-        <i className="debt" />
-        LENDING POSITION {liquidated ? <b>LIQUIDATED</b> : <b>{debtReturn === null ? "—" : pct(debtReturn)}</b>}
-        {!liquidated && <em>{money(debtPositionValue(p, debtPosition))}</em>}
-      </div>}
-      {comparisonMode === "perp" && (
-        <div>
-          <i className="perp" />
-          PERP POSITION <b>{perpLiquidated ? "LIQUIDATED" : perpReturn === null ? "—" : pct(perpReturn)}</b>
-          {!perpLiquidated && <em>{money(perpPositionValue(p, perpPosition))}</em>}
-        </div>
-      )}
+      {secondaryMetrics.length > 0 && <div className="tooltip-legs">{secondaryMetrics.map(renderMetric)}</div>}
     </div>
   );
 }
@@ -882,6 +947,30 @@ export default function App() {
     objective,
     result: lastRun?.crossover,
   }) ? lastRun!.crossover : null;
+  const objectiveAnalysis = useMemo(
+    () => mode === "optimise" && optimisationStatus === "current"
+      ? createObjectiveAnalysis({
+          objective,
+          config,
+          spotParityPercent: spotParityMagnitude,
+          debtParityPercent: debtParityMagnitude,
+          perpParityPercent: perpParityMagnitude,
+          debtPosition,
+          perpPosition: perpState,
+        })
+      : null,
+    [
+      config,
+      debtParityMagnitude,
+      debtPosition,
+      mode,
+      objective,
+      optimisationStatus,
+      perpParityMagnitude,
+      perpState,
+      spotParityMagnitude,
+    ],
+  );
   const longReferenceLabel = `Long V4 · ${formatLtv(config.longLtv)} LTV · ${effectiveLeverage(config.longLtv).toFixed(2)}×`;
   const shortReferenceLabel = `Short V4 · ${formatLtv(config.shortLtv)} LTV · ${effectiveLeverage(config.shortLtv).toFixed(2)}×`;
   const longControlLabel = `Long V4 · ${formatLtv(config.longLtv)} · ${effectiveLeverage(config.longLtv).toFixed(2)}×`;
@@ -1923,6 +2012,7 @@ export default function App() {
               <h4 className="crossover-subheading">TRADE-OFF</h4>
               <p className="crossover-tradeoff">{crossoverTradeoffText(cashbackCrossover)}</p>
             </section>}
+            {objectiveAnalysis && <ObjectiveAnalysisBlock analysis={objectiveAnalysis} />}
           </div>
           <div className="panel chart-panel">
             <div className="panel-head">
@@ -2058,7 +2148,7 @@ export default function App() {
                     tick={{ fontSize: 12, fill: "#9b9187" }}
                     label={{ value: "Portfolio return", angle: -90, position: "insideLeft", fill: "#9b9187", fontSize: 12 }}
                   />
-                  <Tooltip content={<ChartTooltip config={config} debtPosition={debtPosition} comparisonMode={comparisonMode} perpPosition={perpState} baseAssetValue={baseAssetValue} assetLabel={assetLabel} showLong={showLong} showShort={showShort} />} />
+                  <Tooltip content={<ChartTooltip config={config} debtPosition={debtPosition} comparisonMode={comparisonMode} perpPosition={perpState} baseAssetValue={baseAssetValue} assetLabel={assetLabel} showLong={showLong} showShort={showShort} showSpot={showSpot} showDebt={showDebt} showPerp={showPerp} />} />
                   <ReferenceLine y={0} stroke="#7e756c" strokeOpacity={0.72} />
                   <ReferenceLine
                     x={0}
