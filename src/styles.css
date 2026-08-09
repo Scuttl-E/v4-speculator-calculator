@@ -2675,42 +2675,87 @@ body {
    Narrow viewports scroll the page instead of compressing controls and data. */
 html.web-build,
 body.web-build {
-  min-width: 1820px;
+  min-width: 1630px;
   min-height: 1100px;
   height: auto;
   overflow: auto;
 }
 body.web-build #root {
-  min-width: 1820px;
+  min-width: 1630px;
   min-height: 1100px;
   height: auto;
   overflow: visible;
 }
 main.web-app {
-  min-width: 1820px;
+  min-width: 1630px;
   min-height: 1100px;
   height: auto;
   overflow: visible;
 }
 main.web-app .shell {
-  min-width: 1820px;
+  min-width: 1630px;
   min-height: 1046px;
   height: calc(100vh - 54px);
-  grid-template-columns: 368px minmax(1404px, 1fr);
+  grid-template-columns: 368px minmax(1214px, 1fr);
+  gap: 16px;
+  padding: 16px;
   overflow: visible;
 }
 main.web-app .workspace {
-  min-width: 1404px;
+  min-width: 1214px;
 }
 main.web-app .workspace > .chart-panel {
-  min-width: 1404px;
+  min-width: 1214px;
 }
 main.web-app .workspace > .scenarios {
-  min-width: 1040px;
+  min-width: 850px;
 }
 main.web-app .shell.pea-nile-enhanced {
   grid-template-columns: 0 minmax(0, 1fr);
   gap: 0;
+}
+
+/* Browser-only cascade locks: narrow viewports must not activate the compact
+   desktop tracks inside the fixed-width web workstation. */
+main.web-app .chart-panel .panel-head {
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 14px;
+  padding: 12px 18px;
+}
+main.web-app .chart-panel .panel-head b {
+  font-size: 17px;
+}
+main.web-app .chart-panel .panel-head span {
+  font-size: 13px;
+}
+main.web-app .chart-panel .chart-controls {
+  gap: 20px;
+  font-size: 13px;
+}
+main.web-app .chart-panel .chart-controls > label {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+main.web-app .scenarios .scenario-row {
+  grid-template-columns: 78px minmax(82px, 1fr) minmax(68px, .9fr) minmax(82px, 1.08fr) minmax(78px, .95fr) minmax(68px, .78fr) minmax(94px, 1.05fr);
+  gap: 9px;
+  padding-inline: 10px;
+  font-size: 14px;
+}
+main.web-app .scenarios .scenario-row strong {
+  font-size: 16px;
+}
+main.web-app .scenarios .scenario-row b {
+  font-size: 15px;
+}
+main.web-app .scenarios.comparison-base .scenario-row {
+  grid-template-columns: 78px minmax(82px, 1fr) minmax(68px, .9fr) minmax(82px, 1.08fr) minmax(78px, .95fr) minmax(68px, .78fr);
+}
+main.web-app .scenarios .scenario-row > .v4-start,
+main.web-app .scenarios .scenario-row > .spot-start,
+main.web-app .scenarios .scenario-row > .edge-cell {
+  padding-left: 14px;
 }
 
 /* The web viewport has less chart height than the desktop window. Keep the
