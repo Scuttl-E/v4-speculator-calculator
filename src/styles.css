@@ -2702,3 +2702,14 @@ main.web-app .shell {
 main.web-app .workspace {
   min-width: 1000px;
 }
+
+/* The web viewport has less chart height than the desktop window. Keep the
+   series key in the header's existing lower breathing room, above the plot. */
+main.web-app .chart-panel .chart-series-legend {
+  order: -1;
+  align-self: stretch;
+  justify-content: flex-end;
+  min-height: 18px;
+  margin: -8px 20px 1px;
+  padding: 0;
+}
