@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   optimisePortfolio,
+  optimisePortfolioWithCashbackFrontier,
   optimisePortfolioWithOutcome,
+  supportedOptimiserMaxLtv,
   targetPercentToPrice,
 } from "./optimiser";
 import {
   findWorstDrawdown,
+  dollarValue,
   portfolioValue,
 } from "./v4Math";
+import { debtPositionValue } from "./debtPosition";
+import { perpPositionValue } from "./perpPosition";
+import { createBenchmarkDominanceEvaluator } from "./benchmarkDominance";
 import type {
   CashbackMode,
   Config,
@@ -20,6 +26,17 @@ const base: OptimiseOptions = {
   maxLtv: 0.51,
   objective: "bullish",
   spotParityPercent: 100,
+  debtParityPercent: 50,
+  perpParityPercent: 50,
+  debtPosition: { assetPrice: 4000, assetAmount: 20, usdDebt: 15000, liquidationLtv: 0.9 },
+  perpPosition: {
+    assetPrice: 1900,
+    averageEntryPrice: 1500,
+    positionSize: 20,
+    margin: 10000,
+    liquidationPrice: 1100,
+    side: "long",
+  },
   cashbackMode: "spot",
   requireBreakeven: false,
   downsideBreakevenPercent: -80,
@@ -28,7 +45,7 @@ const base: OptimiseOptions = {
 };
 
 function bestFeasibleValue(
-  objective: Exclude<Objective, "spotParity">,
+  objective: Exclude<Objective, "spotParity" | "debtParity" | "perpParity" | "benchmarkDominance">,
   cashbackMode: CashbackMode = "spot",
 ) {
   const p = targetPercentToPrice(objective === "bullish" ? 200 : -75);
@@ -71,13 +88,19 @@ describe("optimiser", () => {
   });
 
   it("caps optimiser LTVs at the supported 80% maximum", () => {
+    expect(supportedOptimiserMaxLtv(0.95)).toBe(0.8);
+    expect(supportedOptimiserMaxLtv(0.75)).toBe(0.75);
+  });
+
+  it("respects independent long and short leverage limits", () => {
     const result = optimisePortfolio({
       ...base,
-      maxDrawdown: 1,
-      maxLtv: 0.95,
+      maxLtv: 0.8,
+      longMaxLtv: 0.55,
+      shortMaxLtv: 0.65,
     });
-    expect(result.longLtv).toBeLessThanOrEqual(0.8);
-    expect(result.shortLtv).toBeLessThanOrEqual(0.8);
+    expect(result.longLtv).toBeLessThanOrEqual(0.55);
+    expect(result.shortLtv).toBeLessThanOrEqual(0.65);
   });
 
   it("includes a fractional LTV terminal stop in the optimiser grid", () => {
@@ -97,6 +120,36 @@ describe("optimiser", () => {
 
   it("maximises bearish exposure at the -75% scenario extreme", () => {
     bestFeasibleValue("bearish");
+  });
+
+  it("maximises the worst relative edge for Benchmark Dominance", () => {
+    const options: OptimiseOptions = {
+      ...base,
+      objective: "benchmarkDominance",
+      comparisonMode: "base",
+      maxDrawdown: 1,
+      maxLtv: 0.5,
+      searchStepPercent: 50,
+      analysisMinPercent: -80,
+      analysisMaxPercent: 200,
+    };
+    const evaluator = createBenchmarkDominanceEvaluator({
+      comparisonMode: "base",
+      requestedMinMove: -80,
+      requestedMaxMove: 200,
+      debtPosition: options.debtPosition,
+      perpPosition: options.perpPosition,
+    })!;
+    const candidates = [0, 0.5, 1].map((longAllocation) => ({
+      deposit: options.deposit,
+      longAllocation,
+      longLtv: 0.5,
+      shortLtv: 0.5,
+      cashbackMode: "spot" as const,
+    }));
+    const bestWorstEdge = Math.max(...candidates.map((candidate) => evaluator.analyse(candidate).worstEdgePts));
+    const result = optimisePortfolio(options);
+    expect(evaluator.analyse(result).worstEdgePts).toBeCloseTo(bestWorstEdge, 8);
   });
 
   it("minimises downside drawdown while matching spot at the parity target", () => {
@@ -144,6 +197,23 @@ describe("optimiser", () => {
     expect(findWorstDrawdown(result).drawdown).toBeLessThan(0);
   });
 
+  it("minimises drawdown while securing lending parity at the selected target", () => {
+    const options = {
+      ...base,
+      objective: "debtParity" as const,
+      debtParityPercent: 50,
+      maxLtv: 0.75,
+      deposit: 65000,
+    };
+    const outcome = optimisePortfolioWithOutcome(options);
+    expect(outcome.config).not.toBeNull();
+    expect(outcome.debtParity?.secured).toBe(true);
+    const p = targetPercentToPrice(options.debtParityPercent);
+    expect(dollarValue(p, outcome.config!)).toBeGreaterThanOrEqual(
+      debtPositionValue(p, options.debtPosition),
+    );
+  });
+
   it("chooses the better cashback treatment when requested", () => {
     const options = {
       ...base,
@@ -158,6 +228,44 @@ describe("optimiser", () => {
       10,
     );
     expect(["cash", "spot"]).toContain(result.cashbackMode);
+  });
+
+  it("minimises drawdown while securing perp parity at its independent target", () => {
+    const options = {
+      ...base,
+      objective: "perpParity" as const,
+      perpParityPercent: 25,
+      maxLtv: 0.75,
+      perpPosition: {
+        ...base.perpPosition,
+        positionSize: 5,
+      },
+      deposit: 12000,
+    };
+    const outcome = optimisePortfolioWithOutcome(options);
+    expect(outcome.config).not.toBeNull();
+    expect(outcome.perpParity?.secured).toBe(true);
+    const p = targetPercentToPrice(options.perpParityPercent);
+    expect(dollarValue(p, outcome.config!)).toBeGreaterThanOrEqual(
+      perpPositionValue(p, options.perpPosition),
+    );
+  });
+
+  it("builds both cashback frontiers without changing a forced cashback result", () => {
+    const options = {
+      ...base,
+      objective: "bullish" as const,
+      cashbackMode: "cash" as const,
+    };
+    const expected = optimisePortfolioWithOutcome(options);
+    const analysed = optimisePortfolioWithCashbackFrontier(options);
+
+    expect(analysed.outcome).toEqual(expected);
+    expect(new Set(analysed.candidates.map(({ cashbackMode }) => cashbackMode)))
+      .toEqual(new Set(["cash", "spot"]));
+    expect(analysed.candidates.every(({ requiredDrawdown, targetPayoff }) =>
+      Number.isFinite(requiredDrawdown) && Number.isFinite(targetPayoff)
+    )).toBe(true);
   });
 
   it("relaxes drawdown to the smallest whole-percent limit for breakeven", () => {

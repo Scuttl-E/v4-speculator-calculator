@@ -1,11 +1,35 @@
 node_modules/
 dist/
 dist-electron/
+release/
+release-*/
 
 *.tsbuildinfo
 *.log
+
+# Local environment and signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Packaged artefacts
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.zip
 
 # Local visual QA captures
 artifacts/
 electron-app-screenshot.png
 visual-check-*.png
+
+# Editor and operating-system state
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,6 +1,9 @@
+import type { PerpPositionInput } from "./perpPosition";
+
 export type CashbackMode = "cash" | "spot";
 export type OptimiserCashbackMode = CashbackMode | "optimise";
-export type Objective = "bullish" | "bearish" | "spotParity";
+export type ComparisonMode = "base" | "lending" | "perp";
+export type Objective = "bullish" | "bearish" | "spotParity" | "debtParity" | "perpParity" | "benchmarkDominance";
 export interface Config {
   deposit: number;
   longAllocation: number;
@@ -16,8 +19,26 @@ export interface Trough {
 export interface OptimiseOptions {
   maxDrawdown: number;
   maxLtv: number;
+  longMaxLtv?: number;
+  shortMaxLtv?: number;
+  bullishTargetPercent?: number;
+  bearishTargetPercent?: number;
+  analysisMinPercent?: number;
+  analysisMaxPercent?: number;
+  searchStepPercent?: number;
   objective: Objective;
+  comparisonMode?: ComparisonMode;
+  baseAssetValue?: number;
   spotParityPercent: number;
+  debtParityPercent: number;
+  perpParityPercent: number;
+  debtPosition: {
+    assetPrice: number;
+    assetAmount: number;
+    usdDebt: number;
+    liquidationLtv: number;
+  };
+  perpPosition: PerpPositionInput;
   cashbackMode: OptimiserCashbackMode;
   requireBreakeven: boolean;
   downsideBreakevenPercent: number;
@@ -33,5 +54,17 @@ export interface OptimiseOutcome {
   adverseDirection: AdverseDirection;
   downsideBreakeven: number | null;
   upsideBreakeven: number | null;
+  debtParity: {
+    targetPercent: number;
+    debtValue: number;
+    v4Value: number;
+    secured: boolean;
+  } | null;
+  perpParity: {
+    targetPercent: number;
+    perpValue: number;
+    v4Value: number;
+    secured: boolean;
+  } | null;
   failure: string | null;
 }
