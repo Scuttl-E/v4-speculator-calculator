@@ -1,6 +1,8 @@
+import type { PerpPositionInput } from "./perpPosition";
+
 export type CashbackMode = "cash" | "spot";
 export type OptimiserCashbackMode = CashbackMode | "optimise";
-export type Objective = "bullish" | "bearish" | "spotParity" | "debtParity";
+export type Objective = "bullish" | "bearish" | "spotParity" | "debtParity" | "perpParity";
 export interface Config {
   deposit: number;
   longAllocation: number;
@@ -24,12 +26,14 @@ export interface OptimiseOptions {
   objective: Objective;
   spotParityPercent: number;
   debtParityPercent: number;
+  perpParityPercent: number;
   debtPosition: {
     assetPrice: number;
     assetAmount: number;
     usdDebt: number;
     liquidationLtv: number;
   };
+  perpPosition: PerpPositionInput;
   cashbackMode: OptimiserCashbackMode;
   requireBreakeven: boolean;
   downsideBreakevenPercent: number;
@@ -48,6 +52,12 @@ export interface OptimiseOutcome {
   debtParity: {
     targetPercent: number;
     debtValue: number;
+    v4Value: number;
+    secured: boolean;
+  } | null;
+  perpParity: {
+    targetPercent: number;
+    perpValue: number;
     v4Value: number;
     secured: boolean;
   } | null;

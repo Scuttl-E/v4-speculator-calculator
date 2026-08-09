@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   optimisePortfolio,
+  optimisePortfolioWithCashbackFrontier,
   optimisePortfolioWithOutcome,
   supportedOptimiserMaxLtv,
   targetPercentToPrice,
@@ -11,6 +12,7 @@ import {
   portfolioValue,
 } from "./v4Math";
 import { debtPositionValue } from "./debtPosition";
+import { perpPositionValue } from "./perpPosition";
 import type {
   CashbackMode,
   Config,
@@ -24,7 +26,16 @@ const base: OptimiseOptions = {
   objective: "bullish",
   spotParityPercent: 100,
   debtParityPercent: 50,
+  perpParityPercent: 50,
   debtPosition: { assetPrice: 4000, assetAmount: 20, usdDebt: 15000, liquidationLtv: 0.9 },
+  perpPosition: {
+    assetPrice: 1900,
+    averageEntryPrice: 1500,
+    positionSize: 20,
+    margin: 10000,
+    liquidationPrice: 1100,
+    side: "long",
+  },
   cashbackMode: "spot",
   requireBreakeven: false,
   downsideBreakevenPercent: -80,
@@ -186,6 +197,44 @@ describe("optimiser", () => {
       10,
     );
     expect(["cash", "spot"]).toContain(result.cashbackMode);
+  });
+
+  it("minimises drawdown while securing perp parity at its independent target", () => {
+    const options = {
+      ...base,
+      objective: "perpParity" as const,
+      perpParityPercent: 25,
+      maxLtv: 0.75,
+      perpPosition: {
+        ...base.perpPosition,
+        positionSize: 5,
+      },
+      deposit: 12000,
+    };
+    const outcome = optimisePortfolioWithOutcome(options);
+    expect(outcome.config).not.toBeNull();
+    expect(outcome.perpParity?.secured).toBe(true);
+    const p = targetPercentToPrice(options.perpParityPercent);
+    expect(dollarValue(p, outcome.config!)).toBeGreaterThanOrEqual(
+      perpPositionValue(p, options.perpPosition),
+    );
+  });
+
+  it("builds both cashback frontiers without changing a forced cashback result", () => {
+    const options = {
+      ...base,
+      objective: "bullish" as const,
+      cashbackMode: "cash" as const,
+    };
+    const expected = optimisePortfolioWithOutcome(options);
+    const analysed = optimisePortfolioWithCashbackFrontier(options);
+
+    expect(analysed.outcome).toEqual(expected);
+    expect(new Set(analysed.candidates.map(({ cashbackMode }) => cashbackMode)))
+      .toEqual(new Set(["cash", "spot"]));
+    expect(analysed.candidates.every(({ requiredDrawdown, targetPayoff }) =>
+      Number.isFinite(requiredDrawdown) && Number.isFinite(targetPayoff)
+    )).toBe(true);
   });
 
   it("relaxes drawdown to the smallest whole-percent limit for breakeven", () => {

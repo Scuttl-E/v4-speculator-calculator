@@ -10,7 +10,7 @@ const inputsPath = () => path.join(app.getPath("userData"), "calculator-inputs.j
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 1800,
+    width: 1830,
     height: 1320,
     minWidth: 1400,
     minHeight: 1100,

@@ -537,6 +537,25 @@ select {
 .settings-number::-webkit-outer-spin-button, .settings-number::-webkit-inner-spin-button { margin: 0; appearance: none; }
 .settings-grid label > em { position: absolute; right: 9px; bottom: 9px; color: #a99e93; font: 11px Atelier; font-style: normal; }
 .settings-panel > p { margin: 0; padding-top: 10px; border-top: 1px solid #ffffff10; color: #a99e93; font-size: 10px; }
+.asset-name-panel { width: 360px; }
+.asset-name-field { display: grid; gap: 7px; padding: 15px 0; }
+.asset-name-field > span { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .075em; }
+.asset-name-field input {
+  width: 100%;
+  height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #ffffff10;
+  border-radius: 6px;
+  background: #1112129e;
+  color: var(--cream);
+  outline: 0;
+  font: 600 15px var(--mono);
+  letter-spacing: .03em;
+}
+.asset-name-field input:focus { border-color: #d4874c80; box-shadow: 0 0 0 2px #d4874c1c; }
+.asset-name-actions { display: flex; justify-content: space-between; gap: 8px; padding-top: 11px; border-top: 1px solid #ffffff10; }
+.asset-name-actions button { padding: 8px 10px; border: 0; border-radius: 6px; background: #ffffff0a; color: #cdbda9; font: 600 10px Atelier; letter-spacing: .07em; cursor: pointer; }
+.asset-name-actions button:last-child { color: #fae8d4; background: #d4874c33; }
 .maths-dialog {
   width: min(1040px, calc(100vw - 64px));
   max-height: calc(100vh - 102px);
@@ -1111,7 +1130,7 @@ body {
 .status { gap: 18px; font-size: 11px; letter-spacing: .075em; }
 .status b { color: #d7b18e; }
 
-.shell { gap: 22px; padding: 22px; }
+.shell { gap: 14px; padding: 14px; }
 .rail,
 .panel {
   border: 0;
@@ -1294,7 +1313,7 @@ body {
 .readouts span { color: #968b80; font-size: 13px; }
 .readouts .risk strong { color: #da7258; }
 
-.workspace { grid-template-rows: auto minmax(360px, 1fr) auto; gap: 18px; }
+.workspace { grid-template-rows: auto minmax(360px, 1fr) auto; gap: 14px; }
 .chart-panel {
   position: relative;
   background:
@@ -1936,7 +1955,7 @@ body {
 
 /* The chart gets the full upper span; readouts sit in the lower-right beside scenarios. */
 .workspace {
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: minmax(0, 1fr) 350px;
   grid-template-rows: minmax(360px, 1fr) auto;
 }
 .workspace > .chart-panel { grid-column: 1 / -1; grid-row: 1; }
@@ -2238,3 +2257,244 @@ body {
 }
 .rail-scroll-indicator.top i { transform: rotate(225deg); }
 .rail-scroll-indicator.bottom i { transform: rotate(45deg) translate(-1px, -1px); }
+
+/* One analytical instrument: shared section edges, hierarchy and spacing. */
+.workspace > .readouts.analytical-panel {
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  gap: 0;
+  padding: 0 16px 14px;
+  background: #191a19;
+}
+.workspace > .readouts.analytical-panel > .analytical-section {
+  min-width: 0;
+  min-height: 0;
+  padding: 15px 0;
+  border: 0;
+}
+.workspace > .readouts.analytical-panel > .analytical-section + .analytical-section {
+  border-top: 1px solid #ffffff10;
+}
+.analytical-panel h3,
+.analytical-panel h4 {
+  margin: 0;
+  color: #d5a981;
+  font: 600 11px Atelier;
+  letter-spacing: .105em;
+}
+.analytical-panel h3 { margin-bottom: 10px; }
+.workspace > .readouts.analytical-panel .analytical-primary,
+.position-breakdown-grid > b,
+.position-breakdown-grid > .cashback-spot-value b {
+  color: var(--cream);
+  font: 600 20px var(--mono);
+  letter-spacing: -.015em;
+}
+.workspace > .readouts.analytical-panel .analytical-note,
+.position-breakdown-grid > .cashback-spot-value small {
+  color: #968b80;
+  font: 400 13px Atelier;
+  line-height: 1.3;
+}
+.position-breakdown-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 7px;
+  color: #aaa096;
+  font-size: 14px;
+  line-height: 1.25;
+}
+.workspace > .readouts.analytical-panel .position-breakdown-grid > span {
+  margin: 0;
+  color: #aaa096;
+  font-size: 14px;
+}
+.position-breakdown-label small {
+  color: #968b80;
+  font: 400 13px Atelier;
+  white-space: nowrap;
+}
+.position-breakdown-grid > b { text-align: right; }
+.position-breakdown-grid > .cashback-cash-value { grid-column: 2; }
+.position-breakdown-grid > .cashback-spot-value {
+  display: flex;
+  grid-column: 2;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.workspace > .readouts.analytical-panel .summary-risk .analytical-primary {
+  color: #dd7559;
+}
+.drawdown-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 10px;
+}
+.workspace > .readouts.analytical-panel .drawdown-summary-row .analytical-note {
+  text-align: right;
+  white-space: nowrap;
+}
+.analytical-stat-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  width: 100%;
+  column-gap: 8px;
+  row-gap: 7px;
+  color: #aaa096;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.workspace > .readouts.analytical-panel .analytical-stat-grid > span {
+  color: #aaa096;
+  font-size: 14px;
+}
+.analytical-stat-grid > b {
+  color: var(--cream);
+  font: 600 14px var(--mono);
+  letter-spacing: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+.workspace > .readouts.analytical-panel .analytical-stat-grid > b .crossover-percent,
+.workspace > .readouts.analytical-panel .analytical-stat-grid > b .crossover-sign {
+  display: inline;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  opacity: .68;
+}
+.workspace > .readouts.analytical-panel .analytical-stat-grid > b .crossover-unit {
+  display: inline;
+  color: #aaa096;
+  font-size: .92em;
+  font-weight: 400;
+}
+.workspace > .readouts.analytical-panel .analytical-stat-grid > b .crossover-output-arrow {
+  display: inline;
+  color: #d5a981;
+  font-size: inherit;
+  font-weight: 400;
+  opacity: .68;
+}
+.crossover-section-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  margin-bottom: 12px;
+}
+.workspace > .readouts.analytical-panel .crossover-section-heading > h3 { margin: 0; }
+.crossover-objective-tag {
+  justify-self: end;
+  padding: 6px 9px;
+  font-size: 10px;
+  cursor: default;
+  pointer-events: none;
+}
+.crossover-subheading { margin-top: 16px; }
+.crossover-outcome-grid { margin-top: 9px; }
+.crossover-tradeoff {
+  margin: 8px 0 0;
+  color: #aaa096;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+/* Scenario legend belongs with the scenario instrument, not its analytical readout. */
+.scenarios > .panel-head {
+  align-items: flex-start;
+  gap: 20px;
+}
+.scenario-header-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, max-content));
+  grid-auto-rows: minmax(18px, auto);
+  align-items: center;
+  justify-content: end;
+  column-gap: 14px;
+  row-gap: 4px;
+  margin-left: auto;
+  color: #aaa096;
+  font-size: 12px;
+  text-align: left;
+}
+.scenario-header-legend > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.scenario-header-legend > span > i {
+  flex: 0 0 16px;
+  display: inline-block;
+  height: 3px !important;
+  border: 0;
+  border-radius: 2px;
+  background: currentColor !important;
+}
+.scenario-header-legend > span > i.v4 { color: #e18a4a; }
+.scenario-header-legend > span > i.spot { color: #b8aea3; }
+.scenario-header-legend > span > i.long,
+.scenario-header-legend > span > i.short { background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px) !important; }
+.scenario-header-legend > span > i.long { color: #e18a4a; }
+.scenario-header-legend > span > i.short { color: #aa9481; }
+.scenario-header-legend > span > i.debt { color: #c4b17d; }
+.scenario-header-legend > span > i.perp { color: #cf7961; }
+
+/* Keep the chart key with its axes: one compact row directly below the X axis. */
+.chart { display: flex; flex-direction: column; }
+.chart-plot { flex: 1 1 auto; min-height: 0; }
+.chart-plot > .recharts-responsive-container { width: 100% !important; height: 100% !important; }
+.chart-series-legend {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 22px;
+  padding: 1px 4px 0;
+  color: #aaa096;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chart-series-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Allocation labels stay legible without affecting the proportional bar beneath. */
+.allocation-split { position: relative; }
+.allocation-split-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  pointer-events: none;
+}
+.allocation-split-labels > span {
+  display: flex;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--cream);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-shadow: 0 1px 2px #000b;
+}
+.allocation-split-labels > span b {
+  margin: 0;
+  color: var(--cream);
+  font: 700 19px var(--mono);
+  letter-spacing: -.04em;
+}
+.allocation-split-labels > .long-label { justify-self: start; padding-left: 12px; }
+.allocation-split-labels > .short-label { justify-self: end; padding-right: 12px; }
+.allocation-split-labels > .only-side { grid-column: 1 / -1; }
