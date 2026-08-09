@@ -2,6 +2,7 @@
   "name": "v4-speculator-calculator",
   "version": "1.0.0",
   "description": "Independent, unofficial Peapods Finance V4 price-model desktop calculator.",
+  "license": "MIT",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {

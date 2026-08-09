@@ -457,3 +457,9 @@ If official V4 documentation conflicts with any current inferred behaviour, the 
 This project is intended for research, modelling, and experimentation.
 
 Its V4 outputs are estimates based on currently available public information. They should not be treated as official Peapods Finance calculations, financial advice, or guarantees of real-world strategy performance.
+
+---
+
+## Licence
+
+This project is licensed under the [MIT License](LICENSE).
