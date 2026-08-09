@@ -2670,3 +2670,35 @@ body {
     transition-duration: 1ms;
   }
 }
+
+/* Browser build: retain the workstation layout below its designed width.
+   Narrow viewports scroll the page instead of compressing controls and data. */
+html.web-build,
+body.web-build {
+  min-width: 1420px;
+  min-height: 1100px;
+  height: auto;
+  overflow: auto;
+}
+body.web-build #root {
+  min-width: 1420px;
+  min-height: 1100px;
+  height: auto;
+  overflow: visible;
+}
+main.web-app {
+  min-width: 1420px;
+  min-height: 1100px;
+  height: auto;
+  overflow: visible;
+}
+main.web-app .shell {
+  min-width: 1420px;
+  min-height: 1046px;
+  height: calc(100vh - 54px);
+  grid-template-columns: 368px minmax(1000px, 1fr);
+  overflow: visible;
+}
+main.web-app .workspace {
+  min-width: 1000px;
+}

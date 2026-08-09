@@ -788,6 +788,15 @@ export default function App() {
   const [persistenceLoaded, setPersistenceLoaded] = useState(false);
   const isDesktopApp = isDesktopShell();
   useEffect(() => {
+    if (isDesktopApp) return;
+    document.documentElement.classList.add("web-build");
+    document.body.classList.add("web-build");
+    return () => {
+      document.documentElement.classList.remove("web-build");
+      document.body.classList.remove("web-build");
+    };
+  }, [isDesktopApp]);
+  useEffect(() => {
     if (!showMaths) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShowMaths(false);
@@ -1423,7 +1432,7 @@ export default function App() {
   const assetLabel = assetName.trim() || DEFAULT_ASSET_NAME;
   const assetLabelLower = assetLabel.toLowerCase();
   return (
-    <main>
+    <main className={isDesktopApp ? "desktop-app" : "web-app"}>
       <header className="topbar">
         <div className="topbar-brand">
           <div className="wordmark">
