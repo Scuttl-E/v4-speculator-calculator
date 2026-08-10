@@ -2420,7 +2420,13 @@ body {
   gap: 0;
   padding: 0 16px 14px;
   background: #191a19;
+  contain: size;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
 }
+.workspace > .readouts.analytical-panel::-webkit-scrollbar { width: 0; height: 0; }
 .workspace > .readouts.analytical-panel > .analytical-section {
   min-width: 0;
   min-height: 0;
@@ -2472,6 +2478,18 @@ body {
   white-space: nowrap;
 }
 .position-breakdown-grid > b { text-align: right; }
+.position-breakdown-grid > .position-capital-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 7px;
+  white-space: nowrap;
+}
+.position-breakdown-grid > .position-capital-value .degen-recycled-allocation {
+  color: #dc9562;
+  font: 600 12px var(--mono);
+  letter-spacing: 0;
+}
 .position-breakdown-grid > .cashback-cash-value { grid-column: 2; }
 .position-breakdown-grid > .cashback-spot-value {
   display: flex;

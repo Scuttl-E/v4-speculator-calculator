@@ -1071,22 +1071,24 @@ export default function App() {
   const positionBreakdown = useMemo(() => {
     const degenAccounting = calculateDegenAccounting(config.deposit, config);
     const cashbackAmount = degenAccounting.residualCashback;
-    const currentAssetPrice = displayComparisonMode === "lending"
-      ? displayDebtPosition.assetPrice
-      : displayComparisonMode === "perp"
-        ? displayPerpState.assetPrice
-        : null;
+    const currentAssetPrice = displayComparisonMode === "base"
+      ? displayBaseAssetValue > 0 ? displayBaseAssetValue : null
+      : displayComparisonMode === "lending"
+        ? displayDebtPosition.assetPrice
+        : displayPerpState.assetPrice;
     const spotUnits = config.cashbackMode === "spot" && currentAssetPrice && currentAssetPrice > 0
       ? cashbackAmount / currentAssetPrice
       : null;
     return {
       longCapital: config.deposit * config.longAllocation,
       shortCapital: config.deposit * (1 - config.longAllocation),
+      recycledLongCapital: degenAccounting.recycledIntoV4 * config.longAllocation,
+      recycledShortCapital: degenAccounting.recycledIntoV4 * (1 - config.longAllocation),
       cashbackAmount,
       spotUnits,
       recycledIntoV4: degenAccounting.recycledIntoV4,
     };
-  }, [config, displayComparisonMode, displayDebtPosition.assetPrice, displayPerpState.assetPrice]);
+  }, [config, displayBaseAssetValue, displayComparisonMode, displayDebtPosition.assetPrice, displayPerpState.assetPrice]);
   const points = useMemo(
     () => {
       const moves = Array.from(
@@ -2525,9 +2527,15 @@ export default function App() {
               <h3>POSITION BREAKDOWN</h3>
               <div className="position-breakdown-grid">
                 <span className="position-breakdown-label">LONG V4 <small>&middot; {effectiveLeverage(config.longLtv).toFixed(2)}&times;</small></span>
-                <b>{money(positionBreakdown.longCapital)}</b>
+                <b className="position-capital-value">
+                  {money(positionBreakdown.longCapital)}
+                  {positionBreakdown.recycledLongCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledLongCapital)})</small>}
+                </b>
                 <span className="position-breakdown-label">SHORT V4 <small>&middot; {effectiveLeverage(config.shortLtv).toFixed(2)}&times;</small></span>
-                <b>{money(positionBreakdown.shortCapital)}</b>
+                <b className="position-capital-value">
+                  {money(positionBreakdown.shortCapital)}
+                  {positionBreakdown.recycledShortCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledShortCapital)})</small>}
+                </b>
                 {config.degenEnabled && positionBreakdown.recycledIntoV4 > 0 && <>
                   <span>RECYCLED INTO V4</span>
                   <b className="degen-recycled-value">+{money(positionBreakdown.recycledIntoV4)}</b>
@@ -2538,7 +2546,7 @@ export default function App() {
                 ) : (
                   <span className="cashback-spot-value">
                     <b>{positionBreakdown.spotUnits === null ? "SPOT" : `${positionBreakdown.spotUnits.toFixed(2)} ${assetLabel}`}</b>
-                    {positionBreakdown.spotUnits !== null && <small>({money(positionBreakdown.cashbackAmount)})</small>}
+                    <small>({money(positionBreakdown.cashbackAmount)})</small>
                   </span>
                 )}
               </div>
