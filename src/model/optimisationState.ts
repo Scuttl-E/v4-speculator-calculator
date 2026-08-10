@@ -2,7 +2,7 @@ import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-coarse-to-fine-1";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-degen-1";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {
@@ -36,6 +36,12 @@ export function createOptimisationSignature(options: OptimiseOptions) {
     longMaxLtv: options.longMaxLtv ?? options.maxLtv,
     shortMaxLtv: options.shortMaxLtv ?? options.maxLtv,
     cashbackMode: options.cashbackMode,
+    degenEnabled: options.degenEnabled,
+    degenMode: options.degenEnabled ? options.degenMode : null,
+    customRecyclePct:
+      options.degenEnabled && options.degenMode === "custom"
+        ? options.customRecyclePct
+        : null,
     requireBreakeven: options.requireBreakeven,
     adverseBreakevenPercent: !options.requireBreakeven
       ? null

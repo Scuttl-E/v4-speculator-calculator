@@ -1,4 +1,5 @@
 import type { CashbackMode, Config, Trough } from "./types";
+import { degenRecycleTargetRatio } from "./degen";
 export const MAX_V4_LTV = 0.8;
 export const effectiveLeverage = (ltv: number) => 0.5 / (1 - ltv);
 export const MAX_V4_EFFECTIVE_LEVERAGE = effectiveLeverage(MAX_V4_LTV);
@@ -15,9 +16,40 @@ export const shortValue = (p: number, ltv: number, mode: CashbackMode) => {
     ? 0.5 + 0.5 * p + (0.5 * m) / p - 0.5 * m
     : p + (0.5 * m) / p - 0.5 * m;
 };
-export const portfolioValue = (p: number, c: Config) =>
-  c.longAllocation * longValue(p, c.longLtv, c.cashbackMode) +
-  (1 - c.longAllocation) * shortValue(p, c.shortLtv, c.cashbackMode);
+export interface PortfolioComponents {
+  long: number;
+  short: number;
+  residualCashback: number;
+  total: number;
+}
+
+export const portfolioComponents = (p: number, c: Config): PortfolioComponents => {
+  p = validP(p);
+  const recycleTargetRatio = degenRecycleTargetRatio(c);
+  const grossV4Deposited = 1 + recycleTargetRatio;
+  const residualCashbackRatio = 0.5 * (1 - recycleTargetRatio);
+  const long = grossV4Deposited * c.longAllocation *
+    (longValue(p, c.longLtv, "cash") - 0.5);
+  const short = grossV4Deposited * (1 - c.longAllocation) *
+    (shortValue(p, c.shortLtv, "cash") - 0.5);
+  const residualCashback = residualCashbackRatio *
+    (c.cashbackMode === "cash" ? 1 : p);
+  return { long, short, residualCashback, total: long + short + residualCashback };
+};
+
+export const portfolioValue = (p: number, c: Config) => {
+  p = validP(p);
+  if (!c.degenEnabled)
+    return c.longAllocation * longValue(p, c.longLtv, c.cashbackMode) +
+      (1 - c.longAllocation) * shortValue(p, c.shortLtv, c.cashbackMode);
+  const recycleTargetRatio = degenRecycleTargetRatio(c);
+  const grossV4Deposited = 1 + recycleTargetRatio;
+  const residualCashbackRatio = 0.5 * (1 - recycleTargetRatio);
+  return grossV4Deposited * (
+    c.longAllocation * (longValue(p, c.longLtv, "cash") - 0.5) +
+    (1 - c.longAllocation) * (shortValue(p, c.shortLtv, "cash") - 0.5)
+  ) + residualCashbackRatio * (c.cashbackMode === "cash" ? 1 : p);
+};
 export const portfolioReturn = (p: number, c: Config) =>
   portfolioValue(p, c) - 1;
 export const dollarValue = (p: number, c: Config) =>

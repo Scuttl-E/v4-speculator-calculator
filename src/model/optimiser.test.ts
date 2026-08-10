@@ -38,6 +38,9 @@ const base: OptimiseOptions = {
     side: "long",
   },
   cashbackMode: "spot",
+  degenEnabled: false,
+  degenMode: "x1",
+  customRecyclePct: 50,
   requireBreakeven: false,
   downsideBreakevenPercent: -80,
   upsideBreakevenPercent: 400,
@@ -59,6 +62,9 @@ function bestFeasibleValue(
           longLtv,
           shortLtv,
           cashbackMode,
+          degenEnabled: base.degenEnabled,
+          degenMode: base.degenMode,
+          customRecyclePct: base.customRecyclePct,
         };
         if (
           findWorstDrawdown(config).drawdown >=
@@ -163,6 +169,9 @@ describe("optimiser", () => {
       longLtv: 0.5,
       shortLtv: 0.5,
       cashbackMode: "spot" as const,
+      degenEnabled: options.degenEnabled,
+      degenMode: options.degenMode,
+      customRecyclePct: options.customRecyclePct,
     }));
     const bestWorstEdge = Math.max(...candidates.map((candidate) => evaluator.analyse(candidate).worstEdgePts));
     const result = optimisePortfolio(options);
@@ -184,6 +193,9 @@ describe("optimiser", () => {
             longLtv,
             shortLtv,
             cashbackMode: "spot",
+            degenEnabled: base.degenEnabled,
+            degenMode: base.degenMode,
+            customRecyclePct: base.customRecyclePct,
           };
           const trough = findWorstDrawdown(config);
           if (portfolioValue(parityP, config) < parityP - 1e-10)
@@ -245,6 +257,48 @@ describe("optimiser", () => {
       10,
     );
     expect(["cash", "spot"]).toContain(result.cashbackMode);
+  });
+
+  it("evaluates fixed Degen settings inside every candidate without adding a search dimension", () => {
+    const options = {
+      ...base,
+      maxDrawdown: 0.15,
+      maxLtv: 0.8,
+      longMaxLtv: 0.8,
+      shortMaxLtv: 0.8,
+      searchStepPercent: 2,
+      cashbackMode: "optimise" as const,
+    };
+    const offOutcome = optimisePortfolioWithOutcome(options);
+    const maxOutcome = optimisePortfolioWithOutcome({ ...options, degenEnabled: true, degenMode: "max" });
+    const off = offOutcome.config!;
+    const max = maxOutcome.config!;
+    expect(max.degenEnabled).toBe(true);
+    expect(max.degenMode).toBe("max");
+    expect(max.customRecyclePct).toBe(options.customRecyclePct);
+    expect(max.longAllocation).not.toBe(off.longAllocation);
+    expect(maxOutcome.diagnostics?.passes[0].candidatesConsidered)
+      .toBe(offOutcome.diagnostics?.passes[0].candidatesConsidered);
+    expect(maxOutcome.diagnostics!.candidatesEvaluated /
+      offOutcome.diagnostics!.candidatesEvaluated).toBeLessThan(1.2);
+  });
+
+  it("runs Auto Cash versus Spot only after the selected recycling target", () => {
+    const options = {
+      ...base,
+      objective: "bullish" as const,
+      degenEnabled: true,
+      degenMode: "x3" as const,
+    };
+    const auto = optimisePortfolio({ ...options, cashbackMode: "optimise" });
+    const cash = optimisePortfolio({ ...options, cashbackMode: "cash" });
+    const spot = optimisePortfolio({ ...options, cashbackMode: "spot" });
+    const p = targetPercentToPrice(200);
+    expect(portfolioValue(p, auto)).toBeCloseTo(
+      Math.max(portfolioValue(p, cash), portfolioValue(p, spot)),
+      10,
+    );
+    expect(auto.degenMode).toBe("x3");
   });
 
   it("minimises drawdown while securing perp parity at its independent target", () => {

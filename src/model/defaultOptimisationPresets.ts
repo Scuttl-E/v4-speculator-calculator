@@ -9,7 +9,7 @@ export interface DefaultOptimisationPreset {
 }
 
 export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION: string =
-  "v4-price-model-2026-08-coarse-to-fine-1";
+  "v4-price-model-2026-08-degen-1";
 
 const outcome = (
   deposit: number,
@@ -19,7 +19,16 @@ const outcome = (
   cashbackMode: "cash" | "spot",
   adverseDirection: "downside" | "upside" = "downside",
 ): OptimiseOutcome => ({
-  config: { deposit, longAllocation, longLtv, shortLtv, cashbackMode },
+  config: {
+    deposit,
+    longAllocation,
+    longLtv,
+    shortLtv,
+    cashbackMode,
+    degenEnabled: false,
+    degenMode: "x1",
+    customRecyclePct: 50,
+  },
   requestedMaxDrawdown: 0.15,
   effectiveMaxDrawdown: 0.15,
   drawdownRelaxed: false,

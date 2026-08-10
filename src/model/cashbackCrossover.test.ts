@@ -15,6 +15,9 @@ const currentConfig: Config = {
   longLtv: 0.5,
   shortLtv: 0.5,
   cashbackMode: "cash",
+  degenEnabled: false,
+  degenMode: "x1",
+  customRecyclePct: 50,
 };
 
 const crossingCandidates: CashbackFrontierCandidate[] = [

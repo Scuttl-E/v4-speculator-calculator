@@ -345,7 +345,13 @@ function optimisePortfolioInternal(
     shortMaxLtv: supportedOptimiserMaxLtv(options.shortMaxLtv ?? options.maxLtv),
     cashbackModes,
     finalResolutionPercent,
-    assess: (candidate) => evaluate({ ...candidate, deposit: options.deposit }),
+    assess: (candidate) => evaluate({
+      ...candidate,
+      deposit: options.deposit,
+      degenEnabled: options.degenEnabled,
+      degenMode: options.degenMode,
+      customRecyclePct: options.customRecyclePct,
+    }),
   });
 
   const config = isBenchmarkParity

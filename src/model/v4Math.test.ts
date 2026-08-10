@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, MAX_V4_EFFECTIVE_LEVERAGE, MAX_V4_LTV, shortValue } from "./v4Math";
+import { effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, MAX_V4_EFFECTIVE_LEVERAGE, MAX_V4_LTV, portfolioComponents, portfolioValue, shortValue } from "./v4Math";
 import type { Config } from "./types";
+const config = (overrides: Partial<Config> = {}): Config => ({
+  deposit: 10000,
+  longAllocation: 0.6,
+  longLtv: 0.75,
+  shortLtv: 0.5,
+  cashbackMode: "spot",
+  degenEnabled: false,
+  degenMode: "x1",
+  customRecyclePct: 50,
+  ...overrides,
+});
 describe("published V4 anchors", () => {
   it("reproduces the 75% long curve", () => {
     expect(longValue(0.2, 0.75, "cash") * 10000).toBe(5200);
@@ -28,10 +39,39 @@ describe("published V4 anchors", () => {
     }
   });
   it("finds the lower-price breakeven beyond a downside trough", () => {
-    const config: Config = { deposit: 10000, longAllocation: 0.6, longLtv: 0.75, shortLtv: 0.5, cashbackMode: "spot" };
-    const trough = findWorstDrawdown(config);
-    const breakeven = findDownsideBreakeven(config, trough);
+    const strategy = config();
+    const trough = findWorstDrawdown(strategy);
+    const breakeven = findDownsideBreakeven(strategy, trough);
     expect(breakeven).not.toBeNull();
     expect(breakeven!).toBeLessThan(trough.p);
+  });
+
+  it("matches the locked pre-Degen portfolio formula exactly when disabled", () => {
+    for (const cashbackMode of ["cash", "spot"] as const) {
+      const strategy = config({ cashbackMode });
+      for (const p of [0.25, 0.8, 1, 1.5, 3]) {
+        const legacy = strategy.longAllocation * longValue(p, strategy.longLtv, cashbackMode) +
+          (1 - strategy.longAllocation) * shortValue(p, strategy.shortLtv, cashbackMode);
+        expect(portfolioValue(p, strategy)).toBeCloseTo(legacy, 12);
+      }
+    }
+  });
+
+  it("scales the same candidate strategy and retains original-capital normalisation", () => {
+    const strategy = config({ degenEnabled: true, degenMode: "x2", cashbackMode: "cash" });
+    const atEntry = portfolioComponents(1, strategy);
+    expect(atEntry.total).toBeCloseTo(1, 12);
+    expect(atEntry.long / atEntry.short).toBeCloseTo(
+      (strategy.longAllocation * 0.5) / ((1 - strategy.longAllocation) * 0.5),
+      12,
+    );
+    expect(atEntry.residualCashback).toBe(0.125);
+  });
+
+  it("makes equivalent Custom and preset targets produce identical payoff curves", () => {
+    const preset = config({ degenEnabled: true, degenMode: "x2" });
+    const custom = config({ degenEnabled: true, degenMode: "custom", customRecyclePct: 75 });
+    for (const p of [0.2, 0.75, 1, 2, 5])
+      expect(portfolioValue(p, custom)).toBeCloseTo(portfolioValue(p, preset), 12);
   });
 });

@@ -34,6 +34,9 @@ const options = (overrides: Partial<OptimiseOptions> = {}): OptimiseOptions => (
     side: "long",
   },
   cashbackMode: "optimise",
+  degenEnabled: false,
+  degenMode: "x1",
+  customRecyclePct: 50,
   requireBreakeven: false,
   downsideBreakevenPercent: -80,
   upsideBreakevenPercent: 400,
@@ -54,6 +57,9 @@ const snapshot = (
     longLtv: 0.75,
     shortLtv: 0.7,
     cashbackMode: "spot",
+    degenEnabled: input.degenEnabled,
+    degenMode: input.degenMode,
+    customRecyclePct: input.customRecyclePct,
   },
   outcome: {
     config: {
@@ -62,6 +68,9 @@ const snapshot = (
       longLtv: 0.75,
       shortLtv: 0.7,
       cashbackMode: "spot",
+      degenEnabled: input.degenEnabled,
+      degenMode: input.degenMode,
+      customRecyclePct: input.customRecyclePct,
     },
     requestedMaxDrawdown: input.maxDrawdown,
     effectiveMaxDrawdown: input.maxDrawdown,
@@ -126,6 +135,24 @@ describe("optimiser result state", () => {
     expect(createOptimisationSignature(options({ deposit: 12000 }))).not.toBe(original);
     expect(createOptimisationSignature(options({ comparisonMode: "lending" }))).not.toBe(original);
     expect(createOptimisationSignature(options({ baseAssetValue: 2000 }))).not.toBe(original);
+  });
+
+  it("separates and restores cache entries by material Degen settings", () => {
+    const off = options();
+    const x1 = options({ degenEnabled: true, degenMode: "x1" });
+    const x2 = options({ degenEnabled: true, degenMode: "x2" });
+    const custom68 = options({ degenEnabled: true, degenMode: "custom", customRecyclePct: 68 });
+    const custom69 = options({ degenEnabled: true, degenMode: "custom", customRecyclePct: 69 });
+    expect(createOptimisationSignature(x1)).not.toBe(createOptimisationSignature(off));
+    expect(createOptimisationSignature(x2)).not.toBe(createOptimisationSignature(x1));
+    expect(createOptimisationSignature(custom69)).not.toBe(createOptimisationSignature(custom68));
+    expect(createOptimisationSignature(options({ degenMode: "max", customRecyclePct: 99 })))
+      .toBe(createOptimisationSignature(off));
+
+    const x1Result = snapshot(x1);
+    const x2Result = snapshot(x2);
+    const cache = new Map([[x1Result.signature, x1Result], [x2Result.signature, x2Result]]);
+    expect(restoreCachedResult(x2Result, cache, x1Result.signature)).toBe(x1Result);
   });
 
   it("invalidates Lending and Perp signatures for their material comparator changes", () => {

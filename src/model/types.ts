@@ -3,9 +3,15 @@ import type { OptimiserSearchDiagnostics } from "./optimiserSearch";
 
 export type CashbackMode = "cash" | "spot";
 export type OptimiserCashbackMode = CashbackMode | "optimise";
+export type DegenMode = "x1" | "x2" | "x3" | "x4" | "custom" | "max";
+export interface DegenSettings {
+  degenEnabled: boolean;
+  degenMode: DegenMode;
+  customRecyclePct: number;
+}
 export type ComparisonMode = "base" | "lending" | "perp";
 export type Objective = "bullish" | "bearish" | "spotParity" | "debtParity" | "perpParity" | "benchmarkDominance";
-export interface Config {
+export interface Config extends DegenSettings {
   deposit: number;
   longAllocation: number;
   longLtv: number;
@@ -17,7 +23,7 @@ export interface Trough {
   p: number;
   drawdown: number;
 }
-export interface OptimiseOptions {
+export interface OptimiseOptions extends DegenSettings {
   maxDrawdown: number;
   maxLtv: number;
   longMaxLtv?: number;
