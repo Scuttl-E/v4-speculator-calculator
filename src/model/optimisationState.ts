@@ -1,6 +1,6 @@
 import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
-import type { Config, OptimiseOptions, OptimiseOutcome } from "./types";
+import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
 export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-degen-1";
 
@@ -92,8 +92,13 @@ export function restoreCachedResult(
   displayed: SuccessfulOptimisationResult | null,
   cache: ReadonlyMap<string, SuccessfulOptimisationResult>,
   pendingSignature: string,
+  comparisonMode: ComparisonMode,
 ) {
-  return cache.get(pendingSignature) ?? displayed;
+  const cached = cache.get(pendingSignature);
+  if (cached) return cached;
+  return displayed && (displayed.options.comparisonMode ?? "base") === comparisonMode
+    ? displayed
+    : null;
 }
 
 export function optimisationStatusFor(
@@ -101,7 +106,7 @@ export function optimisationStatusFor(
   pendingSignature: string,
   runState: OptimiserRunState,
 ): OptimisationStatus {
-  if (runState.kind === "running") return "calculating";
+  if (runState.kind === "running" && runState.signature === pendingSignature) return "calculating";
   if (runState.kind === "failed" && runState.signature === pendingSignature) return "failed";
   if (!displayed) return "not-run";
   return displayed.signature === pendingSignature ? "current" : "stale";

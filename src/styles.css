@@ -2414,6 +2414,7 @@ body {
 
 /* One analytical instrument: shared section edges, hierarchy and spacing. */
 .workspace > .readouts.analytical-panel {
+  position: relative;
   align-content: start;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto;
@@ -2632,6 +2633,7 @@ body {
 .chart-plot { position: relative; flex: 1 1 auto; min-height: 0; }
 .chart-plot > .recharts-responsive-container { width: 100% !important; height: 100% !important; }
 .optimisation-required-badge {
+  z-index: 8;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2645,6 +2647,7 @@ body {
   letter-spacing: .065em;
   line-height: 1;
   white-space: nowrap;
+  pointer-events: none;
 }
 .optimisation-required-badge i {
   color: var(--bright);
@@ -2653,12 +2656,47 @@ body {
 }
 .chart-optimisation-required {
   position: absolute;
-  z-index: 8;
   top: 10px;
   right: 18px;
-  pointer-events: none;
 }
 .scenario-optimisation-required { flex: 0 0 auto; margin-left: auto; }
+.workspace > .readouts.analytical-panel > .analytical-optimisation-required {
+  position: absolute;
+  min-height: 0;
+  top: 10px;
+  right: 10px;
+  padding: 7px 8px 6px;
+}
+.chart-panel > .panel-head,
+.chart-panel .chart-plot > .recharts-responsive-container,
+.chart-panel .chart-series-legend,
+.scenarios > .panel-head > div:first-child,
+.scenarios > .scenario-table,
+.scenarios > .scenario-debt-summary,
+.analytical-panel > .analytical-section {
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+.chart-panel.is-stale > .panel-head,
+.chart-panel.is-stale .chart-plot > .recharts-responsive-container,
+.chart-panel.is-stale .chart-series-legend,
+.scenarios.is-stale > .panel-head > div:first-child,
+.scenarios.is-stale > .scenario-table,
+.scenarios.is-stale > .scenario-debt-summary,
+.analytical-panel.is-stale > .analytical-section {
+  filter: blur(.65px) saturate(.88);
+  opacity: .76;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-panel > .panel-head,
+  .chart-panel .chart-plot > .recharts-responsive-container,
+  .chart-panel .chart-series-legend,
+  .scenarios > .panel-head > div:first-child,
+  .scenarios > .scenario-table,
+  .scenarios > .scenario-debt-summary,
+  .analytical-panel > .analytical-section {
+    transition: none;
+  }
+}
 .chart-series-legend {
   flex: 0 0 auto;
   display: flex;

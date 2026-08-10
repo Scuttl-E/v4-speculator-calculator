@@ -105,6 +105,28 @@ function CrossoverValue({
   </>;
 }
 
+function OptimisationRequiredBadge({
+  className,
+  calculating = false,
+  compact = false,
+}: {
+  className: string;
+  calculating?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`optimisation-required-badge ${className}`} role="status" aria-live="polite">
+      {compact ? (
+        calculating ? "OPTIMISING" : "OPTIMISATION REQUIRED"
+      ) : calculating ? (
+        <>OPTIMISING <i>&middot;</i> SHOWING PREVIOUS RESULT</>
+      ) : (
+        <>SETTINGS CHANGED <i>&middot;</i> OPTIMISATION REQUIRED</>
+      )}
+    </div>
+  );
+}
+
 const crossoverTradeoffText = (result: CashbackCrossoverResult) => {
   if (result.efficiency === null) return "No material drawdown change";
   const ratio = result.efficiency < 0.005 ? "<0.01" : result.efficiency.toFixed(2);
@@ -254,13 +276,37 @@ const DEFAULT_PERP: PerpPositionInput = {
 };
 const DEFAULT_ASSET_NAME = "ETH";
 const SCUTTLE_LINK = "https://x.com/chainsandtrains";
-const CURRENT_INPUT_DEFAULTS_VERSION = 3;
 const DEFAULT_MAX_DRAWDOWN = 15;
+const CURRENT_INPUT_DEFAULTS_VERSION = 4;
 const DEFAULT_MAX_DRAWDOWN_BY_MODE: Record<ComparisonMode, number> = {
   base: DEFAULT_MAX_DRAWDOWN,
   lending: DEFAULT_MAX_DRAWDOWN,
   perp: DEFAULT_MAX_DRAWDOWN,
 };
+type DegenSettings = Pick<Config, "degenEnabled" | "degenMode" | "customRecyclePct">;
+type DegenSettingsByMode = Record<ComparisonMode, DegenSettings>;
+const DEFAULT_DEGEN_SETTINGS: DegenSettings = {
+  degenEnabled: false,
+  degenMode: "x1",
+  customRecyclePct: 50,
+};
+const createDefaultDegenSettingsByMode = (): DegenSettingsByMode => ({
+  base: { ...DEFAULT_DEGEN_SETTINGS },
+  lending: { ...DEFAULT_DEGEN_SETTINGS },
+  perp: { ...DEFAULT_DEGEN_SETTINGS },
+});
+type OptimisedConfigsByMode = Record<ComparisonMode, Config>;
+const createDefaultOptimisedConfigsByMode = (): OptimisedConfigsByMode => ({
+  base: { ...INITIAL_CONFIG },
+  lending: { ...INITIAL_CONFIG },
+  perp: { ...INITIAL_CONFIG },
+});
+type DisplayedResultsByMode = Record<ComparisonMode, SuccessfulOptimisationResult | null>;
+const createEmptyDisplayedResultsByMode = (): DisplayedResultsByMode => ({
+  base: null,
+  lending: null,
+  perp: null,
+});
 type ChartSeriesVisibility = {
   long: boolean;
   short: boolean;
@@ -742,9 +788,9 @@ export default function App() {
   const [manualConfig, setManualConfig] = useState<Config>(() => ({
       ...INITIAL_CONFIG,
     })),
-    [optimisedConfig, setOptimisedConfig] = useState<Config>(() => ({
-      ...INITIAL_CONFIG,
-    })),
+    [optimisedConfigsByMode, setOptimisedConfigsByMode] = useState<OptimisedConfigsByMode>(
+      createDefaultOptimisedConfigsByMode,
+    ),
     [optimiserDeposit, setOptimiserDeposit] = useState(INITIAL_CONFIG.deposit);
   const [mode, setMode] = useState<"manual" | "optimise">("optimise"),
     [comparisonMode, setComparisonMode] = useState<ComparisonMode>("base"),
@@ -756,9 +802,9 @@ export default function App() {
     [upsideBreakevenMagnitude, setUpsideBreakevenMagnitude] = useState(400),
     [cashbackPreference, setCashbackPreference] =
       useState<OptimiserCashbackMode>("optimise"),
-    [degenEnabled, setDegenEnabled] = useState(false),
-    [degenMode, setDegenMode] = useState<DegenMode>("x1"),
-    [customRecyclePct, setCustomRecyclePct] = useState(50),
+    [degenSettingsByMode, setDegenSettingsByMode] = useState<DegenSettingsByMode>(
+      createDefaultDegenSettingsByMode,
+    ),
     [showDegenSelector, setShowDegenSelector] = useState(false),
     [requireBreakeven, setRequireBreakeven] = useState(false),
     [defaultMaxDrawdown, setDefaultMaxDrawdown] = useState(DEFAULT_MAX_DRAWDOWN),
@@ -793,8 +839,12 @@ export default function App() {
     [showAssetName, setShowAssetName] = useState(false),
     [isPeaNileEnhanced, setIsPeaNileEnhanced] = useState(false),
     [assetName, setAssetName] = useState(DEFAULT_ASSET_NAME),
-    [displayedResult, setDisplayedResult] = useState<SuccessfulOptimisationResult | null>(null),
+    [displayedResultsByMode, setDisplayedResultsByMode] = useState<DisplayedResultsByMode>(
+      createEmptyDisplayedResultsByMode,
+    ),
     [runState, setRunState] = useState<OptimiserRunState>({ kind: "idle" });
+  const { degenEnabled, degenMode, customRecyclePct } = degenSettingsByMode[comparisonMode];
+  const displayedResult = displayedResultsByMode[comparisonMode];
   const maxDD = maxDrawdownByMode[comparisonMode];
   const setMaxDD = (value: number) => setMaxDrawdownByMode((current) => ({
     ...current,
@@ -804,7 +854,11 @@ export default function App() {
   const peaNileButtonRef = useRef<HTMLButtonElement>(null);
   const optimiserWorkerRef = useRef<Worker | null>(null);
   const degenSelectorRef = useRef<HTMLDivElement>(null);
-  const pendingSignatureRef = useRef("");
+  const pendingSignaturesRef = useRef<Record<ComparisonMode, string>>({
+    base: "",
+    lending: "",
+    perp: "",
+  });
   const [railCanScrollUp, setRailCanScrollUp] = useState(false);
   const [railCanScrollDown, setRailCanScrollDown] = useState(false);
   const updateRailScrollIndicators = () => {
@@ -870,6 +924,17 @@ export default function App() {
     const isDegenMode = (value: unknown): value is DegenMode =>
       value === "x1" || value === "x2" || value === "x3" ||
       value === "x4" || value === "custom" || value === "max";
+    const isDegenSettingsByMode = (value: unknown): value is DegenSettingsByMode => {
+      if (!value || typeof value !== "object") return false;
+      const modes = value as Record<string, unknown>;
+      return (["base", "lending", "perp"] as const).every((modeName) => {
+        const settings = modes[modeName];
+        if (!settings || typeof settings !== "object") return false;
+        const input = settings as Record<string, unknown>;
+        return typeof input.degenEnabled === "boolean" &&
+          isDegenMode(input.degenMode) && isNumber(input.customRecyclePct);
+      });
+    };
     const isConfig = (value: unknown): value is Config => {
       if (!value || typeof value !== "object") return false;
       const input = value as Record<string, unknown>;
@@ -924,9 +989,13 @@ export default function App() {
       if (isNumber(saved.downsideBreakevenMagnitude)) setDownsideBreakevenMagnitude(saved.downsideBreakevenMagnitude);
       if (isNumber(saved.upsideBreakevenMagnitude)) setUpsideBreakevenMagnitude(saved.upsideBreakevenMagnitude);
       if (saved.cashbackPreference === "cash" || saved.cashbackPreference === "spot" || saved.cashbackPreference === "optimise") setCashbackPreference(saved.cashbackPreference);
-      if (typeof saved.degenEnabled === "boolean") setDegenEnabled(saved.degenEnabled);
-      if (isDegenMode(saved.degenMode)) setDegenMode(saved.degenMode);
-      if (isNumber(saved.customRecyclePct)) setCustomRecyclePct(Math.min(100, Math.max(0, saved.customRecyclePct)));
+      if (isDegenSettingsByMode(saved.degenSettingsByMode)) {
+        setDegenSettingsByMode({
+          base: { ...saved.degenSettingsByMode.base, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.base.customRecyclePct)) },
+          lending: { ...saved.degenSettingsByMode.lending, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.lending.customRecyclePct)) },
+          perp: { ...saved.degenSettingsByMode.perp, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.perp.customRecyclePct)) },
+        });
+      }
       if (typeof saved.requireBreakeven === "boolean") setRequireBreakeven(saved.requireBreakeven);
       if (isNumber(saved.defaultMaxDrawdown)) setDefaultMaxDrawdown(Math.min(100, Math.max(0, saved.defaultMaxDrawdown)));
       if (isMaxDrawdownByMode(saved.maxDrawdownByMode)) setMaxDrawdownByMode(saved.maxDrawdownByMode);
@@ -978,7 +1047,7 @@ export default function App() {
         inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
         comparisonMode, mode, manualConfig, optimiserDeposit, objective,
         spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-        upsideBreakevenMagnitude, cashbackPreference, degenEnabled, degenMode, customRecyclePct, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+        upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
         minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
@@ -986,7 +1055,7 @@ export default function App() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [
-    assetAmount, assetName, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, customRecyclePct, debtParityMagnitude, degenEnabled, degenMode,
+    assetAmount, assetName, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, debtParityMagnitude, degenSettingsByMode,
     bearishTarget, bullishTarget, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDrawdownByMode, maxMove,
     minMove, mode, objective, optimiserDeposit, perpParityMagnitude, perpState, persistenceLoaded,
     defaultMaxDrawdown, requireBreakeven, searchStep, shortLtvLimit, chartSeriesVisibility, showDebt, showDrawdownLine, showLiquidationLine,
@@ -1000,7 +1069,7 @@ export default function App() {
   const pendingBaseConfig = mode === "manual"
     ? manualConfig
     : {
-        ...optimisedConfig,
+        ...optimisedConfigsByMode[comparisonMode],
         deposit: optimiserDeposit,
         degenEnabled,
         degenMode,
@@ -1153,7 +1222,10 @@ export default function App() {
     const updateConfig = (current: Config) => ({ ...current, [key]: v });
     if (mode === "manual") setManualConfig(updateConfig);
     else if (key === "deposit" && typeof v === "number") setOptimiserDeposit(v);
-    else setOptimisedConfig(updateConfig);
+    else setOptimisedConfigsByMode((current) => ({
+      ...current,
+      [comparisonMode]: updateConfig(current[comparisonMode]),
+    }));
   };
   const setCashbackMode = (cashbackMode: CashbackMode) => {
     if (mode === "manual") update("cashbackMode", cashbackMode);
@@ -1164,10 +1236,16 @@ export default function App() {
       setManualConfig((current) => ({ ...current, ...patch }));
       return;
     }
-    if (patch.degenEnabled !== undefined) setDegenEnabled(patch.degenEnabled);
-    if (patch.degenMode !== undefined) setDegenMode(patch.degenMode);
-    if (patch.customRecyclePct !== undefined)
-      setCustomRecyclePct(Math.min(100, Math.max(0, patch.customRecyclePct)));
+    setDegenSettingsByMode((current) => ({
+      ...current,
+      [comparisonMode]: {
+        ...current[comparisonMode],
+        ...patch,
+        customRecyclePct: patch.customRecyclePct === undefined
+          ? current[comparisonMode].customRecyclePct
+          : Math.min(100, Math.max(0, patch.customRecyclePct)),
+      },
+    }));
   };
   const degenSelectorLabel = pendingConfig.degenMode === "custom"
     ? `CUSTOM · ${pendingConfig.customRecyclePct.toFixed(0)}%`
@@ -1196,10 +1274,20 @@ export default function App() {
   const resetActiveComparison = () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
-    optimisationCache.current = createDefaultOptimisationCache();
-    setDisplayedResult(null);
+    for (const [signature, result] of optimisationCache.current) {
+      if ((result.options.comparisonMode ?? "base") === comparisonMode)
+        optimisationCache.current.delete(signature);
+    }
+    for (const [signature, result] of createDefaultOptimisationCache()) {
+      if ((result.options.comparisonMode ?? "base") === comparisonMode)
+        optimisationCache.current.set(signature, result);
+    }
+    setDisplayedResultsByMode((current) => ({ ...current, [comparisonMode]: null }));
     setRunState({ kind: "idle" });
-    setOptimisedConfig({ ...INITIAL_CONFIG });
+    setOptimisedConfigsByMode((current) => ({
+      ...current,
+      [comparisonMode]: { ...INITIAL_CONFIG },
+    }));
     setMaxDD(defaultMaxDrawdown);
     if (mode === "manual") {
       setManualConfig((current) => ({
@@ -1213,9 +1301,10 @@ export default function App() {
         customRecyclePct: 50,
       }));
     } else {
-      setDegenEnabled(false);
-      setDegenMode("x1");
-      setCustomRecyclePct(50);
+      setDegenSettingsByMode((current) => ({
+        ...current,
+        [comparisonMode]: { ...DEFAULT_DEGEN_SETTINGS },
+      }));
     }
     if (comparisonMode === "base") {
       update("deposit", INITIAL_CONFIG.deposit);
@@ -1235,7 +1324,7 @@ export default function App() {
     inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
     comparisonMode, mode, manualConfig, optimiserDeposit, objective,
     spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-    upsideBreakevenMagnitude, cashbackPreference, degenEnabled, degenMode, customRecyclePct, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+    upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
     minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
@@ -1273,6 +1362,11 @@ export default function App() {
     }
   };
   const selectComparisonMode = (nextMode: ComparisonMode) => {
+    if (nextMode === comparisonMode) return;
+    optimiserWorkerRef.current?.terminate();
+    optimiserWorkerRef.current = null;
+    setRunState({ kind: "idle" });
+    setShowDegenSelector(false);
     setComparisonMode(nextMode);
     if (
       (objective === "debtParity" && nextMode !== "lending") ||
@@ -1348,27 +1442,33 @@ export default function App() {
     deposit: pendingConfig.deposit,
   };
   const pendingSignature = createOptimisationSignature(pendingOptions);
-  pendingSignatureRef.current = pendingSignature;
+  pendingSignaturesRef.current[comparisonMode] = pendingSignature;
   useLayoutEffect(() => {
     if (mode !== "optimise") return;
-    setDisplayedResult((current) => restoreCachedResult(
-      current,
-      optimisationCache.current,
-      pendingSignature,
-    ));
+    setDisplayedResultsByMode((current) => {
+      const restored = restoreCachedResult(
+        current[comparisonMode],
+        optimisationCache.current,
+        pendingSignature,
+        comparisonMode,
+      );
+      return restored === current[comparisonMode]
+        ? current
+        : { ...current, [comparisonMode]: restored };
+    });
     setRunState((current) =>
       current.kind === "failed" && current.signature !== pendingSignature
         ? { kind: "idle" }
         : current,
     );
-  }, [mode, pendingSignature]);
+  }, [comparisonMode, mode, pendingSignature]);
   useEffect(() => () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
   }, []);
   const optimisationStatus = optimisationStatusFor(displayedResult, pendingSignature, runState);
-  const optimisationCycleRequired = mode === "optimise" &&
-    (optimisationStatus === "not-run" || optimisationStatus === "stale" || optimisationStatus === "failed");
+  const stalePanelActive = mode === "optimise" && optimisationStatus !== "current";
+  const stalePanelCalculating = optimisationStatus === "calculating";
   const optimiseError = runState.kind === "failed" && runState.signature === pendingSignature
     ? runState.message
     : null;
@@ -1421,10 +1521,18 @@ export default function App() {
     if (optimising || !pendingComparisonIsValid) return;
     const cached = optimisationCache.current.get(pendingSignature);
     if (cached) {
-      setDisplayedResult(cached);
+      setDisplayedResultsByMode((current) => ({
+        ...current,
+        [comparisonMode]: cached,
+      }));
+      setOptimisedConfigsByMode((current) => ({
+        ...current,
+        [comparisonMode]: cached.result,
+      }));
       setRunState({ kind: "idle" });
       return;
     }
+    const jobComparisonMode = comparisonMode;
     const jobOptions = structuredClone(pendingOptions);
     const jobInputs = structuredClone(optimisationInputs);
     const jobSignature = createOptimisationSignature(jobOptions);
@@ -1476,13 +1584,24 @@ export default function App() {
         }),
         baseAssetValue: jobOptions.baseAssetValue ?? 0,
       };
-      setDisplayedResult((current) => completeOptimisation(
-        current,
-        optimisationCache.current,
-        completed,
-        pendingSignatureRef.current,
-      ));
-      if (pendingSignatureRef.current === jobSignature) setOptimisedConfig(result);
+      setDisplayedResultsByMode((current) => {
+        const displayedForMode = current[jobComparisonMode];
+        const next = completeOptimisation(
+          displayedForMode,
+          optimisationCache.current,
+          completed,
+          pendingSignaturesRef.current[jobComparisonMode],
+        );
+        return next === displayedForMode
+          ? current
+          : { ...current, [jobComparisonMode]: next };
+      });
+      if (pendingSignaturesRef.current[jobComparisonMode] === jobSignature) {
+        setOptimisedConfigsByMode((current) => ({
+          ...current,
+          [jobComparisonMode]: result,
+        }));
+      }
       setRunState({ kind: "idle" });
     };
     worker.onerror = () => {
@@ -2522,7 +2641,14 @@ export default function App() {
               <span>{displayComparisonMode === "perp" ? "Enter valid mark, entry, size, margin and liquidation values; current perp equity must remain above $0 to compare with V4." : `Repay enough debt or add ${assetLabelLower} collateral so net equity is above $0.`}</span>
             </div>
           ) : <>
-          <div className="readouts analytical-panel">
+          <div className={`readouts analytical-panel${stalePanelActive ? " is-stale" : ""}`}>
+            {stalePanelActive && (
+              <OptimisationRequiredBadge
+                className="analytical-optimisation-required"
+                calculating={stalePanelCalculating}
+                compact
+              />
+            )}
             <section className="analytical-section summary-position">
               <h3>POSITION BREAKDOWN</h3>
               <div className="position-breakdown-grid">
@@ -2581,7 +2707,7 @@ export default function App() {
             </section>}
             {objectiveAnalysis && <ObjectiveAnalysisBlock analysis={objectiveAnalysis} />}
           </div>
-          <div className="panel chart-panel">
+          <div className={`panel chart-panel${stalePanelActive ? " is-stale" : ""}`}>
             <div className="panel-head">
               <div>
                 <b>STRATEGY RESPONSE</b>
@@ -2697,10 +2823,11 @@ export default function App() {
             </div>
             <div className="chart">
               <div className="chart-plot" onWheel={handleChartWheel}>
-              {optimisationCycleRequired && (
-                <div className="optimisation-required-badge chart-optimisation-required">
-                  SETTINGS CHANGED <i>·</i> OPTIMISATION REQUIRED
-                </div>
+              {stalePanelActive && (
+                <OptimisationRequiredBadge
+                  className="chart-optimisation-required"
+                  calculating={stalePanelCalculating}
+                />
               )}
               <ResponsiveContainer>
                 <ComposedChart
@@ -2935,7 +3062,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div className={`panel scenarios comparison-${displayComparisonMode}`}>
+          <div className={`panel scenarios comparison-${displayComparisonMode}${stalePanelActive ? " is-stale" : ""}`}>
             <div className="panel-head">
               <div>
                 <b>SCENARIO ANALYSIS</b>
@@ -2947,10 +3074,11 @@ export default function App() {
                       : `V4 strategy, spot ${assetLabelLower} and perp position compared at the same price moves`}
                 </span>
               </div>
-              {optimisationCycleRequired && (
-                <div className="optimisation-required-badge scenario-optimisation-required">
-                  SETTINGS CHANGED <i>·</i> OPTIMISATION REQUIRED
-                </div>
+              {stalePanelActive && (
+                <OptimisationRequiredBadge
+                  className="scenario-optimisation-required"
+                  calculating={stalePanelCalculating}
+                />
               )}
             </div>
             <div className="scenario-table">

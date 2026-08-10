@@ -91,7 +91,7 @@ describe("optimiser result state", () => {
   it("keeps Bullish displayed and becomes stale when uncached Benchmark Dominance is selected", () => {
     const bullish = snapshot(options());
     const dominanceSignature = createOptimisationSignature(options({ objective: "benchmarkDominance" }));
-    expect(restoreCachedResult(bullish, new Map(), dominanceSignature)).toBe(bullish);
+    expect(restoreCachedResult(bullish, new Map(), dominanceSignature, "base")).toBe(bullish);
     expect(optimisationStatusFor(bullish, dominanceSignature, { kind: "idle" })).toBe("stale");
   });
 
@@ -115,7 +115,7 @@ describe("optimiser result state", () => {
     const bullish = snapshot(options());
     const dominance = snapshot(options({ objective: "benchmarkDominance" }));
     const cache = new Map([[bullish.signature, bullish], [dominance.signature, dominance]]);
-    const restored = restoreCachedResult(dominance, cache, bullish.signature);
+    const restored = restoreCachedResult(dominance, cache, bullish.signature, "base");
     expect(restored).toBe(bullish);
     expect(optimisationStatusFor(restored, bullish.signature, { kind: "idle" })).toBe("current");
   });
@@ -125,9 +125,9 @@ describe("optimiser result state", () => {
     const cache = new Map([[bullish.signature, bullish]]);
     const changed = createOptimisationSignature(options({ bullishTargetPercent: 400 }));
     expect(changed).not.toBe(bullish.signature);
-    expect(restoreCachedResult(bullish, cache, changed)).toBe(bullish);
+    expect(restoreCachedResult(bullish, cache, changed, "base")).toBe(bullish);
     expect(optimisationStatusFor(bullish, changed, { kind: "idle" })).toBe("stale");
-    expect(restoreCachedResult(bullish, cache, createOptimisationSignature(options()))).toBe(bullish);
+    expect(restoreCachedResult(bullish, cache, createOptimisationSignature(options()), "base")).toBe(bullish);
   });
 
   it("separates cache entries by deposit and comparison mode", () => {
@@ -152,7 +152,18 @@ describe("optimiser result state", () => {
     const x1Result = snapshot(x1);
     const x2Result = snapshot(x2);
     const cache = new Map([[x1Result.signature, x1Result], [x2Result.signature, x2Result]]);
-    expect(restoreCachedResult(x2Result, cache, x1Result.signature)).toBe(x1Result);
+    expect(restoreCachedResult(x2Result, cache, x1Result.signature, "base")).toBe(x1Result);
+  });
+
+  it("never carries a stale result into another comparison mode", () => {
+    const base = snapshot(options({ comparisonMode: "base" }));
+    const lendingOptions = options({ comparisonMode: "lending", degenEnabled: true });
+    const lendingSignature = createOptimisationSignature(lendingOptions);
+    expect(restoreCachedResult(base, new Map(), lendingSignature, "lending")).toBeNull();
+
+    const lending = snapshot(lendingOptions);
+    expect(restoreCachedResult(base, new Map([[lending.signature, lending]]), lending.signature, "lending"))
+      .toBe(lending);
   });
 
   it("invalidates Lending and Perp signatures for their material comparator changes", () => {
@@ -169,6 +180,14 @@ describe("optimiser result state", () => {
     const pending = createOptimisationSignature(options({ objective: "bearish" }));
     expect(optimisationStatusFor(bullish, pending, { kind: "failed", signature: pending, message: "failed" })).toBe("failed");
     expect(optimisationStatusFor(bullish, pending, { kind: "cancelled", signature: pending })).toBe("stale");
+  });
+
+  it("does not mark a newer pending configuration as calculating for an older job", () => {
+    const bullish = snapshot(options());
+    const runningSignature = createOptimisationSignature(options({ objective: "benchmarkDominance" }));
+    const newerPending = createOptimisationSignature(options({ objective: "bearish" }));
+    expect(optimisationStatusFor(bullish, newerPending, { kind: "running", signature: runningSignature }))
+      .toBe("stale");
   });
 
   it("associates a running completion with its job signature and does not replace newer intent", () => {
@@ -188,7 +207,7 @@ describe("optimiser result state", () => {
       ? { kind: "dominance", result: { benchmark: "spot", requestedMinMove: -80, requestedMaxMove: 200, effectiveMinMove: -80, effectiveMaxMove: 200, worstEdgePts: 0, worstMove: 0, aheadPercent: 50, averageEdgePts: 10, maxDrawdown: -0.1 } } as ObjectiveAnalysis
       : { kind: "bearish", troughMove: -40, targetMove: -75, troughReturn: -20, targetReturn: 80, recoveryPts: 100 } as ObjectiveAnalysis;
     const result = snapshot(options({ objective }), analysis);
-    const restored = restoreCachedResult(null, new Map([[result.signature, result]]), result.signature);
+    const restored = restoreCachedResult(null, new Map([[result.signature, result]]), result.signature, "base");
     expect(restored?.options.objective).toBe(objective);
     expect(restored?.objectiveAnalysis?.kind).toBe(analysisKind);
   });
