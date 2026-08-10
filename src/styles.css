@@ -2420,7 +2420,6 @@ body {
   gap: 0;
   padding: 0 16px 14px;
   background: #191a19;
-  contain: size;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
