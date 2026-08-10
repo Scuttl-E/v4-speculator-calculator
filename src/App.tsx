@@ -248,10 +248,11 @@ const DEFAULT_PERP: PerpPositionInput = {
 const DEFAULT_ASSET_NAME = "ETH";
 const SCUTTLE_LINK = "https://x.com/chainsandtrains";
 const CURRENT_INPUT_DEFAULTS_VERSION = 2;
+const DEFAULT_MAX_DRAWDOWN = 15;
 const DEFAULT_MAX_DRAWDOWN_BY_MODE: Record<ComparisonMode, number> = {
-  base: 15,
-  lending: 15,
-  perp: 15,
+  base: DEFAULT_MAX_DRAWDOWN,
+  lending: DEFAULT_MAX_DRAWDOWN,
+  perp: DEFAULT_MAX_DRAWDOWN,
 };
 type ChartSeriesVisibility = {
   long: boolean;
@@ -736,6 +737,7 @@ export default function App() {
     [cashbackPreference, setCashbackPreference] =
       useState<OptimiserCashbackMode>("optimise"),
     [requireBreakeven, setRequireBreakeven] = useState(false),
+    [defaultMaxDrawdown, setDefaultMaxDrawdown] = useState(DEFAULT_MAX_DRAWDOWN),
     [maxDrawdownByMode, setMaxDrawdownByMode] = useState<Record<ComparisonMode, number>>(() => ({
       ...DEFAULT_MAX_DRAWDOWN_BY_MODE,
     })),
@@ -878,6 +880,7 @@ export default function App() {
       if (isNumber(saved.upsideBreakevenMagnitude)) setUpsideBreakevenMagnitude(saved.upsideBreakevenMagnitude);
       if (saved.cashbackPreference === "cash" || saved.cashbackPreference === "spot" || saved.cashbackPreference === "optimise") setCashbackPreference(saved.cashbackPreference);
       if (typeof saved.requireBreakeven === "boolean") setRequireBreakeven(saved.requireBreakeven);
+      if (isNumber(saved.defaultMaxDrawdown)) setDefaultMaxDrawdown(Math.min(100, Math.max(0, saved.defaultMaxDrawdown)));
       if (isMaxDrawdownByMode(saved.maxDrawdownByMode)) setMaxDrawdownByMode(saved.maxDrawdownByMode);
       if (isNumber(saved.longLtvLimit)) setLongLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.longLtvLimit)));
       if (isNumber(saved.shortLtvLimit)) setShortLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.shortLtvLimit)));
@@ -927,7 +930,7 @@ export default function App() {
         inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
         comparisonMode, mode, manualConfig, optimiserDeposit, objective,
         spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-        upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+        upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
         minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
@@ -936,7 +939,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [
     assetAmount, assetName, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, debtParityMagnitude,
-    bearishTarget, bullishTarget, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDrawdownByMode, maxMove,
+    bearishTarget, bullishTarget, defaultMaxDrawdown, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDrawdownByMode, maxMove,
     minMove, mode, objective, optimiserDeposit, perpParityMagnitude, perpState, persistenceLoaded,
     requireBreakeven, searchStep, shortLtvLimit, chartSeriesVisibility, showDebt, showDrawdownLine, showLiquidationLine,
     showPerp, spotParityMagnitude, upsideBreakevenMagnitude, usdDebt,
@@ -1115,7 +1118,7 @@ export default function App() {
         perpState.margin === DEFAULT_PERP.margin &&
         perpState.liquidationPrice === DEFAULT_PERP.liquidationPrice &&
         perpState.side === DEFAULT_PERP.side) &&
-    maxDD === DEFAULT_MAX_DRAWDOWN_BY_MODE[comparisonMode] &&
+    maxDD === defaultMaxDrawdown &&
     (mode !== "manual" || manualPositionIsDefault);
   const resetActiveComparison = () => {
     optimiserWorkerRef.current?.terminate();
@@ -1124,7 +1127,7 @@ export default function App() {
     setDisplayedResult(null);
     setRunState({ kind: "idle" });
     setOptimisedConfig({ ...INITIAL_CONFIG });
-    setMaxDD(DEFAULT_MAX_DRAWDOWN_BY_MODE[comparisonMode]);
+    setMaxDD(defaultMaxDrawdown);
     if (mode === "manual") {
       setManualConfig((current) => ({
         ...current,
@@ -1152,7 +1155,7 @@ export default function App() {
     inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
     comparisonMode, mode, manualConfig, optimiserDeposit, objective,
     spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-    upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+    upsideBreakevenMagnitude, cashbackPreference, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
     minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
@@ -1567,6 +1570,12 @@ export default function App() {
                 <span>FINAL RESOLUTION</span>
                 <small>Automatic 5% to 2% refinement to this grid</small>
                 <NumericInput className="settings-number" value={searchStep} min={0.25} max={5} step="0.25" onValueChange={(value) => setSearchStep(Math.min(5, Math.max(0.25, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>DEFAULT DRAWDOWN</span>
+                <small>Used when Reset is pressed</small>
+                <NumericInput className="settings-number" value={defaultMaxDrawdown} min={0} max={100} step="0.1" onValueChange={(value) => setDefaultMaxDrawdown(Math.min(100, Math.max(0, value)))} />
                 <em>%</em>
               </label>
               <label>
