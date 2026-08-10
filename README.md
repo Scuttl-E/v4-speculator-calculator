@@ -4,18 +4,12 @@ An independent Windows desktop modelling and optimisation tool for exploring pot
 
 V4 Speculator lets you model Long V4 and Short V4 allocations, leverage, cashback treatment, and drawdown constraints, then compare the resulting response curve against spot, leveraged lending positions, and perpetual futures.
 
+> **Web version:** The web version is an experimental beta release with the latest feature set. It may offer capabilities ahead of the desktop version, but is also more likely to experience instability or breaking changes while development continues. Try it at [scuttl-e.github.io/v4-speculator-calculator](https://scuttl-e.github.io/v4-speculator-calculator/).
+
 > [!IMPORTANT]
-> ## Unofficial V4 model
+> **Unofficial V4 model**
 >
-> This project is **independent and unofficial**. It is not produced by, affiliated with, or endorsed by the Peapods Finance team.
->
-> The V4 calculations are **close estimates reconstructed from publicly released information**, including Peapods Finance charts, published strategy examples, posts, and technical material made available so far.
->
-> Some parts of the model are strongly anchored to published examples, while others necessarily involve interpolation or extrapolation where complete V4 mechanics have not yet been publicly documented.
->
-> Treat all figures as **scenario estimates rather than authoritative V4 outputs** until the official Peapods team publishes complete documentation, formulas, and implementation details.
->
-> In particular, arbitrary-LTV behaviour and parts of the short-side model involve inferred behaviour beyond the publicly demonstrated anchor points.
+> <small>This project is **independent and unofficial**; it is not produced by, affiliated with, or endorsed by the Peapods Finance team. The V4 calculations are **close estimates reconstructed from publicly released information**, including charts, strategy examples, posts, and technical material. Where complete mechanics have not been documented, the model uses interpolation, extrapolation, or inferred behaviour—particularly for arbitrary LTV levels and parts of the short-side model. Treat all figures as **scenario estimates rather than authoritative V4 outputs** until complete official documentation, formulas, and implementation details are published.</small>
 
 ---
 
