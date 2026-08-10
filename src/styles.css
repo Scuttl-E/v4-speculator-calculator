@@ -39,14 +39,17 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
 .assumption-toggle { margin-top: auto; }
 .status span, .status b { white-space: nowrap; }
 .topbar-actions { display: flex; align-items: center; gap: 18px; }
-.topbar button { -webkit-app-region: no-drag; }
-.topbar-brand { gap: 20px; }
-.topbar-mode-actions { display: flex; align-items: center; gap: 8px; }
+.topbar button, .topbar a { -webkit-app-region: no-drag; }
+.topbar-brand { flex: 1; min-width: 0; gap: 14px; }
+.topbar-mode-actions { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
 .comparison-modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 7px; background: #121211; box-shadow: inset 0 1px 4px #0009, 0 0 0 1px #ffffff0b; -webkit-app-region: no-drag; }
 .comparison-modes button { padding: 5px 9px; border: 0; border-radius: 5px; background: transparent; color: #9f9387; font: 600 10px Atelier; letter-spacing: .07em; cursor: pointer; }
 .comparison-modes button.on { color: #fae8d4; background: linear-gradient(145deg, #8a5031, #593527); box-shadow: inset 0 1px #ffffff1f; }
 .comparison-reset, .comparison-settings { padding: 8px 10px; border: 0; border-radius: 6px; background: #121211; box-shadow: inset 0 1px 4px #0009, 0 0 0 1px #ffffff0b; color: #d7a276; font: 600 10px Atelier; letter-spacing: .07em; cursor: pointer; }
 .comparison-reset:not(:disabled):hover, .comparison-settings:hover, .comparison-settings.active { color: #fae8d4; background: #d4874c1c; }
+.creator-credit { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.creator-credit-label { color: #9f9387; font: 600 10px Atelier; letter-spacing: .07em; }
+.creator-credit-button { text-decoration: none; }
 .comparison-reset:disabled { color: #625c55; cursor: default; opacity: .65; }
 
 @media (max-height: 900px) {
@@ -412,18 +415,6 @@ select {
 .wordmark {
   font-size: 16px;
   letter-spacing: 0.4px;
-}
-.wordmark i {
-  width: 8px;
-  height: 8px;
-  background: var(--copper);
-  box-shadow: 0 0 9px #d4874c55;
-}
-.wordmark span {
-  font: 12px Atelier;
-  color: var(--warm);
-  letter-spacing: 0;
-  margin-left: 8px;
 }
 .status {
   font: 11px Atelier;
@@ -1119,14 +1110,6 @@ body {
   box-shadow: 0 8px 25px #0003, inset 0 -1px #0008;
 }
 .wordmark { font-size: 17px; font-weight: 600; letter-spacing: .045em; }
-.wordmark i {
-  width: 11px;
-  height: 3px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--bright), var(--copper));
-  box-shadow: 0 0 14px #d4874c66;
-}
-.wordmark span { margin-left: 11px; font-size: 12px; letter-spacing: .06em; }
 .status { gap: 18px; font-size: 11px; letter-spacing: .075em; }
 .status b { color: #d7b18e; }
 

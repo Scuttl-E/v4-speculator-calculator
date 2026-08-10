@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 
 const WINDOW_CLOSE_CHANNEL = "window:close";
 const INPUTS_LOAD_CHANNEL = "inputs:load";
 const INPUTS_SAVE_CHANNEL = "inputs:save";
+const OPEN_EXTERNAL_CHANNEL = "open:external";
 
 const inputsPath = () => path.join(app.getPath("userData"), "calculator-inputs.json");
 
@@ -43,6 +44,12 @@ ipcMain.handle(INPUTS_LOAD_CHANNEL, async () => {
 
 ipcMain.handle(INPUTS_SAVE_CHANNEL, async (_event, inputs: unknown) => {
   await writeFile(inputsPath(), JSON.stringify(inputs), "utf8");
+});
+
+ipcMain.handle(OPEN_EXTERNAL_CHANNEL, async (_event, target: unknown) => {
+  if (typeof target !== "string" || !target.startsWith("https://"))
+    throw new Error("Only HTTPS links can be opened externally");
+  await shell.openExternal(target);
 });
 
 app.whenReady().then(createWindow);

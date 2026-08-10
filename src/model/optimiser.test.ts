@@ -114,6 +114,23 @@ describe("optimiser", () => {
     expect(result.longLtv).toBe(fractionalMaxLtv);
   });
 
+  it("uses Resolution as the final globally anchored search grid", () => {
+    const automatic = optimisePortfolioWithOutcome({
+      ...base,
+      maxLtv: 0.5,
+      searchStepPercent: 1,
+    });
+    const advanced = optimisePortfolioWithOutcome({
+      ...base,
+      maxLtv: 0.5,
+      searchStepPercent: 0.25,
+    });
+    expect(automatic.diagnostics?.passes.map(({ resolutionPercent }) => resolutionPercent))
+      .toEqual([5, 2, 1]);
+    expect(advanced.diagnostics?.passes.map(({ resolutionPercent }) => resolutionPercent))
+      .toEqual([5, 2, 1, 0.25]);
+  });
+
   it("maximises bullish exposure at the +200% scenario extreme", () => {
     bestFeasibleValue("bullish");
   });
@@ -260,7 +277,10 @@ describe("optimiser", () => {
     const expected = optimisePortfolioWithOutcome(options);
     const analysed = optimisePortfolioWithCashbackFrontier(options);
 
-    expect(analysed.outcome).toEqual(expected);
+    expect({ ...analysed.outcome, diagnostics: undefined }).toEqual({
+      ...expected,
+      diagnostics: undefined,
+    });
     expect(new Set(analysed.candidates.map(({ cashbackMode }) => cashbackMode)))
       .toEqual(new Set(["cash", "spot"]));
     expect(analysed.candidates.every(({ requiredDrawdown, targetPayoff }) =>

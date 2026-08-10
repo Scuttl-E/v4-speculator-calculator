@@ -1,4 +1,5 @@
 import type { PerpPositionInput } from "./perpPosition";
+import type { OptimiserSearchDiagnostics } from "./optimiserSearch";
 
 export type CashbackMode = "cash" | "spot";
 export type OptimiserCashbackMode = CashbackMode | "optimise";
@@ -67,4 +68,5 @@ export interface OptimiseOutcome {
     secured: boolean;
   } | null;
   failure: string | null;
+  diagnostics?: OptimiserSearchDiagnostics;
 }

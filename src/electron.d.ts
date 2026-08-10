@@ -6,6 +6,7 @@ declare global {
       close: () => void;
       loadInputs: () => Promise<unknown>;
       saveInputs: (inputs: unknown) => Promise<void>;
+      openExternal: (target: string) => Promise<void>;
     };
   }
 }

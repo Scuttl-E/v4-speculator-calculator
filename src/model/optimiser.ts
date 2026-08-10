@@ -14,6 +14,11 @@ import {
   type BenchmarkDominanceScore,
 } from "./benchmarkDominance";
 import type { CashbackFrontierCandidate } from "./cashbackCrossover";
+import {
+  runCoarseToFineSearch,
+  runExhaustiveReferenceSearch,
+  type SearchAssessment,
+} from "./optimiserSearch";
 import type {
   AdverseDirection,
   Config,
@@ -33,12 +38,13 @@ const adverseDirectionFor = (
 ): AdverseDirection =>
   objective === "bearish" ? "upside" : "downside";
 
-function hasAdverseBreakeven(
+function assessAdverseBreakeven(
   config: Config,
   direction: AdverseDirection,
   downsideBreakevenPercent: number,
   upsideBreakevenPercent: number,
 ) {
+  let closestDistance = Infinity;
   if (direction === "downside") {
     const minP = targetPercentToPrice(downsideBreakevenPercent);
     let last = 0,
@@ -47,10 +53,12 @@ function hasAdverseBreakeven(
       const p = 1 - ((1 - minP) * i) / 240,
         value = portfolioValue(p, config) - 1;
       if (value < -1e-8) hasDrawnDown = true;
-      if (hasDrawnDown && last <= 0 && value >= 0) return true;
+      if (hasDrawnDown) closestDistance = Math.min(closestDistance, Math.abs(value));
+      if (hasDrawnDown && last <= 0 && value >= 0)
+        return { satisfied: true, distance: 0 };
       last = value;
     }
-    return false;
+    return { satisfied: false, distance: closestDistance };
   }
 
   const maxP = targetPercentToPrice(upsideBreakevenPercent);
@@ -60,23 +68,16 @@ function hasAdverseBreakeven(
     const p = 1 + ((maxP - 1) * i) / 240,
       value = portfolioValue(p, config) - 1;
     if (value < -1e-8) hasDrawnDown = true;
-    if (hasDrawnDown && last <= 0 && value >= 0) return true;
+    if (hasDrawnDown) closestDistance = Math.min(closestDistance, Math.abs(value));
+    if (hasDrawnDown && last <= 0 && value >= 0)
+      return { satisfied: true, distance: 0 };
     last = value;
   }
-  return false;
+  return { satisfied: false, distance: closestDistance };
 }
 
 const wholePercentDrawdownLimit = (drawdown: number) =>
   Math.ceil(Math.max(0, -drawdown * 100)) / 100;
-
-const steppedValues = (min: number, max: number, step: number) => {
-  const values = Array.from(
-    { length: Math.floor((max - min) / step + 1e-9) + 1 },
-    (_, index) => +(min + index * step).toFixed(10),
-  );
-  if (Math.abs(values[values.length - 1] - max) > 1e-9) values.push(max);
-  return values;
-};
 
 export const supportedOptimiserMaxLtv = (requestedMaxLtv: number) =>
   Math.min(requestedMaxLtv, MAX_V4_LTV);
@@ -84,6 +85,7 @@ export const supportedOptimiserMaxLtv = (requestedMaxLtv: number) =>
 function optimisePortfolioInternal(
   options: OptimiseOptions,
   frontierCandidates?: CashbackFrontierCandidate[],
+  exhaustiveReference = false,
 ): OptimiseOutcome {
   if (
     options.downsideBreakevenPercent <= -100 ||
@@ -134,17 +136,7 @@ function optimisePortfolioInternal(
     frontierCandidates || options.cashbackMode === "optimise"
       ? (["cash", "spot"] as const)
       : ([options.cashbackMode] as const);
-  const step = (options.searchStepPercent ?? 1) / 100;
-  const longLtvValues = steppedValues(
-    0.5,
-    supportedOptimiserMaxLtv(options.longMaxLtv ?? options.maxLtv),
-    step,
-  );
-  const shortLtvValues = steppedValues(
-    0.5,
-    supportedOptimiserMaxLtv(options.shortMaxLtv ?? options.maxLtv),
-    step,
-  );
+  const finalResolutionPercent = options.searchStepPercent ?? 1;
   let bestWithin: Config | undefined,
     bestWithinScore = -Infinity,
     bestWithinSecondaryScore = -Infinity,
@@ -189,7 +181,7 @@ function optimisePortfolioInternal(
     (Math.abs(score - bestScore) <= 1e-12 &&
       secondaryScore > bestSecondaryScore);
 
-  const evaluate = (candidate: Config) => {
+  const evaluate = (candidate: Config): SearchAssessment => {
     const config: Config = {
       ...candidate,
       longAllocation: Math.round(candidate.longAllocation * 100) / 100,
@@ -197,13 +189,61 @@ function optimisePortfolioInternal(
       shortLtv: candidate.shortLtv,
     };
     const trough = findWorstDrawdown(config);
-    const adverseBreakevenSatisfied = !options.requireBreakeven ||
-      hasAdverseBreakeven(
+    const adverseBreakevenAssessment = !options.requireBreakeven
+      ? { satisfied: true, distance: Infinity }
+      : assessAdverseBreakeven(
         config,
         adverseDirection,
         options.downsideBreakevenPercent,
         options.upsideBreakevenPercent,
       );
+    const adverseBreakevenSatisfied = adverseBreakevenAssessment.satisfied;
+    const spotParityValue = options.objective === "spotParity"
+      ? portfolioValue(parityPrice, config)
+      : 0;
+    const benchmarkTargetValue = isBenchmarkParity
+      ? dollarValue(benchmarkParityPrice, config)
+      : 0;
+    const withinRequestedLimit =
+      options.objective === "spotParity" || isBenchmarkParity ||
+      trough.drawdown >= -options.maxDrawdown - 1e-8;
+    const scoreSet = scoresFor(config, trough.drawdown);
+    const benchmarkExcess = benchmarkTargetValue - benchmarkParityValue;
+    const assessment: SearchAssessment = {
+      eligible:
+        (options.objective !== "spotParity" || spotParityValue >= parityPrice - 1e-10) &&
+        (!options.requireBreakeven || adverseBreakevenSatisfied) &&
+        (options.requireBreakeven || withinRequestedLimit) &&
+        (!isBenchmarkParity || benchmarkTargetValue + 1e-8 >= benchmarkParityValue),
+      quality: isBenchmarkParity
+        ? [
+            trough.drawdown,
+            -Math.max(0, -benchmarkExcess),
+            -Math.abs(benchmarkExcess),
+            -(config.longLtv + config.shortLtv),
+            -Math.abs(config.longAllocation - 0.5),
+          ]
+        : scoreSet.dominance
+          ? [
+              scoreSet.dominance.worstEdgePts,
+              scoreSet.dominance.averageEdgePts,
+              scoreSet.dominance.maxDrawdown,
+            ]
+          : [scoreSet.primary, scoreSet.secondary],
+      boundaryDistances: [
+        options.objective === "spotParity" || isBenchmarkParity
+          ? Infinity
+          : Math.abs(trough.drawdown + options.maxDrawdown),
+        options.objective === "spotParity"
+          ? Math.abs(spotParityValue - parityPrice)
+          : Infinity,
+        isBenchmarkParity
+          ? Math.abs(benchmarkTargetValue - benchmarkParityValue) /
+            Math.max(1, Math.abs(benchmarkParityValue))
+          : Infinity,
+        options.requireBreakeven ? adverseBreakevenAssessment.distance : Infinity,
+      ],
+    };
     if (
       frontierCandidates && adverseBreakevenSatisfied &&
       (options.objective === "bullish" || options.objective === "bearish")
@@ -221,26 +261,23 @@ function optimisePortfolioInternal(
     if (
       options.cashbackMode !== "optimise" &&
       config.cashbackMode !== options.cashbackMode
-    ) return;
+    ) return assessment;
     if (
       options.objective === "spotParity" &&
       portfolioValue(parityPrice, config) < parityPrice - 1e-10
     )
-      return;
-    const withinRequestedLimit =
-      options.objective === "spotParity" || isBenchmarkParity ||
-      trough.drawdown >= -options.maxDrawdown - 1e-8;
+      return assessment;
     if (!options.requireBreakeven) {
-      if (!withinRequestedLimit) return;
+      if (!withinRequestedLimit) return assessment;
     } else if (!adverseBreakevenSatisfied) {
-      return;
+      return assessment;
     }
 
     if (isBenchmarkParity) {
-      const targetValue = dollarValue(benchmarkParityPrice, config);
+      const targetValue = benchmarkTargetValue;
       if (!bestBenchmarkAttempt || targetValue > bestBenchmarkAttempt.value)
         bestBenchmarkAttempt = { config, value: targetValue };
-      if (targetValue + 1e-8 < benchmarkParityValue) return;
+      if (targetValue + 1e-8 < benchmarkParityValue) return assessment;
 
       const excess = targetValue - benchmarkParityValue;
       const leverage =
@@ -261,13 +298,10 @@ function optimisePortfolioInternal(
         bestBenchmarkLeverage = leverage;
         bestBenchmarkSimplicity = simplicity;
       }
-      return;
+      return assessment;
     }
 
-    const { primary: score, secondary: secondaryScore, dominance } = scoresFor(
-      config,
-      trough.drawdown,
-    );
+    const { primary: score, secondary: secondaryScore, dominance } = scoreSet;
     if (withinRequestedLimit) {
       const better = dominance
         ? isBetterBenchmarkDominanceScore(dominance, bestWithinDominanceScore)
@@ -283,7 +317,7 @@ function optimisePortfolioInternal(
         if (dominance) bestWithinDominanceScore = dominance;
         bestWithin = config;
       }
-      return;
+      return assessment;
     }
 
     const requiredLimit = wholePercentDrawdownLimit(trough.drawdown);
@@ -300,19 +334,19 @@ function optimisePortfolioInternal(
       if (dominance) bestRelaxedDominanceScore = dominance;
       bestRelaxed = config;
     }
+    return assessment;
   };
 
-  for (const cashbackMode of cashbackModes)
-    for (let allocation = 0; allocation <= 1; allocation += step)
-      for (const longLtv of longLtvValues)
-        for (const shortLtv of shortLtvValues)
-          evaluate({
-            deposit: options.deposit,
-            longAllocation: allocation,
-            longLtv,
-            shortLtv,
-            cashbackMode,
-          });
+  const runSearch = exhaustiveReference
+    ? runExhaustiveReferenceSearch
+    : runCoarseToFineSearch;
+  const diagnostics = runSearch({
+    longMaxLtv: supportedOptimiserMaxLtv(options.longMaxLtv ?? options.maxLtv),
+    shortMaxLtv: supportedOptimiserMaxLtv(options.shortMaxLtv ?? options.maxLtv),
+    cashbackModes,
+    finalResolutionPercent,
+    assess: (candidate) => evaluate({ ...candidate, deposit: options.deposit }),
+  });
 
   const config = isBenchmarkParity
     ? bestBenchmarkParity ?? null
@@ -354,6 +388,7 @@ function optimisePortfolioInternal(
           : options.requireBreakeven
             ? "No configuration in the allowed allocation, LTV and cashback ranges can recover within the selected breakeven horizon. Try widening the recovery limit, changing the objective or changing cashback."
             : "No configuration satisfies the active optimisation constraints.",
+      diagnostics,
     };
   }
 
@@ -398,6 +433,7 @@ function optimisePortfolioInternal(
           }
         : null,
     failure: null,
+    diagnostics,
   };
 }
 
@@ -405,6 +441,13 @@ export function optimisePortfolioWithOutcome(
   options: OptimiseOptions,
 ): OptimiseOutcome {
   return optimisePortfolioInternal(options);
+}
+
+/** Exhaustive reference implementation for deterministic validation and benchmarks. */
+export function optimisePortfolioExhaustiveReference(
+  options: OptimiseOptions,
+): OptimiseOutcome {
+  return optimisePortfolioInternal(options, undefined, true);
 }
 
 export function optimisePortfolioWithCashbackFrontier(

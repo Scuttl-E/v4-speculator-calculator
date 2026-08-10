@@ -2,7 +2,7 @@ import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-dominance-1";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-coarse-to-fine-1";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {

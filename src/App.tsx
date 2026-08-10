@@ -246,6 +246,7 @@ const DEFAULT_PERP: PerpPositionInput = {
   side: "long",
 };
 const DEFAULT_ASSET_NAME = "ETH";
+const SCUTTLE_LINK = "https://x.com/chainsandtrains";
 const CURRENT_INPUT_DEFAULTS_VERSION = 2;
 const DEFAULT_MAX_DRAWDOWN_BY_MODE: Record<ComparisonMode, number> = {
   base: 15,
@@ -1431,13 +1432,13 @@ export default function App() {
   const scenarios = [0.25, 0.5, 0.75, 0.9, 1.25, 1.5, 2, 3];
   const assetLabel = assetName.trim() || DEFAULT_ASSET_NAME;
   const assetLabelLower = assetLabel.toLowerCase();
+  const assetLabelUpper = assetLabel.toUpperCase();
   return (
     <main className={isDesktopApp ? "desktop-app" : "web-app"}>
       <header className="topbar">
         <div className="topbar-brand">
           <div className="wordmark">
-            <i />
-            V4 SPECULATOR <span>PRICE MODEL</span>
+            V4 SPECULATOR
           </div>
           <div className="topbar-mode-actions">
             <div className="comparison-modes" aria-label="Comparison mode">
@@ -1491,9 +1492,25 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          <div className="status">
-            <span>LOCAL · BASE PRICE MODEL · YIELD &amp; LP FEES EXCLUDED</span>
+          <div className="creator-credit" aria-label="Created by Scuttle.eth">
+            <span className="creator-credit-label">CREATED BY-</span>
+            <a
+              className="comparison-settings creator-credit-button"
+              href={SCUTTLE_LINK}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => {
+                if (!isDesktopApp || !window.desktopWindow?.openExternal) return;
+                event.preventDefault();
+                void window.desktopWindow.openExternal(SCUTTLE_LINK);
+              }}
+            >
+              SCUTTLE.ETH
+            </a>
           </div>
+          {/* Legacy status removed from the titlebar.
+            <span>LOCAL · BASE PRICE MODEL · YIELD &amp; LP FEES EXCLUDED</span>
+          */}
           <button
             type="button"
             className={`maths-toggle ${showMaths ? "active" : ""}`}
@@ -1547,8 +1564,8 @@ export default function App() {
                 <em>%</em>
               </label>
               <label>
-                <span>SEARCH RESOLUTION</span>
-                <small>Allocation and LTV search increment</small>
+                <span>FINAL RESOLUTION</span>
+                <small>Automatic 5% to 2% refinement to this grid</small>
                 <NumericInput className="settings-number" value={searchStep} min={0.25} max={5} step="0.25" onValueChange={(value) => setSearchStep(Math.min(5, Math.max(0.25, value)))} />
                 <em>%</em>
               </label>
@@ -2369,7 +2386,7 @@ export default function App() {
               <div>
                 <b>STRATEGY RESPONSE</b>
                 <span>
-                  V4 strategy return against underlying {assetLabelLower} movement
+                  V4 return vs {assetLabelUpper} move · Yield &amp; LP fees excluded
                 </span>
               </div>
               <div className="chart-controls">

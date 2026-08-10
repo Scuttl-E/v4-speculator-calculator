@@ -8,8 +8,8 @@ export interface DefaultOptimisationPreset {
   crossover: CashbackCrossoverResult | null;
 }
 
-export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION =
-  "v4-price-model-2026-08-dominance-1";
+export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION: string =
+  "v4-price-model-2026-08-coarse-to-fine-1";
 
 const outcome = (
   deposit: number,
@@ -34,12 +34,12 @@ const outcome = (
 const bullishCrossover: CashbackCrossoverResult = {
   becomesOptimal: "spot",
   currentDrawdown: 0.15,
-  crossoverDrawdown: 0.46562500000000007,
+  crossoverDrawdown: 0.5475000000000001,
   currentPayoff: 572.6165001233429,
-  switchPayoff: 723.1046719903339,
-  changePts: 31.562500000000004,
-  payoffDeltaPts: 150.48817186699102,
-  efficiency: 4.767942078954171,
+  switchPayoff: 758.1472437320624,
+  changePts: 39.75000000000001,
+  payoffDeltaPts: 185.5307436087195,
+  efficiency: 4.667440090785395,
 };
 
 const baseBullish = outcome(10000, 0.78, 0.8, 0.8, "cash");
