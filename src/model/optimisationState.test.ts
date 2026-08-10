@@ -16,8 +16,7 @@ const options = (overrides: Partial<OptimiseOptions> = {}): OptimiseOptions => (
   shortMaxLtv: 0.8,
   bullishTargetPercent: 200,
   bearishTargetPercent: -75,
-  analysisMinPercent: -80,
-  analysisMaxPercent: 200,
+  analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 3 },
   searchStepPercent: 1,
   objective: "bullish",
   comparisonMode: "base",
@@ -135,6 +134,17 @@ describe("optimiser result state", () => {
     expect(createOptimisationSignature(options({ deposit: 12000 }))).not.toBe(original);
     expect(createOptimisationSignature(options({ comparisonMode: "lending" }))).not.toBe(original);
     expect(createOptimisationSignature(options({ baseAssetValue: 2000 }))).not.toBe(original);
+  });
+
+  it("invalidates every objective when the analysis range changes", () => {
+    for (const objective of ["bullish", "bearish", "spotParity", "debtParity", "perpParity", "benchmarkDominance"] as const) {
+      const original = createOptimisationSignature(options({ objective }));
+      const changed = createOptimisationSignature(options({
+        objective,
+        analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 5 },
+      }));
+      expect(changed).not.toBe(original);
+    }
   });
 
   it("separates and restores cache entries by material Degen settings", () => {

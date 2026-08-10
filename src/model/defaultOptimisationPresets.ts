@@ -9,7 +9,7 @@ export interface DefaultOptimisationPreset {
 }
 
 export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION: string =
-  "v4-price-model-2026-08-degen-1";
+  "v4-price-model-2026-08-analysis-range-1";
 
 const outcome = (
   deposit: number,
@@ -52,12 +52,12 @@ const bullishCrossover: CashbackCrossoverResult = {
 };
 
 const baseBullish = outcome(10000, 0.78, 0.8, 0.8, "cash");
-const baseBearish = outcome(10000, 0, 0.5, 0.8, "cash", "upside");
+const baseBearish = outcome(10000, 0.02, 0.77, 0.8, "cash", "upside");
 const baseSpotParity = outcome(10000, 0.4, 0.8, 0.8, "spot");
 const baseDominance = outcome(10000, 0.56, 0.8, 0.8, "spot");
 
 const lendingBullish = outcome(25000, 0.78, 0.8, 0.8, "cash");
-const lendingBearish = outcome(25000, 0, 0.5, 0.8, "cash", "upside");
+const lendingBearish = outcome(25000, 0.02, 0.77, 0.8, "cash", "upside");
 const lendingSpotParity = outcome(25000, 0.4, 0.8, 0.8, "spot");
 const lendingParity = outcome(25000, 0.69, 0.8, 0.8, "spot");
 lendingParity.debtParity = {
@@ -69,7 +69,7 @@ lendingParity.debtParity = {
 const lendingDominance = outcome(25000, 0.56, 0.8, 0.8, "spot");
 
 const perpBullish = outcome(17500, 0.78, 0.8, 0.8, "cash");
-const perpBearish = outcome(17500, 0, 0.5, 0.8, "cash", "upside");
+const perpBearish = outcome(17500, 0.02, 0.77, 0.8, "cash", "upside");
 const perpSpotParity = outcome(17500, 0.4, 0.8, 0.8, "spot");
 const perpParity = outcome(17500, 0.75, 0.8, 0.8, "spot");
 perpParity.perpParity = {

@@ -15,8 +15,7 @@ const base: OptimiseOptions = {
   shortMaxLtv: 0.8,
   bullishTargetPercent: 200,
   bearishTargetPercent: -75,
-  analysisMinPercent: -80,
-  analysisMaxPercent: 200,
+  analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 3 },
   searchStepPercent: 2,
   objective: "bullish",
   comparisonMode: "base",
@@ -55,12 +54,11 @@ const score = (options: OptimiseOptions, config: Config) => {
   if (options.objective === "benchmarkDominance")
     return createBenchmarkDominanceEvaluator({
       comparisonMode: options.comparisonMode ?? "base",
-      requestedMinMove: options.analysisMinPercent ?? -80,
-      requestedMaxMove: options.analysisMaxPercent ?? 200,
+      analysisRange: options.analysisRange,
       debtPosition: options.debtPosition,
       perpPosition: options.perpPosition,
     })!.analyse(config).worstEdgePts;
-  return findWorstDrawdown(config).drawdown;
+  return findWorstDrawdown(config, options.analysisRange).drawdown;
 };
 
 const cases: Array<[string, Partial<OptimiseOptions>]> = [
@@ -106,8 +104,8 @@ describe("coarse-to-fine validation against exhaustive search", () => {
     expect(exhaustive.config).not.toBeNull();
     expect(adaptive.config).toEqual(exhaustive.config);
     expect(score(options, adaptive.config!)).toBeCloseTo(score(options, exhaustive.config!), 9);
-    expect(findWorstDrawdown(adaptive.config!).drawdown).toBeCloseTo(
-      findWorstDrawdown(exhaustive.config!).drawdown,
+    expect(findWorstDrawdown(adaptive.config!, options.analysisRange).drawdown).toBeCloseTo(
+      findWorstDrawdown(exhaustive.config!, options.analysisRange).drawdown,
       9,
     );
     expect(adaptive.diagnostics!.candidatesEvaluated).toBeLessThan(

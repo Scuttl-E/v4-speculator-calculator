@@ -11,7 +11,7 @@ import {
   type PerpPositionInput,
 } from "./perpPosition";
 import { findWorstDrawdown, portfolioReturn } from "./v4Math";
-import type { ComparisonMode, Config } from "./types";
+import type { AnalysisRange, ComparisonMode, Config } from "./types";
 
 export const DOMINANCE_EDGE_TOLERANCE_PTS = 1e-7;
 const DOMAIN_STEP_PERCENT = 1;
@@ -37,8 +37,7 @@ export interface BenchmarkDominanceScore {
 
 interface DominanceInput {
   comparisonMode: ComparisonMode;
-  requestedMinMove: number;
-  requestedMaxMove: number;
+  analysisRange: AnalysisRange;
   debtPosition: DebtPositionInput;
   perpPosition: PerpPositionInput;
 }
@@ -68,11 +67,18 @@ const benchmarkReturnAt = (p: number, input: DominanceInput) =>
       : p - 1;
 
 export function createBenchmarkDominanceEvaluator(input: DominanceInput) {
-  if (input.requestedMinMove <= -100 || input.requestedMaxMove <= input.requestedMinMove)
+  const requestedMinMove = (input.analysisRange.minPriceRatio - 1) * 100;
+  const requestedMaxMove = (input.analysisRange.maxPriceRatio - 1) * 100;
+  if (
+    !Number.isFinite(requestedMinMove) || !Number.isFinite(requestedMaxMove) ||
+    input.analysisRange.minPriceRatio <= 0 ||
+    input.analysisRange.minPriceRatio >= 1 ||
+    input.analysisRange.maxPriceRatio <= 1
+  )
     return null;
 
-  let minP = 1 + input.requestedMinMove / 100;
-  let maxP = 1 + input.requestedMaxMove / 100;
+  let minP = input.analysisRange.minPriceRatio;
+  let maxP = input.analysisRange.maxPriceRatio;
   const liquidationP = liquidationRatioFor(input);
   if (liquidationP !== null && liquidationP >= minP && liquidationP <= maxP) {
     const epsilon = Math.max(1e-8, (maxP - minP) * 1e-8);
@@ -140,15 +146,15 @@ export function createBenchmarkDominanceEvaluator(input: DominanceInput) {
 
       return {
         benchmark: benchmarkName(input.comparisonMode),
-        requestedMinMove: input.requestedMinMove,
-        requestedMaxMove: input.requestedMaxMove,
+        requestedMinMove,
+        requestedMaxMove,
         effectiveMinMove,
         effectiveMaxMove,
         worstEdgePts,
         worstMove,
         aheadPercent: (aheadCount / moves.length) * 100,
         averageEdgePts: edgeSum / moves.length,
-        maxDrawdown: knownMaxDrawdown ?? findWorstDrawdown(config).drawdown,
+        maxDrawdown: knownMaxDrawdown ?? findWorstDrawdown(config, input.analysisRange).drawdown,
       };
     },
   };

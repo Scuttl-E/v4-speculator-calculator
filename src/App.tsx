@@ -13,6 +13,8 @@ import {
   YAxis,
 } from "recharts";
 import {
+  analysisRangeFromPercent,
+  analysisRangeToPercent,
   dollarValue,
   effectiveLeverage,
   findDownsideBreakeven,
@@ -215,7 +217,7 @@ function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
       {analysis.kind === "spot" ? <>
         <h4 className="crossover-subheading">DOWNSIDE PROTECTION</h4>
         <div className="analytical-stat-grid objective-analysis-grid">
-          <span>V4 max drawdown</span>
+          <span>V4 max drawdown<br /><small>Across {signedFixed(analysis.analysisMinMove)}% to {signedFixed(analysis.analysisMaxMove)}%</small></span>
           <b><CrossoverValue value={analysis.v4MaxDrawdown} suffix="%" /></b>
           <span>Spot max drawdown</span>
           <b><CrossoverValue value={analysis.spotMaxDrawdown} suffix="%" /></b>
@@ -277,7 +279,9 @@ const DEFAULT_PERP: PerpPositionInput = {
 const DEFAULT_ASSET_NAME = "ETH";
 const SCUTTLE_LINK = "https://x.com/chainsandtrains";
 const DEFAULT_MAX_DRAWDOWN = 15;
-const CURRENT_INPUT_DEFAULTS_VERSION = 4;
+const DEFAULT_ANALYSIS_MIN_PERCENT = -80;
+const DEFAULT_ANALYSIS_MAX_PERCENT = 200;
+const CURRENT_INPUT_DEFAULTS_VERSION = 5;
 const DEFAULT_MAX_DRAWDOWN_BY_MODE: Record<ComparisonMode, number> = {
   base: DEFAULT_MAX_DRAWDOWN,
   lending: DEFAULT_MAX_DRAWDOWN,
@@ -351,8 +355,10 @@ const defaultOptimisationOptions = (
     shortMaxLtv: MAX_V4_LTV,
     bullishTargetPercent: 200,
     bearishTargetPercent: -75,
-    analysisMinPercent: -80,
-    analysisMaxPercent: 200,
+    analysisRange: analysisRangeFromPercent(
+      DEFAULT_ANALYSIS_MIN_PERCENT,
+      DEFAULT_ANALYSIS_MAX_PERCENT,
+    ),
     searchStepPercent: 1,
     objective,
     comparisonMode,
@@ -391,6 +397,8 @@ const defaultOptimisationInputs = (options: OptimiseOptions): Record<string, unk
     requireBreakeven: options.requireBreakeven,
     downsideBreakevenPercent: options.downsideBreakevenPercent,
     upsideBreakevenPercent: options.upsideBreakevenPercent,
+    analysisMinPercent: (options.analysisRange.minPriceRatio - 1) * 100,
+    analysisMaxPercent: (options.analysisRange.maxPriceRatio - 1) * 100,
   };
 };
 
@@ -418,8 +426,7 @@ const createDefaultOptimisationCache = () => {
         debtPosition: options.debtPosition,
         perpPosition: options.perpPosition,
         bearishTargetPercent: options.bearishTargetPercent ?? -75,
-        analysisMinPercent: options.analysisMinPercent ?? -80,
-        analysisMaxPercent: options.analysisMaxPercent ?? 200,
+        analysisRange: options.analysisRange,
         comparisonMode: preset.comparisonMode,
       }),
       baseAssetValue: 0,
@@ -816,6 +823,8 @@ export default function App() {
     [leverageLimitsExpanded, setLeverageLimitsExpanded] = useState(false),
     [bullishTarget, setBullishTarget] = useState(200),
     [bearishTarget, setBearishTarget] = useState(-75),
+    [analysisMinPercent, setAnalysisMinPercent] = useState(DEFAULT_ANALYSIS_MIN_PERCENT),
+    [analysisMaxPercent, setAnalysisMaxPercent] = useState(DEFAULT_ANALYSIS_MAX_PERCENT),
     [searchStep, setSearchStep] = useState(1),
     [minMove, setMinMove] = useState(DEFAULT_CHART_MIN_MOVE),
     [maxMove, setMaxMove] = useState(DEFAULT_CHART_MAX_MOVE),
@@ -981,11 +990,7 @@ export default function App() {
       if (saved.objective === "bullish" || saved.objective === "bearish" || saved.objective === "spotParity" || saved.objective === "debtParity" || saved.objective === "perpParity" || saved.objective === "benchmarkDominance") setObjective(saved.objective);
       if (isNumber(saved.spotParityMagnitude)) setSpotParityMagnitude(saved.spotParityMagnitude);
       if (isNumber(saved.debtParityMagnitude)) setDebtParityMagnitude(saved.debtParityMagnitude);
-      if (isNumber(saved.perpParityMagnitude)) {
-        const wasPreviousDefault = saved.inputDefaultsVersion !== CURRENT_INPUT_DEFAULTS_VERSION &&
-          saved.perpParityMagnitude === 53;
-        setPerpParityMagnitude(wasPreviousDefault ? 50 : saved.perpParityMagnitude);
-      }
+      if (isNumber(saved.perpParityMagnitude)) setPerpParityMagnitude(saved.perpParityMagnitude);
       if (isNumber(saved.downsideBreakevenMagnitude)) setDownsideBreakevenMagnitude(saved.downsideBreakevenMagnitude);
       if (isNumber(saved.upsideBreakevenMagnitude)) setUpsideBreakevenMagnitude(saved.upsideBreakevenMagnitude);
       if (saved.cashbackPreference === "cash" || saved.cashbackPreference === "spot" || saved.cashbackPreference === "optimise") setCashbackPreference(saved.cashbackPreference);
@@ -1003,6 +1008,8 @@ export default function App() {
       if (isNumber(saved.shortLtvLimit)) setShortLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.shortLtvLimit)));
       if (isNumber(saved.bullishTarget)) setBullishTarget(Math.max(1, saved.bullishTarget));
       if (isNumber(saved.bearishTarget)) setBearishTarget(Math.min(-1, Math.max(-99, saved.bearishTarget)));
+      if (isNumber(saved.analysisMinPercent)) setAnalysisMinPercent(Math.min(-1, Math.max(-99, saved.analysisMinPercent)));
+      if (isNumber(saved.analysisMaxPercent)) setAnalysisMaxPercent(Math.min(2000, Math.max(1, saved.analysisMaxPercent)));
       if (isNumber(saved.searchStep)) setSearchStep(Math.min(5, Math.max(0.25, saved.searchStep)));
       if (isNumber(saved.minMove)) setMinMove(saved.minMove);
       if (isNumber(saved.maxMove)) setMaxMove(saved.maxMove);
@@ -1047,7 +1054,7 @@ export default function App() {
         inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
         comparisonMode, mode, manualConfig, optimiserDeposit, objective,
         spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-        upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+        upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
         minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
@@ -1055,7 +1062,7 @@ export default function App() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [
-    assetAmount, assetName, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, debtParityMagnitude, degenSettingsByMode,
+    analysisMaxPercent, analysisMinPercent, assetAmount, assetName, assetPrice, baseAssetValue, cashbackPreference, comparisonMode, debtParityMagnitude, degenSettingsByMode,
     bearishTarget, bullishTarget, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDrawdownByMode, maxMove,
     minMove, mode, objective, optimiserDeposit, perpParityMagnitude, perpState, persistenceLoaded,
     defaultMaxDrawdown, requireBreakeven, searchStep, shortLtvLimit, chartSeriesVisibility, showDebt, showDrawdownLine, showLiquidationLine,
@@ -1133,10 +1140,18 @@ export default function App() {
   const lastRun = displayedResult;
   const optimising = runState.kind === "running";
   const maxLtv = MAX_V4_LTV * 100;
-  const risk = useMemo(() => {
-    const t = findWorstDrawdown(config);
-    return { ...t, breakeven: findDownsideBreakeven(config, t) };
-  }, [config]);
+  const pendingAnalysisRange = useMemo(
+    () => analysisRangeFromPercent(analysisMinPercent, analysisMaxPercent),
+    [analysisMinPercent, analysisMaxPercent],
+  );
+  const displayAnalysisRange = mode === "optimise" && displayedResult
+    ? displayedResult.options.analysisRange
+    : pendingAnalysisRange;
+  const displayAnalysisMoves = analysisRangeToPercent(displayAnalysisRange);
+  const risk = useMemo(() => ({
+    ...findWorstDrawdown(config, displayAnalysisRange),
+    breakeven: findDownsideBreakeven(config),
+  }), [config, displayAnalysisRange]);
   const positionBreakdown = useMemo(() => {
     const degenAccounting = calculateDegenAccounting(config.deposit, config);
     const cashbackAmount = degenAccounting.residualCashback;
@@ -1324,7 +1339,7 @@ export default function App() {
     inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
     comparisonMode, mode, manualConfig, optimiserDeposit, objective,
     spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-    upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, searchStep,
+    upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
     minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
@@ -1407,8 +1422,8 @@ export default function App() {
     shortLtvLimit,
     bullishTarget,
     bearishTarget,
-    analysisMinPercent: -downsideBreakevenMagnitude,
-    analysisMaxPercent: bullishTarget,
+    analysisMinPercent,
+    analysisMaxPercent,
     searchStep,
   };
   const pendingOptions: OptimiseOptions = {
@@ -1422,8 +1437,7 @@ export default function App() {
     objective,
     comparisonMode,
     baseAssetValue,
-    analysisMinPercent: -downsideBreakevenMagnitude,
-    analysisMaxPercent: bullishTarget,
+    analysisRange: pendingAnalysisRange,
     spotParityPercent: spotParityMagnitude,
     debtParityPercent: debtParityMagnitude,
     perpParityPercent: perpParityMagnitude,
@@ -1511,6 +1525,10 @@ export default function App() {
               lastRun.inputs.upsideBreakevenPercent !==
                 (requireBreakeven ? upsideBreakevenMagnitude : null))
           ? "Breakeven limits changed"
+        : lastRun &&
+            (lastRun.inputs.analysisMinPercent !== analysisMinPercent ||
+              lastRun.inputs.analysisMaxPercent !== analysisMaxPercent)
+          ? "Analysis range changed"
         : "Strategy inputs changed";
   const sendToManual = () => {
     if (!displayedResult) return;
@@ -1578,8 +1596,7 @@ export default function App() {
           debtPosition: jobOptions.debtPosition,
           perpPosition: jobOptions.perpPosition,
           bearishTargetPercent: jobOptions.bearishTargetPercent ?? -75,
-          analysisMinPercent: jobOptions.analysisMinPercent ?? -80,
-          analysisMaxPercent: jobOptions.analysisMaxPercent ?? 200,
+          analysisRange: jobOptions.analysisRange,
           comparisonMode: jobOptions.comparisonMode ?? "base",
         }),
         baseAssetValue: jobOptions.baseAssetValue ?? 0,
@@ -1775,6 +1792,18 @@ export default function App() {
                 <span>BEARISH TARGET</span>
                 <small>Used by Maximise bearish exposure</small>
                 <NumericInput className="settings-number" value={bearishTarget} min={-99} max={-1} onValueChange={(value) => setBearishTarget(Math.min(-1, Math.max(-99, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>ANALYSIS RANGE MIN</span>
+                <small>Lower bound for portfolio risk and full-range comparisons</small>
+                <NumericInput className="settings-number" value={analysisMinPercent} min={-99} max={-1} onValueChange={(value) => setAnalysisMinPercent(Math.min(-1, Math.max(-99, value)))} />
+                <em>%</em>
+              </label>
+              <label>
+                <span>ANALYSIS RANGE MAX</span>
+                <small>Upper bound for portfolio risk and full-range comparisons</small>
+                <NumericInput className="settings-number" value={analysisMaxPercent} min={1} max={2000} onValueChange={(value) => setAnalysisMaxPercent(Math.min(2000, Math.max(1, value)))} />
                 <em>%</em>
               </label>
               <label>
@@ -2681,7 +2710,11 @@ export default function App() {
               <h3>MAX DRAWDOWN</h3>
               <div className="drawdown-summary-row">
                 <strong className="analytical-primary">{pct(risk.drawdown)}</strong>
-                <span className="analytical-note">{risk.breakeven ? `Breakeven at ${pct(risk.breakeven - 1)}` : "No breakeven in modelled range"}</span>
+                <span className="analytical-note">
+                  Across {signedFixed(displayAnalysisMoves.minMovePercent)}% to {signedFixed(displayAnalysisMoves.maxMovePercent)}%
+                  <br />
+                  {risk.breakeven ? `Downside breakeven at ${pct(risk.breakeven - 1)}` : "No downside breakeven in modelled range"}
+                </span>
               </div>
             </section>
             {cashbackCrossover && <section className="analytical-section cashback-crossover" aria-label="Cashback switch point analysis">

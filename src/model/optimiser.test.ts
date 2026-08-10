@@ -24,6 +24,7 @@ import type {
 const base: OptimiseOptions = {
   maxDrawdown: 0.5,
   maxLtv: 0.51,
+  analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 3 },
   objective: "bullish",
   spotParityPercent: 100,
   debtParityPercent: 50,
@@ -67,7 +68,7 @@ function bestFeasibleValue(
           customRecyclePct: base.customRecyclePct,
         };
         if (
-          findWorstDrawdown(config).drawdown >=
+          findWorstDrawdown(config, base.analysisRange).drawdown >=
           -base.maxDrawdown - 1e-5
         )
           best = Math.max(best, portfolioValue(p, config));
@@ -88,9 +89,25 @@ describe("optimiser", () => {
       maxDrawdown: 0.1,
       maxLtv: 0.75,
     });
-    expect(findWorstDrawdown(result).drawdown).toBeGreaterThanOrEqual(-0.10001);
+    expect(findWorstDrawdown(result, base.analysisRange).drawdown).toBeGreaterThanOrEqual(-0.10001);
     expect(result.longLtv).toBeLessThanOrEqual(0.75);
     expect(result.shortLtv).toBeLessThanOrEqual(0.75);
+  });
+
+  it("enforces a bearish strategy's upside trough against the drawdown limit", () => {
+    const result = optimisePortfolio({
+      ...base,
+      objective: "bearish",
+      cashbackMode: "cash",
+      maxDrawdown: 0.15,
+      maxLtv: 0.8,
+      longMaxLtv: 0.8,
+      shortMaxLtv: 0.8,
+    });
+    const trough = findWorstDrawdown(result, base.analysisRange);
+    expect(trough.p).toBeGreaterThan(1);
+    expect(trough.drawdown).toBeGreaterThanOrEqual(-0.15000001);
+    expect(result.longAllocation).toBeGreaterThan(0);
   });
 
   it("caps optimiser LTVs at the supported 80% maximum", () => {
@@ -153,13 +170,10 @@ describe("optimiser", () => {
       maxDrawdown: 1,
       maxLtv: 0.5,
       searchStepPercent: 50,
-      analysisMinPercent: -80,
-      analysisMaxPercent: 200,
     };
     const evaluator = createBenchmarkDominanceEvaluator({
       comparisonMode: "base",
-      requestedMinMove: -80,
-      requestedMaxMove: 200,
+      analysisRange: options.analysisRange,
       debtPosition: options.debtPosition,
       perpPosition: options.perpPosition,
     })!;
@@ -197,7 +211,7 @@ describe("optimiser", () => {
             degenMode: base.degenMode,
             customRecyclePct: base.customRecyclePct,
           };
-          const trough = findWorstDrawdown(config);
+          const trough = findWorstDrawdown(config, base.analysisRange);
           if (portfolioValue(parityP, config) < parityP - 1e-10)
             continue;
           const downsideValue = portfolioValue(downsideP, config);
@@ -218,12 +232,12 @@ describe("optimiser", () => {
     expect(portfolioValue(parityP, result)).toBeGreaterThanOrEqual(
       parityP - 1e-10,
     );
-    expect(findWorstDrawdown(result).drawdown).toBeCloseTo(bestDrawdown, 10);
+    expect(findWorstDrawdown(result, base.analysisRange).drawdown).toBeCloseTo(bestDrawdown, 10);
     expect(portfolioValue(downsideP, result)).toBeCloseTo(
       bestDownsideValue,
       10,
     );
-    expect(findWorstDrawdown(result).drawdown).toBeLessThan(0);
+    expect(findWorstDrawdown(result, base.analysisRange).drawdown).toBeLessThan(0);
   });
 
   it("minimises drawdown while securing lending parity at the selected target", () => {

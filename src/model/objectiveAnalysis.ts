@@ -15,7 +15,7 @@ import {
 } from "./v4Math";
 import { targetPercentToPrice } from "./optimiser";
 import { createBenchmarkDominanceEvaluator, type BenchmarkDominanceResult } from "./benchmarkDominance";
-import type { ComparisonMode, Config, Objective } from "./types";
+import type { AnalysisRange, ComparisonMode, Config, Objective } from "./types";
 
 export interface TargetPayoffAnalysis {
   v4Return: number;
@@ -49,6 +49,8 @@ export type ObjectiveAnalysis =
       v4MaxDrawdown: number;
       spotMaxDrawdown: number;
       protectionGained: number;
+      analysisMinMove: number;
+      analysisMaxMove: number;
     }
   | {
       kind: "lending" | "perp";
@@ -118,8 +120,7 @@ export function createObjectiveAnalysis(input: {
   debtParityPercent: number;
   perpParityPercent: number;
   bearishTargetPercent: number;
-  analysisMinPercent: number;
-  analysisMaxPercent: number;
+  analysisRange: AnalysisRange;
   comparisonMode: ComparisonMode;
   debtPosition: DebtPositionInput;
   perpPosition: PerpPositionInput;
@@ -135,8 +136,7 @@ export function createObjectiveAnalysis(input: {
   if (input.objective === "benchmarkDominance") {
     const evaluator = createBenchmarkDominanceEvaluator({
       comparisonMode: input.comparisonMode,
-      requestedMinMove: input.analysisMinPercent,
-      requestedMaxMove: input.analysisMaxPercent,
+      analysisRange: input.analysisRange,
       debtPosition: input.debtPosition,
       perpPosition: input.perpPosition,
     });
@@ -149,8 +149,10 @@ export function createObjectiveAnalysis(input: {
       priceRatio,
       (priceRatio - 1) * 100,
     );
-    const v4MaxDrawdown = findWorstDrawdown(input.config).drawdown * 100;
-    const spotMaxDrawdown = -100;
+    const analysisMinMove = (input.analysisRange.minPriceRatio - 1) * 100;
+    const analysisMaxMove = (input.analysisRange.maxPriceRatio - 1) * 100;
+    const v4MaxDrawdown = findWorstDrawdown(input.config, input.analysisRange).drawdown * 100;
+    const spotMaxDrawdown = analysisMinMove;
     return {
       kind: "spot",
       target,
@@ -158,6 +160,8 @@ export function createObjectiveAnalysis(input: {
       spotMaxDrawdown,
       protectionGained:
         Math.abs(spotMaxDrawdown) - Math.abs(v4MaxDrawdown),
+      analysisMinMove,
+      analysisMaxMove,
     };
   }
 

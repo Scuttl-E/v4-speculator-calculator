@@ -16,8 +16,7 @@ const common = {
   config,
   comparisonMode: "base" as const,
   bearishTargetPercent: -80,
-  analysisMinPercent: -80,
-  analysisMaxPercent: 200,
+  analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 3 },
   spotParityPercent: 100,
   debtParityPercent: 50,
   perpParityPercent: 25,
@@ -50,9 +49,11 @@ describe("objective-specific analysis", () => {
       result.target.v4Return - 100,
       10,
     );
-    expect(result.spotMaxDrawdown).toBe(-100);
+    expect(result.spotMaxDrawdown).toBeCloseTo(-80, 10);
+    expect(result.analysisMinMove).toBeCloseTo(-80, 10);
+    expect(result.analysisMaxMove).toBeCloseTo(200, 10);
     expect(result.protectionGained).toBeCloseTo(
-      100 - Math.abs(result.v4MaxDrawdown),
+      80 - Math.abs(result.v4MaxDrawdown),
       10,
     );
   });

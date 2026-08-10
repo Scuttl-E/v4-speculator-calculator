@@ -17,8 +17,7 @@ const config: Config = {
   customRecyclePct: 50,
 };
 const common = {
-  requestedMinMove: -80,
-  requestedMaxMove: 200,
+  analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 3 },
   debtPosition: {
     assetPrice: 4000,
     assetAmount: 20,

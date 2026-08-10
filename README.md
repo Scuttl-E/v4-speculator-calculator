@@ -242,9 +242,21 @@ In simple terms:
 
 ### Maximum Drawdown
 
-Sets the maximum portfolio drawdown the optimiser is allowed to accept.
+Sets the maximum portfolio drawdown the optimiser is allowed to accept. The value is the worst portfolio return found within the configured **Analysis Range**, rather than an unbounded claim about every possible asset price.
 
 The control supports **0.1 percentage-point increments**, allowing calculated thresholds such as `-46.6%` to be used directly without changing the optimiser's underlying global search resolution.
+
+### Analysis Range
+
+Defines the asset-price interval used to evaluate maximum drawdown and other full-range portfolio risk and comparison calculations. Its minimum and maximum are adjustable in Settings and default to **-80% through +200%**.
+
+Analysis Range is independent from:
+
+- the Bullish and Bearish objective targets;
+- adverse-side recovery horizons; and
+- chart zoom, which changes only the visible viewport.
+
+For Benchmark Dominance, comparator scoring may stop at a lending or perpetual position's liquidation boundary. V4 maximum drawdown still uses the complete configured Analysis Range.
 
 ### Leverage Limits
 

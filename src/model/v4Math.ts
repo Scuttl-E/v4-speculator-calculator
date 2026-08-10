@@ -1,4 +1,4 @@
-import type { CashbackMode, Config, Trough } from "./types";
+import type { AnalysisRange, CashbackMode, Config, Trough } from "./types";
 import { degenRecycleTargetRatio } from "./degen";
 export const MAX_V4_LTV = 0.8;
 export const effectiveLeverage = (ltv: number) => 0.5 / (1 - ltv);
@@ -54,29 +54,85 @@ export const portfolioReturn = (p: number, c: Config) =>
   portfolioValue(p, c) - 1;
 export const dollarValue = (p: number, c: Config) =>
   c.deposit * portfolioValue(p, c);
-export function findWorstDrawdown(c: Config): Trough {
-  let best = { value: Infinity, p: 0.01, drawdown: 0 };
+
+export const analysisRangeFromPercent = (
+  minMovePercent: number,
+  maxMovePercent: number,
+): AnalysisRange => {
+  const range = {
+    minPriceRatio: 1 + minMovePercent / 100,
+    maxPriceRatio: 1 + maxMovePercent / 100,
+  };
+  assertAnalysisRange(range);
+  return range;
+};
+
+export const analysisRangeToPercent = (range: AnalysisRange) => ({
+  minMovePercent: (range.minPriceRatio - 1) * 100,
+  maxMovePercent: (range.maxPriceRatio - 1) * 100,
+});
+
+const assertAnalysisRange = (range: AnalysisRange) => {
+  if (!Number.isFinite(range.minPriceRatio) || !Number.isFinite(range.maxPriceRatio))
+    throw new RangeError("Analysis range must be finite");
+  if (range.minPriceRatio <= 0)
+    throw new RangeError("Analysis minimum must be greater than -100%");
+  if (range.minPriceRatio >= 1 || range.maxPriceRatio <= 1)
+    throw new RangeError("Analysis range must include moves below and above entry");
+  if (range.maxPriceRatio <= range.minPriceRatio)
+    throw new RangeError("Analysis maximum must be greater than its minimum");
+};
+
+function findMinimumOnInterval(c: Config, minP: number, maxP: number): Trough {
+  const samples: Array<{ p: number; value: number }> = [];
   const n = 1200;
   for (let i = 0; i <= n; i++) {
-    const p = 0.01 + ((1 - 0.01) * i) / n,
-      value = portfolioValue(p, c);
-    if (value < best.value) best = { value, p, drawdown: value - 1 };
+    const p = minP + ((maxP - minP) * i) / n;
+    samples.push({ p, value: portfolioValue(p, c) });
   }
-  let lo = Math.max(0.01, best.p - 0.003),
-    hi = Math.min(1, best.p + 0.003);
-  for (let k = 0; k < 45; k++) {
-    const a = (2 * lo + hi) / 3,
-      b = (lo + 2 * hi) / 3;
-    if (portfolioValue(a, c) < portfolioValue(b, c)) hi = b;
-    else lo = a;
+  if (minP < 1 && maxP > 1 && !samples.some(({ p }) => Math.abs(p - 1) < 1e-12))
+    samples.push({ p: 1, value: portfolioValue(1, c) });
+  samples.sort((a, b) => a.p - b.p);
+
+  let best = samples[0];
+  const consider = (candidate: { p: number; value: number }) => {
+    if (candidate.value < best.value) best = candidate;
+  };
+  consider(samples[samples.length - 1]);
+  const entry = samples.find(({ p }) => Math.abs(p - 1) < 1e-12);
+  if (entry) consider(entry);
+
+  for (let index = 1; index < samples.length - 1; index++) {
+    const sample = samples[index];
+    if (sample.value > samples[index - 1].value || sample.value > samples[index + 1].value)
+      continue;
+    let lo = samples[index - 1].p;
+    let hi = samples[index + 1].p;
+    for (let iteration = 0; iteration < 45; iteration++) {
+      const a = (2 * lo + hi) / 3;
+      const b = (lo + 2 * hi) / 3;
+      if (portfolioValue(a, c) < portfolioValue(b, c)) hi = b;
+      else lo = a;
+    }
+    const p = (lo + hi) / 2;
+    consider({ p, value: portfolioValue(p, c) });
   }
-  const p = (lo + hi) / 2,
-    value = portfolioValue(p, c);
-  return { p, value, drawdown: value - 1 };
+  return { ...best, drawdown: best.value - 1 };
+}
+
+export function findWorstDrawdown(c: Config, range: AnalysisRange): Trough {
+  assertAnalysisRange(range);
+  return findMinimumOnInterval(c, range.minPriceRatio, range.maxPriceRatio);
+}
+
+export function findDownsideTrough(c: Config, minP = 0.01): Trough {
+  if (!Number.isFinite(minP) || minP <= 0 || minP >= 1)
+    throw new RangeError("Downside trough minimum must be between zero and entry");
+  return findMinimumOnInterval(c, minP, 1);
 }
 export function findDownsideBreakeven(
   c: Config,
-  trough: Trough = findWorstDrawdown(c),
+  trough: Trough = findDownsideTrough(c),
 ) {
   let lastP = trough.p,
     last = portfolioValue(lastP, c) - 1;

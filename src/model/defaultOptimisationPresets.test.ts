@@ -36,8 +36,7 @@ const defaultOptions = (
   shortMaxLtv: 0.8,
   bullishTargetPercent: 200,
   bearishTargetPercent: -75,
-  analysisMinPercent: -80,
-  analysisMaxPercent: 200,
+  analysisRange: { minPriceRatio: 0.2, maxPriceRatio: 3 },
   searchStepPercent: 1,
   objective,
   comparisonMode,
@@ -69,8 +68,7 @@ const analysisFor = (options: OptimiseOptions, config: NonNullable<ReturnType<
   debtPosition: options.debtPosition,
   perpPosition: options.perpPosition,
   bearishTargetPercent: options.bearishTargetPercent ?? -75,
-  analysisMinPercent: options.analysisMinPercent ?? -80,
-  analysisMaxPercent: options.analysisMaxPercent ?? 200,
+  analysisRange: options.analysisRange,
   comparisonMode: options.comparisonMode ?? "base",
 });
 

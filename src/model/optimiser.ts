@@ -124,8 +124,7 @@ function optimisePortfolioInternal(
   const dominanceEvaluator = options.objective === "benchmarkDominance"
     ? createBenchmarkDominanceEvaluator({
         comparisonMode: options.comparisonMode ?? "base",
-        requestedMinMove: options.analysisMinPercent ?? options.downsideBreakevenPercent,
-        requestedMaxMove: options.analysisMaxPercent ?? options.bullishTargetPercent ?? 200,
+        analysisRange: options.analysisRange,
         debtPosition: options.debtPosition,
         perpPosition: options.perpPosition,
       })
@@ -188,7 +187,7 @@ function optimisePortfolioInternal(
       longLtv: candidate.longLtv,
       shortLtv: candidate.shortLtv,
     };
-    const trough = findWorstDrawdown(config);
+    const trough = findWorstDrawdown(config, options.analysisRange);
     const adverseBreakevenAssessment = !options.requireBreakeven
       ? { satisfied: true, distance: Infinity }
       : assessAdverseBreakeven(

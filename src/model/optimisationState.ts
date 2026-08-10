@@ -2,7 +2,7 @@ import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-degen-1";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-analysis-range-1";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {
@@ -58,8 +58,7 @@ export function createOptimisationSignature(options: OptimiseOptions) {
     spotParityPercent: options.objective === "spotParity" ? options.spotParityPercent : null,
     debtParityPercent: options.objective === "debtParity" ? options.debtParityPercent : null,
     perpParityPercent: options.objective === "perpParity" ? options.perpParityPercent : null,
-    analysisMinPercent: options.objective === "benchmarkDominance" ? options.analysisMinPercent : null,
-    analysisMaxPercent: options.objective === "benchmarkDominance" ? options.analysisMaxPercent : null,
+    analysisRange: options.analysisRange,
     debtPosition: options.comparisonMode === "lending" ? options.debtPosition : null,
     perpPosition: options.comparisonMode === "perp" ? options.perpPosition : null,
   };

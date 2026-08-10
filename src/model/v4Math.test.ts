@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, MAX_V4_EFFECTIVE_LEVERAGE, MAX_V4_LTV, portfolioComponents, portfolioValue, shortValue } from "./v4Math";
+import { analysisRangeFromPercent, effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, MAX_V4_EFFECTIVE_LEVERAGE, MAX_V4_LTV, portfolioComponents, portfolioValue, shortValue } from "./v4Math";
 import type { Config } from "./types";
+const analysisRange = analysisRangeFromPercent(-80, 200);
 const config = (overrides: Partial<Config> = {}): Config => ({
   deposit: 10000,
   longAllocation: 0.6,
@@ -40,10 +41,34 @@ describe("published V4 anchors", () => {
   });
   it("finds the lower-price breakeven beyond a downside trough", () => {
     const strategy = config();
-    const trough = findWorstDrawdown(strategy);
+    const trough = findWorstDrawdown(strategy, analysisRange);
     const breakeven = findDownsideBreakeven(strategy, trough);
     expect(breakeven).not.toBeNull();
     expect(breakeven!).toBeLessThan(trough.p);
+  });
+
+  it("finds the adverse upside trough of an 80% LTV cash Short", () => {
+    const strategy = config({
+      longAllocation: 0,
+      shortLtv: 0.8,
+      cashbackMode: "cash",
+    });
+    const trough = findWorstDrawdown(strategy, analysisRange);
+    expect(trough.p).toBeCloseTo(Math.sqrt(2.5), 7);
+    expect(trough.drawdown).toBeCloseTo(-0.1688611699, 8);
+  });
+
+  it("compares an endpoint minimum with entry when the interior trough is outside the range", () => {
+    const strategy = config({ longAllocation: 0, shortLtv: 0.8, cashbackMode: "cash" });
+    const trough = findWorstDrawdown(strategy, analysisRangeFromPercent(-80, 50));
+    expect(trough.p).toBeCloseTo(1.5, 10);
+    expect(trough.drawdown).toBeCloseTo(-1 / 6, 8);
+  });
+
+  it("rejects analysis domains that do not cover both sides of entry", () => {
+    expect(() => analysisRangeFromPercent(0, 200)).toThrow(/below and above entry/);
+    expect(() => analysisRangeFromPercent(-80, 0)).toThrow(/below and above entry/);
+    expect(() => analysisRangeFromPercent(-100, 200)).toThrow(/greater than -100/);
   });
 
   it("matches the locked pre-Degen portfolio formula exactly when disabled", () => {

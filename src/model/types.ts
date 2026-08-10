@@ -11,6 +11,10 @@ export interface DegenSettings {
 }
 export type ComparisonMode = "base" | "lending" | "perp";
 export type Objective = "bullish" | "bearish" | "spotParity" | "debtParity" | "perpParity" | "benchmarkDominance";
+export interface AnalysisRange {
+  readonly minPriceRatio: number;
+  readonly maxPriceRatio: number;
+}
 export interface Config extends DegenSettings {
   deposit: number;
   longAllocation: number;
@@ -30,8 +34,7 @@ export interface OptimiseOptions extends DegenSettings {
   shortMaxLtv?: number;
   bullishTargetPercent?: number;
   bearishTargetPercent?: number;
-  analysisMinPercent?: number;
-  analysisMaxPercent?: number;
+  analysisRange: AnalysisRange;
   searchStepPercent?: number;
   objective: Objective;
   comparisonMode?: ComparisonMode;
