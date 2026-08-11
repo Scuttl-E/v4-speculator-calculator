@@ -226,6 +226,11 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
 .manual-position .field-label { display: block; margin: 12px 0 6px; }
 .manual-position .section-label + .field-label { margin-top: 10px; }
 .manual-position .cashback-segments + .field-label { margin-top: 14px; }
+.manual-position .product-mode-segments {
+  display: grid;
+  grid-template-columns: .85fr 1.3fr .85fr;
+}
+.manual-position .product-mode-segments button { width: 100%; }
 .discrete-leverage-limits .field-label { display: block; margin: 10px 0 6px; }
 .discrete-leverage-limits .cashback-segments + .field-label { margin-top: 12px; }
 

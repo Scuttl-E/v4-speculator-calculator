@@ -510,10 +510,20 @@ function Slider({
 }) {
   const [rangeDraft, setRangeDraft] = useState(value);
   const rangeDraftRef = useRef(value);
+  const deferredCommitTimerRef = useRef<number | null>(null);
   useEffect(() => {
+    if (deferredCommitTimerRef.current !== null) {
+      window.clearTimeout(deferredCommitTimerRef.current);
+      deferredCommitTimerRef.current = null;
+    }
     rangeDraftRef.current = value;
     setRangeDraft(value);
   }, [value]);
+  useEffect(() => () => {
+    if (deferredCommitTimerRef.current !== null) {
+      window.clearTimeout(deferredCommitTimerRef.current);
+    }
+  }, []);
   const sliderValue = deferRangeCommit ? rangeDraft : value,
     displayValue = sliderValue,
     inputValue = signedDisplay ? -displayValue : displayValue,
@@ -531,19 +541,33 @@ function Slider({
       else onChange(snapped);
     },
     commitRangeDraft = () => {
+      if (deferredCommitTimerRef.current !== null) {
+        window.clearTimeout(deferredCommitTimerRef.current);
+        deferredCommitTimerRef.current = null;
+      }
       if (deferRangeCommit && rangeDraftRef.current !== value) onChange(rangeDraftRef.current);
     },
+    commitSteppedValue = (next: number) => {
+      const snapped = snapValue(next);
+      if (!deferRangeCommit) {
+        onChange(snapped);
+        return;
+      }
+      rangeDraftRef.current = snapped;
+      setRangeDraft(snapped);
+      if (deferredCommitTimerRef.current !== null) {
+        window.clearTimeout(deferredCommitTimerRef.current);
+      }
+      deferredCommitTimerRef.current = window.setTimeout(() => {
+        deferredCommitTimerRef.current = null;
+        if (rangeDraftRef.current !== value) onChange(rangeDraftRef.current);
+      }, 160);
+    },
     stepUp = () => {
-      const next = signedDisplay
-          ? Math.min(max, value + step)
-          : Math.min(max, value + step);
-      onChange(snapValue(next));
+      commitSteppedValue(Math.min(max, sliderValue + step));
     },
     stepDown = () => {
-      const next = signedDisplay
-        ? Math.max(min, value - step)
-        : Math.max(min, value - step);
-      onChange(snapValue(next));
+      commitSteppedValue(Math.max(min, sliderValue - step));
     },
     commitInput = (next: number) => {
       if (!Number.isFinite(next)) return;
@@ -1323,6 +1347,24 @@ export default function App() {
     manualConfig.longLtv === 0.5 && manualConfig.shortLtv === 0.5 &&
     manualConfig.longMode === "2x" && manualConfig.shortMode === "2x" &&
     manualConfig.cashbackMode === "cash";
+  const resetOptimisationOptions = createDefaultOptimisationOptions(comparisonMode, objective);
+  const resetAnalysisMoves = analysisRangeToPercent(resetOptimisationOptions.analysisRange);
+  const optimiserControlsAreResetDefaults =
+    cashbackPolicy === (resetOptimisationOptions.cashbackPolicy ?? "auto") &&
+    cashbackRouting === (resetOptimisationOptions.cashbackRouting ?? "auto") &&
+    longLtvLimit === (resetOptimisationOptions.longMaxLtv ?? resetOptimisationOptions.maxLtv) * 100 &&
+    shortLtvLimit === (resetOptimisationOptions.shortMaxLtv ?? resetOptimisationOptions.maxLtv) * 100 &&
+    bullishTarget === (resetOptimisationOptions.bullishTargetPercent ?? 200) &&
+    bearishTarget === (resetOptimisationOptions.bearishTargetPercent ?? -75) &&
+    spotParityMagnitude === resetOptimisationOptions.spotParityPercent &&
+    debtParityMagnitude === resetOptimisationOptions.debtParityPercent &&
+    perpParityMagnitude === resetOptimisationOptions.perpParityPercent &&
+    requireBreakeven === resetOptimisationOptions.requireBreakeven &&
+    downsideBreakevenMagnitude === Math.abs(resetOptimisationOptions.downsideBreakevenPercent) &&
+    upsideBreakevenMagnitude === resetOptimisationOptions.upsideBreakevenPercent &&
+    analysisMinPercent === resetAnalysisMoves.minMovePercent &&
+    analysisMaxPercent === resetAnalysisMoves.maxMovePercent &&
+    searchStep === (resetOptimisationOptions.searchStepPercent ?? 1);
   const activeComparisonIsDefault = (comparisonMode === "base"
     ? pendingConfig.deposit === INITIAL_CONFIG.deposit && baseAssetValue === 0
     : comparisonMode === "lending"
@@ -1338,7 +1380,7 @@ export default function App() {
         perpState.side === DEFAULT_PERP.side) &&
     maxDD === defaultMaxDrawdown &&
     !pendingConfig.degenEnabled &&
-    (mode !== "manual" || manualPositionIsDefault);
+    (mode === "manual" ? manualPositionIsDefault : optimiserControlsAreResetDefaults);
   const resetActiveComparison = () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
@@ -1375,20 +1417,35 @@ export default function App() {
         ...current,
         [comparisonMode]: { ...DEFAULT_DEGEN_SETTINGS },
       }));
+      setCashbackPolicy(resetOptimisationOptions.cashbackPolicy ?? "auto");
+      setCashbackRouting(resetOptimisationOptions.cashbackRouting ?? "auto");
+      setLongLtvLimit((resetOptimisationOptions.longMaxLtv ?? resetOptimisationOptions.maxLtv) * 100);
+      setShortLtvLimit((resetOptimisationOptions.shortMaxLtv ?? resetOptimisationOptions.maxLtv) * 100);
+      setBullishTarget(resetOptimisationOptions.bullishTargetPercent ?? 200);
+      setBearishTarget(resetOptimisationOptions.bearishTargetPercent ?? -75);
+      setSpotParityMagnitude(resetOptimisationOptions.spotParityPercent);
+      setDebtParityMagnitude(resetOptimisationOptions.debtParityPercent);
+      setPerpParityMagnitude(resetOptimisationOptions.perpParityPercent);
+      setRequireBreakeven(resetOptimisationOptions.requireBreakeven);
+      setDownsideBreakevenMagnitude(Math.abs(resetOptimisationOptions.downsideBreakevenPercent));
+      setUpsideBreakevenMagnitude(resetOptimisationOptions.upsideBreakevenPercent);
+      setAnalysisMinPercent(resetAnalysisMoves.minMovePercent);
+      setAnalysisMaxPercent(resetAnalysisMoves.maxMovePercent);
+      setSearchStep(resetOptimisationOptions.searchStepPercent ?? 1);
     }
     if (comparisonMode === "base") {
-      update("deposit", INITIAL_CONFIG.deposit);
-      setBaseAssetValue(0);
+      update("deposit", resetOptimisationOptions.deposit);
+      setBaseAssetValue(resetOptimisationOptions.baseAssetValue ?? 0);
       return;
     }
     if (comparisonMode === "lending") {
-      setAssetPrice(DEFAULT_LENDING.assetPrice);
-      setAssetAmount(DEFAULT_LENDING.assetAmount);
-      setUsdDebt(DEFAULT_LENDING.usdDebt);
-      setLiquidationLtv(DEFAULT_LENDING.liquidationLtv);
+      setAssetPrice(resetOptimisationOptions.debtPosition.assetPrice);
+      setAssetAmount(resetOptimisationOptions.debtPosition.assetAmount);
+      setUsdDebt(resetOptimisationOptions.debtPosition.usdDebt);
+      setLiquidationLtv(resetOptimisationOptions.debtPosition.liquidationLtv * 100);
       return;
     }
-    setPerpState({ ...DEFAULT_PERP });
+    setPerpState({ ...resetOptimisationOptions.perpPosition });
   };
   const persistInputsNow = () => saveCalculatorInputs({
     inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
@@ -2384,11 +2441,11 @@ export default function App() {
                   <span>Up to 75% LTV</span>
                 </div>
                 <label className="field-label">LONG PRODUCT</label>
-                <div className="segments wide cashback-segments">
+                <div className="segments wide cashback-segments product-mode-segments">
                   {(["2x", "2.5x-cashback", "2.5x-looped"] as const).map((longMode) => <button key={longMode} className={config.longMode === longMode ? "on" : ""} onClick={() => update("longMode", longMode)}>{longModeLabel(longMode)}</button>)}
                 </div>
                 <label className="field-label">SHORT PRODUCT</label>
-                <div className="segments wide cashback-segments">
+                <div className="segments wide cashback-segments product-mode-segments">
                   {(["2x", "2.5x-cashback", "2.5x-looped"] as const).map((shortMode) => <button key={shortMode} className={config.shortMode === shortMode ? "on" : ""} onClick={() => update("shortMode", shortMode)}>{shortModeLabel(shortMode)}</button>)}
                 </div>
               </section>
