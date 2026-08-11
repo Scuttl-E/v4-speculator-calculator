@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction, type WheelEvent } from "react";
 import { flushSync } from "react-dom";
 import {
   Area,
@@ -311,12 +311,77 @@ const SCUTTLE_LINK = "https://x.com/chainsandtrains";
 const DEFAULT_MAX_DRAWDOWN = DEFAULT_OPTIMISER_MAX_DRAWDOWN_PERCENT;
 const DEFAULT_ANALYSIS_MIN_PERCENT = DEFAULT_OPTIMISER_ANALYSIS_MIN_PERCENT;
 const DEFAULT_ANALYSIS_MAX_PERCENT = DEFAULT_OPTIMISER_ANALYSIS_MAX_PERCENT;
-const CURRENT_INPUT_DEFAULTS_VERSION = 9;
 const DEFAULT_MAX_DRAWDOWN_BY_MODE: Record<ComparisonMode, number> = {
   base: DEFAULT_MAX_DRAWDOWN,
   lending: DEFAULT_MAX_DRAWDOWN,
   perp: DEFAULT_MAX_DRAWDOWN,
 };
+interface OptimiserControls {
+  objective: Objective;
+  spotParityMagnitude: number;
+  debtParityMagnitude: number;
+  perpParityMagnitude: number;
+  downsideBreakevenMagnitude: number;
+  upsideBreakevenMagnitude: number;
+  cashbackPolicy: CashbackPolicy;
+  cashbackRouting: CashbackRoutingPreference;
+  requireBreakeven: boolean;
+  longLtvLimit: number;
+  shortLtvLimit: number;
+  bullishTarget: number;
+  bearishTarget: number;
+  analysisMinPercent: number;
+  analysisMaxPercent: number;
+  searchStep: number;
+}
+type OptimiserControlsByMode = Record<ComparisonMode, OptimiserControls>;
+interface WorkspaceControls {
+  mode: "manual" | "optimise";
+  leverageLimitsExpanded: boolean;
+  minMove: number;
+  maxMove: number;
+  showLiquidationLine: boolean;
+  showDrawdownLine: boolean;
+  scenarioPositionSummaryCollapsed: boolean;
+}
+type WorkspaceControlsByMode = Record<ComparisonMode, WorkspaceControls>;
+const createDefaultWorkspaceControls = (): WorkspaceControls => ({
+  mode: "optimise",
+  leverageLimitsExpanded: false,
+  minMove: DEFAULT_CHART_MIN_MOVE,
+  maxMove: DEFAULT_CHART_MAX_MOVE,
+  showLiquidationLine: true,
+  showDrawdownLine: true,
+  scenarioPositionSummaryCollapsed: false,
+});
+const createDefaultWorkspaceControlsByMode = (): WorkspaceControlsByMode => ({
+  base: createDefaultWorkspaceControls(),
+  lending: createDefaultWorkspaceControls(),
+  perp: createDefaultWorkspaceControls(),
+});
+const createDefaultOptimiserControls = (): OptimiserControls => ({
+  objective: "bullish",
+  spotParityMagnitude: 50,
+  debtParityMagnitude: 50,
+  perpParityMagnitude: 50,
+  downsideBreakevenMagnitude: 80,
+  upsideBreakevenMagnitude: 400,
+  cashbackPolicy: "auto",
+  cashbackRouting: "auto",
+  requireBreakeven: false,
+  longLtvLimit: MAX_V4_LTV * 100,
+  shortLtvLimit: MAX_V4_LTV * 100,
+  bullishTarget: 200,
+  bearishTarget: -75,
+  analysisMinPercent: DEFAULT_ANALYSIS_MIN_PERCENT,
+  analysisMaxPercent: DEFAULT_ANALYSIS_MAX_PERCENT,
+  searchStep: 1,
+});
+const createDefaultOptimiserControlsByMode = (): OptimiserControlsByMode => ({
+  base: createDefaultOptimiserControls(),
+  lending: createDefaultOptimiserControls(),
+  perp: createDefaultOptimiserControls(),
+});
 type DegenSettings = Pick<Config, "degenEnabled" | "degenMode" | "customRecyclePct">;
 type DegenSettingsByMode = Record<ComparisonMode, DegenSettings>;
 const DEFAULT_DEGEN_SETTINGS: DegenSettings = {
@@ -330,6 +395,12 @@ const createDefaultDegenSettingsByMode = (): DegenSettingsByMode => ({
   perp: { ...DEFAULT_DEGEN_SETTINGS },
 });
 type OptimisedConfigsByMode = Record<ComparisonMode, Config>;
+type ManualConfigsByMode = Record<ComparisonMode, Config>;
+const createDefaultManualConfigsByMode = (): ManualConfigsByMode => ({
+  base: { ...INITIAL_CONFIG },
+  lending: { ...INITIAL_CONFIG },
+  perp: { ...INITIAL_CONFIG },
+});
 const createDefaultOptimisedConfigsByMode = (): OptimisedConfigsByMode => ({
   base: { ...INITIAL_CONFIG },
   lending: { ...INITIAL_CONFIG },
@@ -404,6 +475,16 @@ const createDefaultOptimisationCache = () => {
     });
   }
   return cache;
+};
+const createDefaultDisplayedResultsByMode = (
+  cache: ReadonlyMap<string, SuccessfulOptimisationResult>,
+): DisplayedResultsByMode => {
+  const displayed = createEmptyDisplayedResultsByMode();
+  for (const comparisonMode of ["base", "lending", "perp"] as const) {
+    const options = createDefaultOptimisationOptions(comparisonMode, "bullish");
+    displayed[comparisonMode] = cache.get(createOptimisationSignature(options)) ?? null;
+  }
+  return displayed;
 };
 function NumericInput({
   value,
@@ -825,50 +906,35 @@ function ChartTooltip({
   );
 }
 export default function App() {
-  const [manualConfig, setManualConfig] = useState<Config>(() => ({
-      ...INITIAL_CONFIG,
-    })),
+  const [optimisationCache] = useState(createDefaultOptimisationCache);
+  const [manualConfigsByMode, setManualConfigsByMode] = useState<ManualConfigsByMode>(
+      createDefaultManualConfigsByMode,
+    ),
     [optimisedConfigsByMode, setOptimisedConfigsByMode] = useState<OptimisedConfigsByMode>(
       createDefaultOptimisedConfigsByMode,
     ),
     [optimiserDeposit, setOptimiserDeposit] = useState(INITIAL_CONFIG.deposit);
-  const [mode, setMode] = useState<"manual" | "optimise">("optimise"),
-    [comparisonMode, setComparisonMode] = useState<ComparisonMode>("base"),
-    [objective, setObjective] = useState<Objective>("bullish"),
-    [spotParityMagnitude, setSpotParityMagnitude] = useState(50),
-    [debtParityMagnitude, setDebtParityMagnitude] = useState(50),
-    [perpParityMagnitude, setPerpParityMagnitude] = useState(50),
-    [downsideBreakevenMagnitude, setDownsideBreakevenMagnitude] = useState(80),
-    [upsideBreakevenMagnitude, setUpsideBreakevenMagnitude] = useState(400),
-    [cashbackPolicy, setCashbackPolicy] = useState<CashbackPolicy>("auto"),
-    [cashbackRouting, setCashbackRouting] = useState<CashbackRoutingPreference>("auto"),
+  const [comparisonMode, setComparisonMode] = useState<ComparisonMode>("base"),
+    [workspaceControlsByMode, setWorkspaceControlsByMode] = useState<WorkspaceControlsByMode>(
+      createDefaultWorkspaceControlsByMode,
+    ),
+    [optimiserControlsByMode, setOptimiserControlsByMode] = useState<OptimiserControlsByMode>(
+      createDefaultOptimiserControlsByMode,
+    ),
     [degenSettingsByMode, setDegenSettingsByMode] = useState<DegenSettingsByMode>(
       createDefaultDegenSettingsByMode,
     ),
     [showDegenSelector, setShowDegenSelector] = useState(false),
-    [requireBreakeven, setRequireBreakeven] = useState(false),
     [defaultMaxDrawdown, setDefaultMaxDrawdown] = useState(DEFAULT_MAX_DRAWDOWN),
     [maxDrawdownByMode, setMaxDrawdownByMode] = useState<Record<ComparisonMode, number>>(() => ({
       ...DEFAULT_MAX_DRAWDOWN_BY_MODE,
     })),
-    [longLtvLimit, setLongLtvLimit] = useState(MAX_V4_LTV * 100),
-    [shortLtvLimit, setShortLtvLimit] = useState(MAX_V4_LTV * 100),
-    [leverageLimitsExpanded, setLeverageLimitsExpanded] = useState(false),
-    [bullishTarget, setBullishTarget] = useState(200),
-    [bearishTarget, setBearishTarget] = useState(-75),
-    [analysisMinPercent, setAnalysisMinPercent] = useState(DEFAULT_ANALYSIS_MIN_PERCENT),
-    [analysisMaxPercent, setAnalysisMaxPercent] = useState(DEFAULT_ANALYSIS_MAX_PERCENT),
-    [searchStep, setSearchStep] = useState(1),
-    [minMove, setMinMove] = useState(DEFAULT_CHART_MIN_MOVE),
-    [maxMove, setMaxMove] = useState(DEFAULT_CHART_MAX_MOVE),
     [chartSeriesVisibility, setChartSeriesVisibility] = useState<ChartSeriesVisibilityByMode>(() => ({
       base: { ...DEFAULT_CHART_SERIES_VISIBILITY.base },
       lending: { ...DEFAULT_CHART_SERIES_VISIBILITY.lending },
       perp: { ...DEFAULT_CHART_SERIES_VISIBILITY.perp },
     })),
     [showDebt, setShowDebt] = useState(true),
-    [showLiquidationLine, setShowLiquidationLine] = useState(true),
-    [showDrawdownLine, setShowDrawdownLine] = useState(true),
     [baseAssetValue, setBaseAssetValue] = useState(0),
     [assetPrice, setAssetPrice] = useState(DEFAULT_LENDING.assetPrice),
     [assetAmount, setAssetAmount] = useState(DEFAULT_LENDING.assetAmount),
@@ -881,10 +947,92 @@ export default function App() {
     [showAssetName, setShowAssetName] = useState(false),
     [isPeaNileEnhanced, setIsPeaNileEnhanced] = useState(false),
     [assetName, setAssetName] = useState(DEFAULT_ASSET_NAME),
-    [displayedResultsByMode, setDisplayedResultsByMode] = useState<DisplayedResultsByMode>(
-      createEmptyDisplayedResultsByMode,
+    [displayedResultsByMode, setDisplayedResultsByMode] = useState<DisplayedResultsByMode>(() =>
+      createDefaultDisplayedResultsByMode(optimisationCache),
     ),
     [runState, setRunState] = useState<OptimiserRunState>({ kind: "idle" });
+  const {
+    mode,
+    leverageLimitsExpanded,
+    minMove,
+    maxMove,
+    showLiquidationLine,
+    showDrawdownLine,
+    scenarioPositionSummaryCollapsed,
+  } = workspaceControlsByMode[comparisonMode];
+  const setWorkspaceControl = <K extends keyof WorkspaceControls>(
+    key: K,
+    value: SetStateAction<WorkspaceControls[K]>,
+  ) => setWorkspaceControlsByMode((current) => {
+    const controls = current[comparisonMode];
+    const nextValue = typeof value === "function"
+      ? (value as (previous: WorkspaceControls[K]) => WorkspaceControls[K])(controls[key])
+      : value;
+    if (Object.is(nextValue, controls[key])) return current;
+    return { ...current, [comparisonMode]: { ...controls, [key]: nextValue } };
+  });
+  const setMode = (value: SetStateAction<WorkspaceControls["mode"]>) => setWorkspaceControl("mode", value);
+  const setLeverageLimitsExpanded = (value: SetStateAction<boolean>) => setWorkspaceControl("leverageLimitsExpanded", value);
+  const setMinMove = (value: SetStateAction<number>) => setWorkspaceControl("minMove", value);
+  const setMaxMove = (value: SetStateAction<number>) => setWorkspaceControl("maxMove", value);
+  const setShowLiquidationLine = (value: SetStateAction<boolean>) => setWorkspaceControl("showLiquidationLine", value);
+  const setShowDrawdownLine = (value: SetStateAction<boolean>) => setWorkspaceControl("showDrawdownLine", value);
+  const setScenarioPositionSummaryCollapsed = (value: SetStateAction<boolean>) => setWorkspaceControl("scenarioPositionSummaryCollapsed", value);
+  const manualConfig = manualConfigsByMode[comparisonMode];
+  const setManualConfig = (value: SetStateAction<Config>) =>
+    setManualConfigsByMode((current) => {
+      const config = current[comparisonMode];
+      const nextConfig = typeof value === "function"
+        ? (value as (previous: Config) => Config)(config)
+        : value;
+      if (Object.is(nextConfig, config)) return current;
+      return { ...current, [comparisonMode]: nextConfig };
+    });
+  const {
+    objective,
+    spotParityMagnitude,
+    debtParityMagnitude,
+    perpParityMagnitude,
+    downsideBreakevenMagnitude,
+    upsideBreakevenMagnitude,
+    cashbackPolicy,
+    cashbackRouting,
+    requireBreakeven,
+    longLtvLimit,
+    shortLtvLimit,
+    bullishTarget,
+    bearishTarget,
+    analysisMinPercent,
+    analysisMaxPercent,
+    searchStep,
+  } = optimiserControlsByMode[comparisonMode];
+  const setOptimiserControl = <K extends keyof OptimiserControls>(
+    key: K,
+    value: SetStateAction<OptimiserControls[K]>,
+  ) => setOptimiserControlsByMode((current) => {
+    const controls = current[comparisonMode];
+    const nextValue = typeof value === "function"
+      ? (value as (previous: OptimiserControls[K]) => OptimiserControls[K])(controls[key])
+      : value;
+    if (Object.is(nextValue, controls[key])) return current;
+    return { ...current, [comparisonMode]: { ...controls, [key]: nextValue } };
+  });
+  const setObjective = (value: SetStateAction<Objective>) => setOptimiserControl("objective", value);
+  const setSpotParityMagnitude = (value: SetStateAction<number>) => setOptimiserControl("spotParityMagnitude", value);
+  const setDebtParityMagnitude = (value: SetStateAction<number>) => setOptimiserControl("debtParityMagnitude", value);
+  const setPerpParityMagnitude = (value: SetStateAction<number>) => setOptimiserControl("perpParityMagnitude", value);
+  const setDownsideBreakevenMagnitude = (value: SetStateAction<number>) => setOptimiserControl("downsideBreakevenMagnitude", value);
+  const setUpsideBreakevenMagnitude = (value: SetStateAction<number>) => setOptimiserControl("upsideBreakevenMagnitude", value);
+  const setCashbackPolicy = (value: SetStateAction<CashbackPolicy>) => setOptimiserControl("cashbackPolicy", value);
+  const setCashbackRouting = (value: SetStateAction<CashbackRoutingPreference>) => setOptimiserControl("cashbackRouting", value);
+  const setRequireBreakeven = (value: SetStateAction<boolean>) => setOptimiserControl("requireBreakeven", value);
+  const setLongLtvLimit = (value: SetStateAction<number>) => setOptimiserControl("longLtvLimit", value);
+  const setShortLtvLimit = (value: SetStateAction<number>) => setOptimiserControl("shortLtvLimit", value);
+  const setBullishTarget = (value: SetStateAction<number>) => setOptimiserControl("bullishTarget", value);
+  const setBearishTarget = (value: SetStateAction<number>) => setOptimiserControl("bearishTarget", value);
+  const setAnalysisMinPercent = (value: SetStateAction<number>) => setOptimiserControl("analysisMinPercent", value);
+  const setAnalysisMaxPercent = (value: SetStateAction<number>) => setOptimiserControl("analysisMaxPercent", value);
+  const setSearchStep = (value: SetStateAction<number>) => setOptimiserControl("searchStep", value);
   const { degenEnabled, degenMode, customRecyclePct } = degenSettingsByMode[comparisonMode];
   const displayedResult = displayedResultsByMode[comparisonMode];
   const maxDD = maxDrawdownByMode[comparisonMode];
@@ -961,41 +1109,6 @@ export default function App() {
   }, [comparisonMode, mode, leverageLimitsExpanded, requireBreakeven, displayedResult]);
   useEffect(() => {
     let cancelled = false;
-    const isNumber = (value: unknown): value is number =>
-      typeof value === "number" && Number.isFinite(value);
-    const isDegenMode = (value: unknown): value is DegenMode =>
-      value === "x1" || value === "x2" || value === "x3" ||
-      value === "x4" || value === "custom" || value === "max";
-    const isDegenSettingsByMode = (value: unknown): value is DegenSettingsByMode => {
-      if (!value || typeof value !== "object") return false;
-      const modes = value as Record<string, unknown>;
-      return (["base", "lending", "perp"] as const).every((modeName) => {
-        const settings = modes[modeName];
-        if (!settings || typeof settings !== "object") return false;
-        const input = settings as Record<string, unknown>;
-        return typeof input.degenEnabled === "boolean" &&
-          isDegenMode(input.degenMode) && isNumber(input.customRecyclePct);
-      });
-    };
-    const isConfig = (value: unknown): value is Config => {
-      if (!value || typeof value !== "object") return false;
-      const input = value as Record<string, unknown>;
-      return isNumber(input.deposit) && isNumber(input.longAllocation) &&
-        isNumber(input.longLtv) && isNumber(input.shortLtv) &&
-        (input.longMode === "2x" || input.longMode === "2.5x-cashback" || input.longMode === "2.5x-looped") &&
-        (input.shortMode === "2x" || input.shortMode === "2.5x-cashback" || input.shortMode === "2.5x-looped") &&
-        (input.cashbackMode === "cash" || input.cashbackMode === "spot") &&
-        typeof input.degenEnabled === "boolean" && isDegenMode(input.degenMode) &&
-        isNumber(input.customRecyclePct);
-    };
-    const isPerp = (value: unknown): value is PerpPositionInput => {
-      if (!value || typeof value !== "object") return false;
-      const input = value as Record<string, unknown>;
-      return isNumber(input.assetPrice) && isNumber(input.averageEntryPrice) &&
-        isNumber(input.positionSize) && isNumber(input.margin) &&
-        isNumber(input.liquidationPrice) &&
-        (input.side === "long" || input.side === "short");
-    };
     const isChartSeriesVisibility = (value: unknown): value is ChartSeriesVisibilityByMode => {
       if (!value || typeof value !== "object") return false;
       const modes = value as Record<string, unknown>;
@@ -1008,80 +1121,15 @@ export default function App() {
           typeof visibility.spot === "boolean";
       });
     };
-    const isMaxDrawdownByMode = (value: unknown): value is Record<ComparisonMode, number> => {
-      if (!value || typeof value !== "object") return false;
-      const limits = value as Record<string, unknown>;
-      return (["base", "lending", "perp"] as const).every((modeName) =>
-        isNumber(limits[modeName]) && limits[modeName] >= 0 && limits[modeName] <= 100,
-      );
-    };
     void loadCalculatorInputs().then((value) => {
       if (cancelled || !value || typeof value !== "object") return;
       const saved = value as Record<string, unknown>;
-      const savedDefaultsVersion = isNumber(saved.inputDefaultsVersion)
-        ? saved.inputDefaultsVersion
-        : 0;
       if (saved.comparisonMode === "base" || saved.comparisonMode === "lending" || saved.comparisonMode === "perp") setComparisonMode(saved.comparisonMode);
-      if (saved.mode === "manual" || saved.mode === "optimise") setMode(saved.mode);
-      if (isConfig(saved.manualConfig)) setManualConfig({
-        ...saved.manualConfig,
-        cashOutEnabled: saved.manualConfig.cashOutEnabled !== false,
-        longLtv: clampV4Ltv(saved.manualConfig.longLtv),
-        shortLtv: clampV4Ltv(saved.manualConfig.shortLtv),
-      });
-      if (isNumber(saved.optimiserDeposit)) setOptimiserDeposit(Math.max(0, saved.optimiserDeposit));
-      if (saved.objective === "bullish" || saved.objective === "bearish" || saved.objective === "spotParity" || saved.objective === "debtParity" || saved.objective === "perpParity" || saved.objective === "benchmarkDominance") setObjective(saved.objective);
-      if (isNumber(saved.spotParityMagnitude)) setSpotParityMagnitude(saved.spotParityMagnitude);
-      if (isNumber(saved.debtParityMagnitude)) setDebtParityMagnitude(saved.debtParityMagnitude);
-      if (isNumber(saved.perpParityMagnitude)) setPerpParityMagnitude(saved.perpParityMagnitude);
-      if (isNumber(saved.downsideBreakevenMagnitude)) setDownsideBreakevenMagnitude(saved.downsideBreakevenMagnitude);
-      if (isNumber(saved.upsideBreakevenMagnitude)) setUpsideBreakevenMagnitude(saved.upsideBreakevenMagnitude);
-      if (saved.cashbackPolicy === "off" || saved.cashbackPolicy === "forced" || saved.cashbackPolicy === "auto") setCashbackPolicy(saved.cashbackPolicy);
-      if (saved.cashbackRouting === "cash" || saved.cashbackRouting === "spot" || saved.cashbackRouting === "auto") setCashbackRouting(saved.cashbackRouting);
-      if (isDegenSettingsByMode(saved.degenSettingsByMode)) {
-        setDegenSettingsByMode({
-          base: { ...saved.degenSettingsByMode.base, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.base.customRecyclePct)) },
-          lending: { ...saved.degenSettingsByMode.lending, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.lending.customRecyclePct)) },
-          perp: { ...saved.degenSettingsByMode.perp, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.perp.customRecyclePct)) },
-        });
-      }
-      if (typeof saved.requireBreakeven === "boolean") setRequireBreakeven(saved.requireBreakeven);
-      if (savedDefaultsVersion < CURRENT_INPUT_DEFAULTS_VERSION) {
-        setDefaultMaxDrawdown(DEFAULT_MAX_DRAWDOWN);
-        setMaxDrawdownByMode({ ...DEFAULT_MAX_DRAWDOWN_BY_MODE });
-      } else {
-        if (isNumber(saved.defaultMaxDrawdown)) setDefaultMaxDrawdown(Math.min(MAX_OPTIMISER_DRAWDOWN_PERCENT, Math.max(0, saved.defaultMaxDrawdown)));
-        if (isMaxDrawdownByMode(saved.maxDrawdownByMode)) setMaxDrawdownByMode({
-          base: Math.min(MAX_OPTIMISER_DRAWDOWN_PERCENT, saved.maxDrawdownByMode.base),
-          lending: Math.min(MAX_OPTIMISER_DRAWDOWN_PERCENT, saved.maxDrawdownByMode.lending),
-          perp: Math.min(MAX_OPTIMISER_DRAWDOWN_PERCENT, saved.maxDrawdownByMode.perp),
-        });
-      }
-      if (isNumber(saved.longLtvLimit)) setLongLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.longLtvLimit)));
-      if (isNumber(saved.shortLtvLimit)) setShortLtvLimit(Math.min(MAX_V4_LTV * 100, Math.max(50, saved.shortLtvLimit)));
-      if (isNumber(saved.bullishTarget)) setBullishTarget(Math.max(1, saved.bullishTarget));
-      if (isNumber(saved.bearishTarget)) setBearishTarget(Math.min(-1, Math.max(-99, saved.bearishTarget)));
-      if (savedDefaultsVersion < CURRENT_INPUT_DEFAULTS_VERSION)
-        setAnalysisMinPercent(DEFAULT_ANALYSIS_MIN_PERCENT);
-      else if (isNumber(saved.analysisMinPercent))
-        setAnalysisMinPercent(Math.min(-1, Math.max(-99, saved.analysisMinPercent)));
-      if (isNumber(saved.analysisMaxPercent)) setAnalysisMaxPercent(Math.min(2000, Math.max(1, saved.analysisMaxPercent)));
-      if (isNumber(saved.searchStep)) setSearchStep(Math.min(5, Math.max(0.25, saved.searchStep)));
-      if (isNumber(saved.minMove)) setMinMove(saved.minMove);
-      if (isNumber(saved.maxMove)) setMaxMove(saved.maxMove);
       if (isChartSeriesVisibility(saved.chartSeriesVisibility)) {
         setChartSeriesVisibility(saved.chartSeriesVisibility);
       }
       if (typeof saved.showDebt === "boolean") setShowDebt(saved.showDebt);
       if (typeof saved.showPerp === "boolean") setShowPerp(saved.showPerp);
-      if (typeof saved.showLiquidationLine === "boolean") setShowLiquidationLine(saved.showLiquidationLine);
-      if (typeof saved.showDrawdownLine === "boolean") setShowDrawdownLine(saved.showDrawdownLine);
-      if (isNumber(saved.baseAssetValue)) setBaseAssetValue(Math.max(0, saved.baseAssetValue));
-      if (isNumber(saved.assetPrice)) setAssetPrice(saved.assetPrice);
-      if (isNumber(saved.assetAmount)) setAssetAmount(saved.assetAmount);
-      if (isNumber(saved.usdDebt)) setUsdDebt(saved.usdDebt);
-      if (isNumber(saved.liquidationLtv)) setLiquidationLtv(saved.liquidationLtv);
-      if (isPerp(saved.perpState)) setPerpState(saved.perpState);
       if (typeof saved.assetName === "string") setAssetName(saved.assetName.trim().slice(0, 16) || DEFAULT_ASSET_NAME);
     }).finally(() => {
       if (!cancelled) setPersistenceLoaded(true);
@@ -1107,10 +1155,9 @@ export default function App() {
     if (!persistenceLoaded) return;
     const timer = window.setTimeout(() => {
       void saveCalculatorInputs({
-        inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
-        comparisonMode, mode, manualConfig, optimiserDeposit, objective,
-        spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-        upsideBreakevenMagnitude, cashbackPolicy, cashbackRouting, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
+        comparisonMode, manualConfigsByMode, optimiserDeposit, optimiserControlsByMode,
+        workspaceControlsByMode,
+        degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
         minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
@@ -1118,11 +1165,10 @@ export default function App() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [
-    analysisMaxPercent, analysisMinPercent, assetAmount, assetName, assetPrice, baseAssetValue, cashbackPolicy, cashbackRouting, comparisonMode, debtParityMagnitude, degenSettingsByMode,
-    bearishTarget, bullishTarget, defaultMaxDrawdown, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDrawdownByMode, maxMove,
-    minMove, mode, objective, optimiserDeposit, perpParityMagnitude, perpState, persistenceLoaded,
-    requireBreakeven, searchStep, shortLtvLimit, chartSeriesVisibility, showDebt, showDrawdownLine, showLiquidationLine,
-    showPerp, spotParityMagnitude, upsideBreakevenMagnitude, usdDebt,
+    assetAmount, assetName, assetPrice, baseAssetValue, chartSeriesVisibility, comparisonMode,
+    defaultMaxDrawdown, degenSettingsByMode, liquidationLtv, manualConfigsByMode, maxDrawdownByMode,
+    optimiserControlsByMode, optimiserDeposit, perpState, persistenceLoaded,
+    showDebt, showPerp, usdDebt, workspaceControlsByMode,
   ]);
   const pendingComparisonIsValid = comparisonMode === "base"
     ? true
@@ -1189,7 +1235,6 @@ export default function App() {
   const displayComparisonIsValid = mode === "optimise" && displayedResult
     ? true
     : pendingComparisonIsValid;
-  const [optimisationCache] = useState(createDefaultOptimisationCache);
   const lastRun = displayedResult;
   const optimising = runState.kind === "running";
   const maxLtv = MAX_V4_LTV * 100;
@@ -1449,10 +1494,9 @@ export default function App() {
     setPerpState({ ...resetOptimisationOptions.perpPosition });
   };
   const persistInputsNow = () => saveCalculatorInputs({
-    inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
-    comparisonMode, mode, manualConfig, optimiserDeposit, objective,
-    spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-    upsideBreakevenMagnitude, cashbackPolicy, cashbackRouting, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
+    comparisonMode, manualConfigsByMode, optimiserDeposit, optimiserControlsByMode,
+    workspaceControlsByMode,
+    degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
     minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
@@ -1496,10 +1540,6 @@ export default function App() {
     setRunState({ kind: "idle" });
     setShowDegenSelector(false);
     setComparisonMode(nextMode);
-    if (
-      (objective === "debtParity" && nextMode !== "lending") ||
-      (objective === "perpParity" && nextMode !== "perp")
-    ) setObjective("bullish");
   };
   const isParityObjective = objective === "spotParity" ||
     objective === "debtParity" || objective === "perpParity";
@@ -1573,7 +1613,10 @@ export default function App() {
   const pendingSignature = createOptimisationSignature(pendingOptions);
   pendingSignaturesRef.current[comparisonMode] = pendingSignature;
   useLayoutEffect(() => {
-    if (mode !== "optimise") return;
+    // Select the startup preset only after persisted controls have hydrated.
+    // Otherwise the initial Base/Bullish preset becomes stale as soon as the
+    // saved objective and mode-specific inputs arrive.
+    if (!persistenceLoaded || mode !== "optimise") return;
     setDisplayedResultsByMode((current) => {
       // Pending controls only invalidate the existing result. They must not
       // replace the displayed strategy until Optimise is explicitly run.
@@ -1593,7 +1636,7 @@ export default function App() {
         ? { kind: "idle" }
         : current,
     );
-  }, [comparisonMode, mode, optimisationCache, pendingSignature]);
+  }, [comparisonMode, mode, optimisationCache, pendingSignature, persistenceLoaded]);
   useEffect(() => () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
@@ -2813,6 +2856,7 @@ export default function App() {
                 compact
               />
             )}
+            <div className="analytical-panel-scroll">
             <section className="analytical-section summary-position">
               <h3>POSITION BREAKDOWN</h3>
               <div className="position-breakdown-grid">
@@ -2868,6 +2912,7 @@ export default function App() {
             </section>
             {productRoutingDecision && <ProductRoutingDecisionBlock decision={productRoutingDecision} />}
             {objectiveAnalysis && <ObjectiveAnalysisBlock analysis={objectiveAnalysis} />}
+            </div>
           </div>
           <div className={`panel chart-panel${stalePanelActive ? " is-stale" : ""}`}>
             <div className="panel-head">

@@ -2506,26 +2506,33 @@ body {
 /* One analytical instrument: shared section edges, hierarchy and spacing. */
 .workspace > .readouts.analytical-panel {
   position: relative;
-  contain: size;
+  display: block;
+  padding: 0;
+  background: #191a19;
+  overflow: hidden;
+}
+.workspace > .readouts.analytical-panel > .analytical-panel-scroll {
+  position: absolute;
+  inset: 0;
+  display: grid;
   align-content: start;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto;
+  grid-auto-rows: max-content;
   gap: 0;
   padding: 0 16px 14px;
-  background: #191a19;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
   touch-action: pan-y;
 }
-.workspace > .readouts.analytical-panel::-webkit-scrollbar { width: 0; height: 0; }
-.workspace > .readouts.analytical-panel > .analytical-section {
+.workspace > .readouts.analytical-panel > .analytical-panel-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.workspace > .readouts.analytical-panel > .analytical-panel-scroll > .analytical-section {
   min-width: 0;
   min-height: 0;
   padding: 15px 0;
   border: 0;
 }
-.workspace > .readouts.analytical-panel > .analytical-section + .analytical-section {
+.workspace > .readouts.analytical-panel > .analytical-panel-scroll > .analytical-section + .analytical-section {
   border-top: 1px solid #ffffff10;
 }
 .analytical-panel h3,
@@ -2799,7 +2806,7 @@ body {
 .scenarios > .panel-head > div:first-child,
 .scenarios > .scenario-table,
 .scenarios > .scenario-debt-summary,
-.analytical-panel > .analytical-section {
+.analytical-panel-scroll > .analytical-section {
   transition: filter 160ms ease, opacity 160ms ease;
 }
 .chart-panel.is-stale > .panel-head,
@@ -2808,7 +2815,7 @@ body {
 .scenarios.is-stale > .panel-head > div:first-child,
 .scenarios.is-stale > .scenario-table,
 .scenarios.is-stale > .scenario-debt-summary,
-.analytical-panel.is-stale > .analytical-section {
+.analytical-panel.is-stale > .analytical-panel-scroll > .analytical-section {
   filter: blur(.65px) saturate(.88);
   opacity: .76;
 }
@@ -2819,7 +2826,7 @@ body {
   .scenarios > .panel-head > div:first-child,
   .scenarios > .scenario-table,
   .scenarios > .scenario-debt-summary,
-  .analytical-panel > .analytical-section {
+  .analytical-panel-scroll > .analytical-section {
     transition: none;
   }
 }
