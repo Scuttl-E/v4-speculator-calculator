@@ -3113,11 +3113,11 @@ export default function App() {
                 <span className="v4-start">V4 VALUE</span>
                 <span className="v4-end">V4 RETURN</span>
                 <span className="spot-start">{assetLabel} VALUE - SPOT</span>
-                <span className="edge-cell">V4 EDGE VS SPOT</span>
+                <span className="edge-cell">V4 EDGE</span>
                 {displayComparisonMode === "lending" && <span className="debt-cell">LENDING POSITION</span>}
                 {displayComparisonMode === "perp" && <span className="debt-cell">PERP POSITION</span>}
-                {displayComparisonMode === "lending" && <span className="comparison-edge">V4 EDGE VS LENDING</span>}
-                {displayComparisonMode === "perp" && <span className="comparison-edge">V4 EDGE VS PERP</span>}
+                {displayComparisonMode === "lending" && <span className="comparison-edge">V4 EDGE</span>}
+                {displayComparisonMode === "perp" && <span className="comparison-edge">V4 EDGE</span>}
               </div>
               {scenarios.map((p) => {
                 const v4Return = portfolioReturn(p, config),
