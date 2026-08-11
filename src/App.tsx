@@ -3167,14 +3167,14 @@ export default function App() {
                     </span>
                     {displayComparisonMode === "lending" && <span className="debt-cell debt-scenario">
                       {isDebtPositionLiquidated(p, displayDebtPosition) ? (
-                        <><b>LIQUIDATED</b><small>{((displayDebtPosition.liquidationLtv ?? 0.9) * 100).toFixed(0)}% LTV reached</small></>
+                        <><b>RIP</b><small>{((displayDebtPosition.liquidationLtv ?? 0.9) * 100).toFixed(0)}% LTV reached</small></>
                       ) : (
                         <><b>{money(debtPositionValue(p, displayDebtPosition))}</b><small>{pct(debtPositionReturn(p, displayDebtPosition) ?? 0)}</small></>
                       )}
                     </span>}
                     {displayComparisonMode === "perp" && <span className="debt-cell debt-scenario">
                       {isPerpPositionLiquidated(p, displayPerpState) ? (
-                        <><b>LIQUIDATED</b><small>Liquidation at {displayPerpSummary.liquidationAssetMove === null ? "—" : pct(displayPerpSummary.liquidationAssetMove / 100)}</small></>
+                        <><b>RIP</b><small>Liquidation at {displayPerpSummary.liquidationAssetMove === null ? "—" : pct(displayPerpSummary.liquidationAssetMove / 100)}</small></>
                       ) : (
                         <><b>{money(perpPositionValue(p, displayPerpState))}</b><small>{pct(perpPositionReturn(p, displayPerpState) ?? 0)}</small></>
                       )}
