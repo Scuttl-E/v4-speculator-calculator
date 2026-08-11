@@ -2583,6 +2583,24 @@ body {
   font: 600 12px var(--mono);
   letter-spacing: 0;
 }
+.workspace > .readouts.analytical-panel .position-breakdown-grid > .position-looped-capital-label {
+  color: #b6a89b;
+  font: 600 10px Atelier;
+  letter-spacing: .075em;
+}
+.workspace > .readouts.analytical-panel .position-breakdown-grid > .position-leg-separator {
+  grid-column: 2 / 4;
+  width: 58%;
+  justify-self: end;
+  height: 1px;
+  margin: 3px 0 1px;
+  background: linear-gradient(90deg, transparent, #d4874c24);
+}
+.position-breakdown-grid > .position-looped-capital-value {
+  color: #dc9562;
+  font: 600 13px var(--mono);
+  letter-spacing: 0;
+}
 .position-breakdown-grid > .cashback-cash-value { grid-column: 3; }
 .position-breakdown-grid > .cashback-spot-value {
   display: flex;
@@ -2597,10 +2615,13 @@ body {
 .drawdown-summary-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: start;
   column-gap: 10px;
 }
 .workspace > .readouts.analytical-panel .drawdown-summary-row .analytical-note {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.18;
   text-align: right;
   white-space: nowrap;
 }

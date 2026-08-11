@@ -1233,10 +1233,11 @@ export default function App() {
     return {
       longCapital: config.deposit * config.longAllocation * (config.longMode === "2.5x-looped" ? 1.5 : 1),
       shortCapital: config.deposit * (1 - config.longAllocation) * (config.shortMode === "2.5x-looped" ? 1.5 : 1),
+      loopedLongCapital: config.deposit * longLooped,
+      loopedShortCapital: config.deposit * shortLooped,
       recycledLongCapital: 0,
       recycledShortCapital: 0,
       cashOutAmount,
-      loopedAmount: config.deposit * (longLooped + shortLooped),
       spotUnits: config.cashbackMode === "spot" && currentAssetPrice && currentAssetPrice > 0
         ? cashOutAmount / currentAssetPrice
         : null,
@@ -2818,18 +2819,28 @@ export default function App() {
                   {money(positionBreakdown.longCapital)}
                   {positionBreakdown.recycledLongCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledLongCapital)})</small>}
                 </b>
+                {positionBreakdown.loopedLongCapital > 0 && <>
+                  <span className="position-looped-capital-label">LEVERAGE ADDED</span>
+                  <b className="position-looped-capital-value">+{money(positionBreakdown.loopedLongCapital)}</b>
+                </>}
+                <span className="position-leg-separator" aria-hidden="true" />
                 <span className="position-breakdown-label">SHORT V4</span>
                 <small className="position-product-label">{shortModeLabel(config.shortMode ?? "2x")}</small>
                 <b className="position-capital-value">
                   {money(positionBreakdown.shortCapital)}
                   {positionBreakdown.recycledShortCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledShortCapital)})</small>}
                 </b>
+                {positionBreakdown.loopedShortCapital > 0 && <>
+                  <span className="position-looped-capital-label">LEVERAGE ADDED</span>
+                  <b className="position-looped-capital-value">+{money(positionBreakdown.loopedShortCapital)}</b>
+                </>}
+                {positionBreakdown.cashOutAmount > 0 && <span className="position-leg-separator" aria-hidden="true" />}
                 {config.degenEnabled && positionBreakdown.recycledIntoV4 > 0 && <>
                   <span>RECYCLED INTO V4</span>
                   <b className="degen-recycled-value">+{money(positionBreakdown.recycledIntoV4)}</b>
                 </>}
                 {positionBreakdown.cashOutAmount > 0 && <>
-                  <span>{config.cashbackMode === "spot" ? "CASHBACK IN SPOT" : "AVAILABLE CASH-OUT"}</span>
+                  <span>{config.cashbackMode === "spot" ? "CASHBACK IN SPOT" : "CASHBACK"}</span>
                   {config.cashbackMode === "cash" ? (
                     <b className="cashback-cash-value">{money(positionBreakdown.cashOutAmount)}</b>
                   ) : (
@@ -2838,10 +2849,6 @@ export default function App() {
                       <small>({money(positionBreakdown.cashOutAmount)})</small>
                     </span>
                   )}
-                </>}
-                {positionBreakdown.loopedAmount > 0 && <>
-                  <span>RETAINED IN V4</span>
-                  <b className="degen-recycled-value">+{money(positionBreakdown.loopedAmount)}</b>
                 </>}
               </div>
             </section>
