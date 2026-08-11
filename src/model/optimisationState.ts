@@ -95,6 +95,24 @@ export function restoreCachedResult(
     : null;
 }
 
+export function restorePassivePresetResult(
+  displayed: SuccessfulOptimisationResult | null,
+  cache: ReadonlyMap<string, SuccessfulOptimisationResult>,
+  presetSignatures: ReadonlySet<string>,
+  pendingSignature: string,
+  comparisonMode: ComparisonMode,
+) {
+  if (
+    displayed?.signature === pendingSignature &&
+    (displayed.options.comparisonMode ?? "base") === comparisonMode
+  ) return displayed;
+  if (!presetSignatures.has(pendingSignature))
+    return displayed && (displayed.options.comparisonMode ?? "base") === comparisonMode
+      ? displayed
+      : null;
+  return restoreCachedResult(displayed, cache, pendingSignature, comparisonMode);
+}
+
 export function optimisationStatusFor(
   displayed: SuccessfulOptimisationResult | null,
   pendingSignature: string,

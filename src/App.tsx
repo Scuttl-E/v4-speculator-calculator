@@ -73,7 +73,7 @@ import {
   createOptimisationSignature,
   OPTIMISER_STATE_MODEL_VERSION,
   optimisationStatusFor,
-  restoreCachedResult,
+  restorePassivePresetResult,
   type OptimiserRunState,
   type SuccessfulOptimisationResult,
 } from "./model/optimisationState";
@@ -365,7 +365,7 @@ const createDefaultOptimiserControls = (): OptimiserControls => ({
   debtParityMagnitude: 50,
   perpParityMagnitude: 50,
   downsideBreakevenMagnitude: 80,
-  upsideBreakevenMagnitude: 400,
+  upsideBreakevenMagnitude: 200,
   cashbackPolicy: "auto",
   cashbackRouting: "auto",
   requireBreakeven: false,
@@ -907,6 +907,9 @@ function ChartTooltip({
 }
 export default function App() {
   const [optimisationCache] = useState(createDefaultOptimisationCache);
+  const [defaultPresetSignatures] = useState(
+    () => new Set(createDefaultOptimisationCache().keys()),
+  );
   const [manualConfigsByMode, setManualConfigsByMode] = useState<ManualConfigsByMode>(
       createDefaultManualConfigsByMode,
     ),
@@ -1430,15 +1433,25 @@ export default function App() {
   const resetActiveComparison = () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
+    const defaultCache = createDefaultOptimisationCache();
     for (const [signature, result] of optimisationCache) {
       if ((result.options.comparisonMode ?? "base") === comparisonMode)
         optimisationCache.delete(signature);
     }
-    for (const [signature, result] of createDefaultOptimisationCache()) {
+    for (const [signature, result] of defaultCache) {
       if ((result.options.comparisonMode ?? "base") === comparisonMode)
         optimisationCache.set(signature, result);
     }
-    setDisplayedResultsByMode((current) => ({ ...current, [comparisonMode]: null }));
+    if (mode === "optimise") {
+      const resetSignature = createOptimisationSignature({
+        ...resetOptimisationOptions,
+        maxDrawdown: defaultMaxDrawdown / 100,
+      });
+      setDisplayedResultsByMode((current) => ({
+        ...current,
+        [comparisonMode]: defaultCache.get(resetSignature) ?? null,
+      }));
+    }
     setRunState({ kind: "idle" });
     setOptimisedConfigsByMode((current) => ({
       ...current,
@@ -1618,12 +1631,12 @@ export default function App() {
     // saved objective and mode-specific inputs arrive.
     if (!persistenceLoaded || mode !== "optimise") return;
     setDisplayedResultsByMode((current) => {
-      // Pending controls only invalidate the existing result. They must not
-      // replace the displayed strategy until Optimise is explicitly run.
-      if (current[comparisonMode]) return current;
-      const restored = restoreCachedResult(
+      // Ordinary control changes retain the displayed strategy as stale.
+      // Only an exact shipped preset may replace it without pressing Optimise.
+      const restored = restorePassivePresetResult(
         current[comparisonMode],
         optimisationCache,
+        defaultPresetSignatures,
         pendingSignature,
         comparisonMode,
       );
@@ -1636,7 +1649,7 @@ export default function App() {
         ? { kind: "idle" }
         : current,
     );
-  }, [comparisonMode, mode, optimisationCache, pendingSignature, persistenceLoaded]);
+  }, [comparisonMode, defaultPresetSignatures, mode, optimisationCache, pendingSignature, persistenceLoaded]);
   useEffect(() => () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
