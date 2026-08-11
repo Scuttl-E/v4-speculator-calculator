@@ -3113,15 +3113,30 @@ export default function App() {
                 <span className="v4-start">V4 VALUE</span>
                 <span className="v4-end">V4 RETURN</span>
                 <span className="spot-start">{assetLabel} VALUE - SPOT</span>
-                <span className="spot-end">{assetLabel} RETURN - SPOT</span>
-                <span className="edge-cell">V4 EDGE</span>
+                <span className="edge-cell">V4 EDGE VS SPOT</span>
                 {displayComparisonMode === "lending" && <span className="debt-cell">LENDING POSITION</span>}
                 {displayComparisonMode === "perp" && <span className="debt-cell">PERP POSITION</span>}
+                {displayComparisonMode === "lending" && <span className="comparison-edge">V4 EDGE VS LENDING</span>}
+                {displayComparisonMode === "perp" && <span className="comparison-edge">V4 EDGE VS PERP</span>}
               </div>
               {scenarios.map((p) => {
-                const v = dollarValue(p, config),
+                const v4Return = portfolioReturn(p, config),
+                  v = dollarValue(p, config),
                   spot = config.deposit * p,
-                  edge = portfolioReturn(p, config) - (p - 1),
+                  spotEdge = v4Return - (p - 1),
+                  comparisonLiquidated = displayComparisonMode === "lending"
+                    ? isDebtPositionLiquidated(p, displayDebtPosition)
+                    : displayComparisonMode === "perp"
+                      ? isPerpPositionLiquidated(p, displayPerpState)
+                      : false,
+                  comparisonReturn = displayComparisonMode === "lending"
+                    ? debtPositionReturn(p, displayDebtPosition)
+                    : displayComparisonMode === "perp"
+                      ? perpPositionReturn(p, displayPerpState)
+                      : null,
+                  comparisonEdge = comparisonLiquidated || comparisonReturn === null
+                    ? null
+                    : v4Return - comparisonReturn,
                   components = portfolioComponents(p, config),
                   cash = config.deposit * components.cashOut,
                   long = config.deposit * components.long,
@@ -3142,14 +3157,13 @@ export default function App() {
                     </span>
                     <b className="v4-start">{money(v)}</b>
                     <span className="v4-end">
-                      {pct(portfolioReturn(p, config))}
+                      {pct(v4Return)}
                     </span>
                     <span className="spot-start">{money(spot)}</span>
-                    <span className="spot-end">{pct(p - 1)}</span>
                     <span
-                      className={`edge-cell ${edge >= 0 ? "positive" : "negative"}`}
+                      className={`edge-cell ${spotEdge >= 0 ? "positive" : "negative"}`}
                     >
-                      {pct(edge).replace("%", " pts")}
+                      {pct(spotEdge).replace("%", " pts")}
                     </span>
                     {displayComparisonMode === "lending" && <span className="debt-cell debt-scenario">
                       {isDebtPositionLiquidated(p, displayDebtPosition) ? (
@@ -3164,6 +3178,11 @@ export default function App() {
                       ) : (
                         <><b>{money(perpPositionValue(p, displayPerpState))}</b><small>{pct(perpPositionReturn(p, displayPerpState) ?? 0)}</small></>
                       )}
+                    </span>}
+                    {displayComparisonMode !== "base" && <span
+                      className={`comparison-edge ${comparisonEdge === null ? "unavailable" : comparisonEdge >= 0 ? "positive" : "negative"}`}
+                    >
+                      {comparisonEdge === null ? "—" : pct(comparisonEdge).replace("%", " pts")}
                     </span>}
                   </div>
                 );

@@ -1808,46 +1808,81 @@ body {
 .spot-parity-result.best-effort { background: linear-gradient(145deg, #6142262b, #191817); box-shadow: inset 2px 0 #b97846; }
 .optimise > .optimise-error { display: block; margin: 7px 0; color: var(--risk); font-size: 11px; line-height: 1.35; }
 
-/* Scenario comparison groups: V4 instrument, spot benchmark, then relative edge. */
+/* Scenario comparison groups: V4 instrument, spot benchmark with its relative
+   edge, then the optional lending/perp position. */
 .scenario-row {
-  grid-template-columns: 94px .9fr .9fr 1fr .9fr .85fr minmax(280px, 2.3fr);
+  grid-template-columns: 112px .9fr .9fr 1fr .85fr minmax(180px, 1.5fr) .9fr;
+}
+.scenarios.comparison-base .scenario-row {
+  grid-template-columns: 112px .9fr .9fr 1fr .85fr;
 }
 .scenario-row > .v4-start,
 .scenario-row > .spot-start,
-.scenario-row > .edge-cell {
+.scenario-row > .debt-cell {
+  position: relative;
   align-self: stretch;
   display: flex;
   align-items: center;
-  padding-left: 14px;
-  border-left: 1px solid #ffffff0b;
+  padding-left: 16px;
 }
-.scenario-row > .v4-start { border-left-color: #d4874c35; }
-.scenario-row > .spot-start { border-left-color: #c7b8aa22; }
-.scenario-row > .edge-cell { border-left-color: #ffffff0d; }
+.scenario-row > .v4-start::before,
+.scenario-row > .spot-start::before,
+.scenario-row > .debt-cell::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 0;
+  width: 1px;
+  background: #ffffff12;
+}
+.scenario-row.headings > .v4-start::before,
+.scenario-row.headings > .spot-start::before,
+.scenario-row.headings > .debt-cell::before {
+  top: 0;
+  bottom: -2px;
+}
+.scenario-row:last-child > .v4-start::before,
+.scenario-row:last-child > .spot-start::before,
+.scenario-row:last-child > .debt-cell::before {
+  bottom: 0;
+}
+.scenario-row > .debt-scenario { align-items: flex-start; justify-content: center; }
 .scenario-row.headings .v4-start,
 .scenario-row.headings .v4-end { color: #d6a57d; }
 .scenario-row.headings .spot-start,
 .scenario-row.headings .spot-end { color: #c5b9ad; }
-.scenario-row.headings .edge-cell { color: #b89475; }
+.scenario-row.headings .edge-cell,
+.scenario-row.headings .comparison-edge { color: #b89475; }
 .scenario-row:not(.headings) .v4-start,
 .scenario-row:not(.headings) .v4-end,
 .scenario-row:not(.headings) .spot-start,
 .scenario-row:not(.headings) .spot-end,
-.scenario-row:not(.headings) .edge-cell {
+.scenario-row:not(.headings) .edge-cell,
+.scenario-row:not(.headings) .comparison-edge {
   font-variant-numeric: tabular-nums;
 }
+.scenario-row > .comparison-edge {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+.scenario-row > .comparison-edge.unavailable { color: var(--muted); }
 .scenario-row:not(.headings) .spot-start { color: #e5d9cb; font-weight: 600; }
 .scenario-row:not(.headings) .spot-end { color: #a99e93; }
 
 @media (max-width: 1350px) {
   .scenario-row {
-    grid-template-columns: 80px .85fr .8fr .95fr .8fr .75fr minmax(180px, 1.7fr);
+    grid-template-columns: 104px .85fr .8fr .95fr .75fr minmax(140px, 1.35fr) .8fr;
     gap: 7px;
     padding-inline: 9px;
   }
+  .scenarios.comparison-base .scenario-row {
+    grid-template-columns: 104px .85fr .8fr .95fr .75fr;
+  }
   .scenario-row > .v4-start,
   .scenario-row > .spot-start,
-  .scenario-row > .edge-cell { padding-left: 8px; }
+  .scenario-row > .debt-cell { padding-left: 10px; }
 }
 
 @media (min-width: 1900px) and (min-height: 1150px) {
@@ -2064,7 +2099,7 @@ body {
   grid-template-columns: 90px 110px 105px 125px 125px 100px minmax(150px, 1fr);
   align-items: center;
 }
-.scenario-row.headings > span { align-self: center; }
+.scenario-row.headings > span:not(.v4-start):not(.spot-start):not(.debt-cell) { align-self: center; }
 
 /* The chart gets the full upper span; readouts sit in the lower-right beside scenarios. */
 .workspace {
@@ -2204,14 +2239,14 @@ body {
 .scenarios > .panel-head { grid-column: 1 / -1; }
 .scenarios > .scenario-table { grid-column: 1; }
 .scenarios .scenario-row {
-  grid-template-columns: 78px minmax(72px, 1fr) minmax(68px, .9fr) minmax(82px, 1.08fr) minmax(78px, .95fr) minmax(68px, .78fr) minmax(94px, 1.05fr);
+  grid-template-columns: 112px minmax(72px, 1fr) 86px minmax(82px, 1.08fr) 92px minmax(68px, .78fr) minmax(94px, 1.05fr);
   gap: 9px;
   padding: 0 10px;
 }
 .scenarios .scenario-row > * { min-width: 0; }
 .scenarios.comparison-base { grid-template-columns: minmax(0, 1fr); }
 .scenarios.comparison-base .scenario-table { grid-column: 1 / -1; }
-.scenarios.comparison-base .scenario-row { grid-template-columns: 78px minmax(72px, 1fr) minmax(68px, .9fr) minmax(82px, 1.08fr) minmax(78px, .95fr) minmax(68px, .78fr); }
+.scenarios.comparison-base .scenario-row { grid-template-columns: 112px minmax(72px, 1fr) 86px minmax(82px, 1.08fr) 92px; }
 .scenario-asset-move { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .scenario-asset-move small { color: #a99e93; font-size: 10px; line-height: 1; white-space: nowrap; }
 .scenario-debt-summary {
@@ -2904,7 +2939,7 @@ main.web-app .chart-panel .chart-controls > label {
   text-overflow: clip;
 }
 main.web-app .scenarios .scenario-row {
-  grid-template-columns: 78px minmax(82px, 1fr) minmax(68px, .9fr) minmax(82px, 1.08fr) minmax(78px, .95fr) minmax(68px, .78fr) minmax(94px, 1.05fr);
+  grid-template-columns: 112px minmax(82px, 1fr) 86px minmax(82px, 1.08fr) 92px minmax(110px, 1.2fr) minmax(78px, .9fr);
   gap: 9px;
   padding-inline: 10px;
   font-size: 14px;
@@ -2916,12 +2951,12 @@ main.web-app .scenarios .scenario-row b {
   font-size: 15px;
 }
 main.web-app .scenarios.comparison-base .scenario-row {
-  grid-template-columns: 78px minmax(82px, 1fr) minmax(68px, .9fr) minmax(82px, 1.08fr) minmax(78px, .95fr) minmax(68px, .78fr);
+  grid-template-columns: 112px minmax(82px, 1fr) 86px minmax(82px, 1.08fr) 92px;
 }
 main.web-app .scenarios .scenario-row > .v4-start,
 main.web-app .scenarios .scenario-row > .spot-start,
-main.web-app .scenarios .scenario-row > .edge-cell {
-  padding-left: 14px;
+main.web-app .scenarios .scenario-row > .debt-cell {
+  padding-left: 16px;
 }
 
 /* The web viewport has less chart height than the desktop window. Keep the
