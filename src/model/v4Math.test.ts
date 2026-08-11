@@ -1,102 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { analysisRangeFromPercent, effectiveLeverage, findDownsideBreakeven, findWorstDrawdown, longValue, MAX_V4_EFFECTIVE_LEVERAGE, MAX_V4_LTV, portfolioComponents, portfolioValue, shortValue } from "./v4Math";
+import { analysisRangeFromPercent, findWorstComponentDrawdown, findWorstDrawdown, longValue, portfolioComponents, portfolioValue } from "./v4Math";
 import type { Config } from "./types";
-const analysisRange = analysisRangeFromPercent(-80, 200);
-const config = (overrides: Partial<Config> = {}): Config => ({
-  deposit: 10000,
-  longAllocation: 0.6,
-  longLtv: 0.75,
-  shortLtv: 0.5,
-  cashbackMode: "spot",
-  degenEnabled: false,
-  degenMode: "x1",
-  customRecyclePct: 50,
-  ...overrides,
+
+const config = (longMode: Config["longMode"], longAllocation = 1): Config => ({
+  deposit: 10_000, longAllocation, longMode, longLtv: longMode === "2x" ? .5 : .75,
+  shortLtv: .5, cashbackMode: "cash", cashOutEnabled: true,
+  degenEnabled: false, degenMode: "x1", customRecyclePct: 0,
 });
-describe("published V4 anchors", () => {
-  it("reproduces the 75% long curve", () => {
-    expect(longValue(0.2, 0.75, "cash") * 10000).toBe(5200);
-    expect(longValue(2.4, 0.75, "cash") * 10000).toBe(33800);
-  });
-  it("reproduces the 50% short curve", () => {
-    expect(shortValue(1, 0.5, "cash") * 10000).toBe(10000);
-    expect(shortValue(2, 0.5, "cash") * 10000).toBe(12500);
-    const value = shortValue(0.4773, 0.5, "cash") * 10000;
-    expect(value).toBeGreaterThan(12860);
-    expect(value).toBeLessThan(12865);
-  });
-  it("calculates leverage", () => {
-    expect(effectiveLeverage(0.5)).toBe(1);
-    expect(effectiveLeverage(0.75)).toBe(2);
-    expect(effectiveLeverage(MAX_V4_LTV)).toBeCloseTo(2.5, 10);
-    expect(MAX_V4_EFFECTIVE_LEVERAGE).toBeCloseTo(2.5, 10);
-  });
-  it("all selected models start at one", () => {
-    for (const ltv of [0.5, 0.6, 0.75, MAX_V4_LTV]) {
-      expect(longValue(1, ltv, "cash")).toBeCloseTo(1, 12);
-      expect(longValue(1, ltv, "spot")).toBeCloseTo(1, 12);
-      expect(shortValue(1, ltv, "cash")).toBeCloseTo(1, 12);
-      expect(shortValue(1, ltv, "spot")).toBeCloseTo(1, 12);
-    }
-  });
-  it("finds the lower-price breakeven beyond a downside trough", () => {
-    const strategy = config();
-    const trough = findWorstDrawdown(strategy, analysisRange);
-    const breakeven = findDownsideBreakeven(strategy, trough);
-    expect(breakeven).not.toBeNull();
-    expect(breakeven!).toBeLessThan(trough.p);
-  });
 
-  it("finds the adverse upside trough of an 80% LTV cash Short", () => {
-    const strategy = config({
-      longAllocation: 0,
-      shortLtv: 0.8,
-      cashbackMode: "cash",
-    });
-    const trough = findWorstDrawdown(strategy, analysisRange);
-    expect(trough.p).toBeCloseTo(Math.sqrt(2.5), 7);
-    expect(trough.drawdown).toBeCloseTo(-0.1688611699, 8);
+describe("V4 discrete Long products", () => {
+  it("normalises every product to the original capital at entry", () => {
+    for (const mode of ["2x", "2.5x-cashback", "2.5x-looped"] as const)
+      expect(portfolioValue(1, config(mode))).toBeCloseTo(1, 12);
   });
-
-  it("compares an endpoint minimum with entry when the interior trough is outside the range", () => {
-    const strategy = config({ longAllocation: 0, shortLtv: 0.8, cashbackMode: "cash" });
-    const trough = findWorstDrawdown(strategy, analysisRangeFromPercent(-80, 50));
-    expect(trough.p).toBeCloseTo(1.5, 10);
-    expect(trough.drawdown).toBeCloseTo(-1 / 6, 8);
+  it("pays the 50% option only for Cashback", () => {
+    expect(portfolioComponents(1, config("2.5x-cashback")).cashOut).toBe(.5);
+    expect(portfolioComponents(1, config("2.5x-looped")).cashOut).toBe(0);
   });
-
-  it("rejects analysis domains that do not cover both sides of entry", () => {
-    expect(() => analysisRangeFromPercent(0, 200)).toThrow(/below and above entry/);
-    expect(() => analysisRangeFromPercent(-80, 0)).toThrow(/below and above entry/);
-    expect(() => analysisRangeFromPercent(-100, 200)).toThrow(/greater than -100/);
+  it("loops that same 50% once, with no recursive multiplier", () => {
+    // $10k initial: $15k deployed at p=1; the retained $5k is a fixed liability.
+    expect(longValue(2, "2.5x-looped")).toBe(5.5); // 1.5 × 2² − .5
+    expect(longValue(2, "2.5x-cashback")).toBe(2.5); // .5 × 2² + .5
   });
-
-  it("matches the locked pre-Degen portfolio formula exactly when disabled", () => {
-    for (const cashbackMode of ["cash", "spot"] as const) {
-      const strategy = config({ cashbackMode });
-      for (const p of [0.25, 0.8, 1, 1.5, 3]) {
-        const legacy = strategy.longAllocation * longValue(p, strategy.longLtv, cashbackMode) +
-          (1 - strategy.longAllocation) * shortValue(p, strategy.shortLtv, cashbackMode);
-        expect(portfolioValue(p, strategy)).toBeCloseTo(legacy, 12);
-      }
-    }
+  it("keeps cash-out and retained capital mutually exclusive", () => {
+    const cash = portfolioComponents(1, config("2.5x-cashback", .6));
+    const looped = portfolioComponents(1, config("2.5x-looped", .6));
+    expect(cash.cashOut).toBe(.3);
+    expect(looped.cashOut).toBe(0);
+    expect(looped.long).toBeCloseTo(.6, 12); // gross capital and its fixed liability net to entry equity
   });
-
-  it("scales the same candidate strategy and retains original-capital normalisation", () => {
-    const strategy = config({ degenEnabled: true, degenMode: "x2", cashbackMode: "cash" });
-    const atEntry = portfolioComponents(1, strategy);
-    expect(atEntry.total).toBeCloseTo(1, 12);
-    expect(atEntry.long / atEntry.short).toBeCloseTo(
-      (strategy.longAllocation * 0.5) / ((1 - strategy.longAllocation) * 0.5),
-      12,
-    );
-    expect(atEntry.residualCashback).toBe(0.125);
+  it("uses the worse isolated leg for risk instead of allowing legs to mask each other", () => {
+    const mixed = config("2x", .5);
+    const range = analysisRangeFromPercent(-80, 200);
+    expect(findWorstComponentDrawdown(mixed, range).drawdown)
+      .toBeLessThan(findWorstDrawdown(mixed, range).drawdown);
+    expect(findWorstComponentDrawdown(mixed, range).drawdown).toBeCloseTo(-.4, 10);
   });
-
-  it("makes equivalent Custom and preset targets produce identical payoff curves", () => {
-    const preset = config({ degenEnabled: true, degenMode: "x2" });
-    const custom = config({ degenEnabled: true, degenMode: "custom", customRecyclePct: 75 });
-    for (const p of [0.2, 0.75, 1, 2, 5])
-      expect(portfolioValue(p, custom)).toBeCloseTo(portfolioValue(p, preset), 12);
+  it("does not let external Cashback cushion the V4 Long leg risk", () => {
+    const range = analysisRangeFromPercent(-80, 200);
+    expect(findWorstComponentDrawdown(config("2.5x-cashback"), range).drawdown)
+      .toBeCloseTo(-.96, 10);
+  });
+  it("scales isolated-leg loss by the capital actually allocated to that leg", () => {
+    const range = analysisRangeFromPercent(-80, 200);
+    expect(findWorstComponentDrawdown(config("2.5x-cashback", .25), range).drawdown)
+      .toBeCloseTo(-.24, 10);
   });
 });

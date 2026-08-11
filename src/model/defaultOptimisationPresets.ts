@@ -1,5 +1,8 @@
 import type { CashbackCrossoverResult } from "./cashbackCrossover";
-import type { ComparisonMode, Objective, OptimiseOutcome } from "./types";
+import { optimisePortfolioWithOutcome } from "./optimiser";
+import { OPTIMISER_STATE_MODEL_VERSION } from "./optimisationState";
+import type { ComparisonMode, Objective, OptimiseOptions, OptimiseOutcome } from "./types";
+import { analysisRangeFromPercent, MAX_V4_LTV } from "./v4Math";
 
 export interface DefaultOptimisationPreset {
   comparisonMode: ComparisonMode;
@@ -8,91 +11,82 @@ export interface DefaultOptimisationPreset {
   crossover: CashbackCrossoverResult | null;
 }
 
-export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION: string =
-  "v4-price-model-2026-08-analysis-range-1";
+export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION = OPTIMISER_STATE_MODEL_VERSION;
+export const DEFAULT_OPTIMISER_MAX_DRAWDOWN_PERCENT = 50;
+export const MAX_OPTIMISER_DRAWDOWN_PERCENT = 99;
+export const DEFAULT_OPTIMISER_ANALYSIS_MIN_PERCENT = -99;
+export const DEFAULT_OPTIMISER_ANALYSIS_MAX_PERCENT = 200;
 
-const outcome = (
-  deposit: number,
-  longAllocation: number,
-  longLtv: number,
-  shortLtv: number,
-  cashbackMode: "cash" | "spot",
-  adverseDirection: "downside" | "upside" = "downside",
-): OptimiseOutcome => ({
-  config: {
-    deposit,
-    longAllocation,
-    longLtv,
-    shortLtv,
-    cashbackMode,
+const DEFAULT_DEBT_POSITION = {
+  assetPrice: 2000,
+  assetAmount: 20,
+  usdDebt: 15000,
+  liquidationLtv: .85,
+};
+
+const DEFAULT_PERP_POSITION = {
+  assetPrice: 2000,
+  averageEntryPrice: 2500,
+  positionSize: 15,
+  margin: 25000,
+  liquidationPrice: 1200,
+  side: "long" as const,
+};
+
+export function createDefaultOptimisationOptions(
+  comparisonMode: ComparisonMode,
+  objective: Objective,
+): OptimiseOptions {
+  const deposit = comparisonMode === "base"
+    ? 10000
+    : comparisonMode === "lending"
+      ? DEFAULT_DEBT_POSITION.assetPrice * DEFAULT_DEBT_POSITION.assetAmount - DEFAULT_DEBT_POSITION.usdDebt
+      : DEFAULT_PERP_POSITION.margin + DEFAULT_PERP_POSITION.positionSize *
+        (DEFAULT_PERP_POSITION.assetPrice - DEFAULT_PERP_POSITION.averageEntryPrice);
+  return {
+    maxDrawdown: DEFAULT_OPTIMISER_MAX_DRAWDOWN_PERCENT / 100,
+    maxLtv: MAX_V4_LTV,
+    longMaxLtv: MAX_V4_LTV,
+    shortMaxLtv: MAX_V4_LTV,
+    bullishTargetPercent: 200,
+    bearishTargetPercent: -75,
+    analysisRange: analysisRangeFromPercent(
+      DEFAULT_OPTIMISER_ANALYSIS_MIN_PERCENT,
+      DEFAULT_OPTIMISER_ANALYSIS_MAX_PERCENT,
+    ),
+    searchStepPercent: 1,
+    objective,
+    comparisonMode,
+    baseAssetValue: 0,
+    spotParityPercent: 50,
+    debtParityPercent: 50,
+    perpParityPercent: 50,
+    debtPosition: { ...DEFAULT_DEBT_POSITION },
+    perpPosition: { ...DEFAULT_PERP_POSITION },
+    cashbackMode: "optimise",
+    cashOutEnabled: true,
+    forceCashOut: false,
     degenEnabled: false,
     degenMode: "x1",
     customRecyclePct: 50,
-  },
-  requestedMaxDrawdown: 0.15,
-  effectiveMaxDrawdown: 0.15,
-  drawdownRelaxed: false,
-  adverseDirection,
-  downsideBreakeven: null,
-  upsideBreakeven: null,
-  debtParity: null,
-  perpParity: null,
-  failure: null,
-});
+    requireBreakeven: false,
+    downsideBreakevenPercent: -80,
+    upsideBreakevenPercent: 200,
+    deposit,
+  };
+}
 
-const bullishCrossover: CashbackCrossoverResult = {
-  becomesOptimal: "spot",
-  currentDrawdown: 0.15,
-  crossoverDrawdown: 0.5475000000000001,
-  currentPayoff: 572.6165001233429,
-  switchPayoff: 758.1472437320624,
-  changePts: 39.75000000000001,
-  payoffDeltaPts: 185.5307436087195,
-  efficiency: 4.667440090785395,
+const objectivesByMode: Record<ComparisonMode, readonly Objective[]> = {
+  base: ["bullish", "bearish", "spotParity", "benchmarkDominance"],
+  lending: ["bullish", "bearish", "spotParity", "debtParity", "benchmarkDominance"],
+  perp: ["bullish", "bearish", "spotParity", "perpParity", "benchmarkDominance"],
 };
 
-const baseBullish = outcome(10000, 0.78, 0.8, 0.8, "cash");
-const baseBearish = outcome(10000, 0.02, 0.77, 0.8, "cash", "upside");
-const baseSpotParity = outcome(10000, 0.4, 0.8, 0.8, "spot");
-const baseDominance = outcome(10000, 0.56, 0.8, 0.8, "spot");
-
-const lendingBullish = outcome(25000, 0.78, 0.8, 0.8, "cash");
-const lendingBearish = outcome(25000, 0.02, 0.77, 0.8, "cash", "upside");
-const lendingSpotParity = outcome(25000, 0.4, 0.8, 0.8, "spot");
-const lendingParity = outcome(25000, 0.69, 0.8, 0.8, "spot");
-lendingParity.debtParity = {
-  targetPercent: 50,
-  debtValue: 45000,
-  v4Value: 45101.03849377637,
-  secured: true,
-};
-const lendingDominance = outcome(25000, 0.56, 0.8, 0.8, "spot");
-
-const perpBullish = outcome(17500, 0.78, 0.8, 0.8, "cash");
-const perpBearish = outcome(17500, 0.02, 0.77, 0.8, "cash", "upside");
-const perpSpotParity = outcome(17500, 0.4, 0.8, 0.8, "spot");
-const perpParity = outcome(17500, 0.75, 0.8, 0.8, "spot");
-perpParity.perpParity = {
-  targetPercent: 50,
-  perpValue: 32500,
-  v4Value: 32667.456824974768,
-  secured: true,
-};
-const perpDominance = outcome(17500, 0.56, 0.8, 0.8, "spot");
-
-export const DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[] = [
-  { comparisonMode: "base", objective: "bullish", outcome: baseBullish, crossover: bullishCrossover },
-  { comparisonMode: "base", objective: "bearish", outcome: baseBearish, crossover: null },
-  { comparisonMode: "base", objective: "spotParity", outcome: baseSpotParity, crossover: null },
-  { comparisonMode: "base", objective: "benchmarkDominance", outcome: baseDominance, crossover: null },
-  { comparisonMode: "lending", objective: "bullish", outcome: lendingBullish, crossover: bullishCrossover },
-  { comparisonMode: "lending", objective: "bearish", outcome: lendingBearish, crossover: null },
-  { comparisonMode: "lending", objective: "spotParity", outcome: lendingSpotParity, crossover: null },
-  { comparisonMode: "lending", objective: "debtParity", outcome: lendingParity, crossover: null },
-  { comparisonMode: "lending", objective: "benchmarkDominance", outcome: lendingDominance, crossover: null },
-  { comparisonMode: "perp", objective: "bullish", outcome: perpBullish, crossover: bullishCrossover },
-  { comparisonMode: "perp", objective: "bearish", outcome: perpBearish, crossover: null },
-  { comparisonMode: "perp", objective: "spotParity", outcome: perpSpotParity, crossover: null },
-  { comparisonMode: "perp", objective: "perpParity", outcome: perpParity, crossover: null },
-  { comparisonMode: "perp", objective: "benchmarkDominance", outcome: perpDominance, crossover: null },
-];
+export const DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[] =
+  (Object.entries(objectivesByMode) as Array<[ComparisonMode, readonly Objective[]]>)
+    .flatMap(([comparisonMode, objectives]) => objectives.map((objective) => ({
+      comparisonMode,
+      objective,
+      outcome: optimisePortfolioWithOutcome(createDefaultOptimisationOptions(comparisonMode, objective)),
+      crossover: null,
+    })));

@@ -10,7 +10,7 @@ import {
   perpPositionSummary,
   type PerpPositionInput,
 } from "./perpPosition";
-import { findWorstDrawdown, portfolioReturn } from "./v4Math";
+import { findWorstComponentDrawdown, portfolioReturn } from "./v4Math";
 import type { AnalysisRange, ComparisonMode, Config } from "./types";
 
 export const DOMINANCE_EDGE_TOLERANCE_PTS = 1e-7;
@@ -154,7 +154,7 @@ export function createBenchmarkDominanceEvaluator(input: DominanceInput) {
         worstMove,
         aheadPercent: (aheadCount / moves.length) * 100,
         averageEdgePts: edgeSum / moves.length,
-        maxDrawdown: knownMaxDrawdown ?? findWorstDrawdown(config, input.analysisRange).drawdown,
+        maxDrawdown: knownMaxDrawdown ?? findWorstComponentDrawdown(config, input.analysisRange).drawdown,
       };
     },
   };

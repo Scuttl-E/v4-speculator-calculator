@@ -2,7 +2,7 @@ import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-price-model-2026-08-analysis-range-1";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-08-11-allocated-leg-risk-2";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {
@@ -22,8 +22,6 @@ const canonicalise = (value: unknown): unknown => {
 };
 
 export function createOptimisationSignature(options: OptimiseOptions) {
-  const isParity = options.objective === "spotParity" ||
-    options.objective === "debtParity" || options.objective === "perpParity";
   const materialInputs = {
     comparisonMode: options.comparisonMode ?? "base",
     baseAssetValue: (options.comparisonMode ?? "base") === "base"
@@ -31,17 +29,11 @@ export function createOptimisationSignature(options: OptimiseOptions) {
       : null,
     objective: options.objective,
     deposit: options.deposit,
-    maxDrawdown: isParity ? null : options.maxDrawdown,
+    maxDrawdown: options.maxDrawdown,
     maxLtv: options.maxLtv,
     longMaxLtv: options.longMaxLtv ?? options.maxLtv,
     shortMaxLtv: options.shortMaxLtv ?? options.maxLtv,
-    cashbackMode: options.cashbackMode,
-    degenEnabled: options.degenEnabled,
-    degenMode: options.degenEnabled ? options.degenMode : null,
-    customRecyclePct:
-      options.degenEnabled && options.degenMode === "custom"
-        ? options.customRecyclePct
-        : null,
+    longProductSelection: options.cashbackMode ?? "optimise",
     requireBreakeven: options.requireBreakeven,
     adverseBreakevenPercent: !options.requireBreakeven
       ? null

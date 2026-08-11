@@ -10,7 +10,7 @@ import {
 } from "./perpPosition";
 import {
   dollarValue,
-  findWorstDrawdown,
+  findWorstComponentDrawdown,
   portfolioReturn,
 } from "./v4Math";
 import { targetPercentToPrice } from "./optimiser";
@@ -151,7 +151,7 @@ export function createObjectiveAnalysis(input: {
     );
     const analysisMinMove = (input.analysisRange.minPriceRatio - 1) * 100;
     const analysisMaxMove = (input.analysisRange.maxPriceRatio - 1) * 100;
-    const v4MaxDrawdown = findWorstDrawdown(input.config, input.analysisRange).drawdown * 100;
+    const v4MaxDrawdown = findWorstComponentDrawdown(input.config, input.analysisRange).drawdown * 100;
     const spotMaxDrawdown = analysisMinMove;
     return {
       kind: "spot",

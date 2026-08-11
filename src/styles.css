@@ -106,7 +106,21 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
   background: #121313b8;
   box-shadow: inset 0 1px 4px #000a, 0 0 0 1px #0005;
 }
+.cashout-master-toggle {
+  flex: 0 0 auto;
+  padding: 0 !important;
+  cursor: pointer;
+}
+.cashback-degen-capsule.cashout-disabled { opacity: .5; }
 .cashback-routing-row { margin: 0; border: 0; border-radius: 7px 7px 0 0; }
+.cashback-routing-row button:disabled { color: #68635e; cursor: default; opacity: .55; }
+.force-cashout-control {
+  margin-top: 7px;
+  padding: 5px 0 0;
+}
+.force-cashout-control .precision-switch { margin: 0; }
+.force-cashout-control.disabled { opacity: .48; }
+.force-cashout-control input:disabled + span { cursor: default; }
 .degen-control-row {
   display: grid;
   grid-template-columns: 86px minmax(0, 1fr);
@@ -205,6 +219,12 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
 .degen-explainer p b { margin-right: 4px; color: #c99067; font-size: 9px; letter-spacing: .06em; }
 .degen-recycled-value { color: #dc9562 !important; }
 .manual-position section + section { padding-top: 14px; }
+.cashback-degen-control .section-label { margin-bottom: 8px; }
+.manual-position .field-label { display: block; margin: 12px 0 6px; }
+.manual-position .section-label + .field-label { margin-top: 10px; }
+.manual-position .cashback-segments + .field-label { margin-top: 14px; }
+.discrete-leverage-limits .field-label { display: block; margin: 10px 0 6px; }
+.discrete-leverage-limits .cashback-segments + .field-label { margin-top: 12px; }
 
 .precision-switch {
   position: relative;
@@ -235,14 +255,15 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
 }
 .precision-switch input:checked + span {
   background: linear-gradient(90deg, #814426, #ad6035);
-  box-shadow: inset 0 2px 5px #0008, 0 0 0 1px #d58a5240;
+  box-shadow: inset 0 2px 5px #0008;
 }
 .precision-switch input:checked + span::after {
   left: 19px;
   background: #f1dfca;
 }
 .precision-switch:hover > span::after { transform: scale(1.06); }
-.precision-switch:focus-within > span { outline: 2px solid #d4874c80; outline-offset: 2px; }
+.precision-switch:focus-within > span { outline: 0; }
+.precision-switch input:focus-visible + span { outline: 2px solid #d4874c80; outline-offset: 2px; }
 .precision-switch > div {
   display: flex;
   min-width: 0;
@@ -1586,7 +1607,9 @@ body {
 .optimised-allocation small b { color: var(--cream); font: 600 12px var(--mono); }
 .optimised-values {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 7px;
   margin-top: 9px;
   padding-top: 9px;
@@ -1601,7 +1624,6 @@ body {
   letter-spacing: .055em;
 }
 .optimised-values b { color: var(--cream); font: 600 14px var(--mono); letter-spacing: -.02em; }
-.optimised-values span:last-child b { color: var(--bright); font: 600 12px Atelier; letter-spacing: .03em; }
 .cashback-optimise {
   margin-top: -5px;
   padding: 11px 0 8px;
@@ -1783,6 +1805,7 @@ body {
   line-height: 1.35;
 }
 .spot-parity-result b { color: #e0a270; font-size: 9px; letter-spacing: .065em; }
+.spot-parity-result.best-effort { background: linear-gradient(145deg, #6142262b, #191817); box-shadow: inset 2px 0 #b97846; }
 .optimise > .optimise-error { display: block; margin: 7px 0; color: var(--risk); font-size: 11px; line-height: 1.35; }
 
 /* Scenario comparison groups: V4 instrument, spot benchmark, then relative edge. */
@@ -2035,7 +2058,6 @@ body {
   color: var(--cream);
   font-size: 16px;
 }
-.optimisation-result .optimised-values span:last-child b { color: var(--bright); }
 
 /* Keep scenario headings and values on the same measured column tracks. */
 .scenario-row {
@@ -2071,7 +2093,7 @@ body {
 .scenario-series-key i.v4 { background: #e18a4a; }
 .scenario-series-key i.spot { background: #b8aea3; }
 .scenario-series-key i.long { background: #e18a4a; }
-.scenario-series-key i.short { background: #aa9481; }
+.scenario-series-key i.short { background: #e0c45d; }
 .scenario-series-key i.debt { background: #c4b17d; }
 .workspace > .readouts .scenario-series-key {
   order: -1;
@@ -2103,7 +2125,7 @@ body {
   background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px) !important;
 }
 .scenario-series-key > span > i.long { color: #e18a4a; }
-.scenario-series-key > span > i.short { color: #aa9481; }
+.scenario-series-key > span > i.short { color: #e0c45d; }
 .scenario-series-key > span > i.debt { color: #c4b17d; }
 .scenario-series-key > span > i.perp { color: #cf7961; }
 
@@ -2159,7 +2181,7 @@ body {
   background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px);
 }
 .chart-tooltip .tooltip-value i.long { color: #e18a4a; }
-.chart-tooltip .tooltip-value i.short { color: #aa9481; }
+.chart-tooltip .tooltip-value i.short { color: #e0c45d; }
 .chart-tooltip .edge {
   display: flex;
   justify-content: center;
@@ -2624,7 +2646,7 @@ body {
 .scenario-header-legend > span > i.long,
 .scenario-header-legend > span > i.short { background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px) !important; }
 .scenario-header-legend > span > i.long { color: #e18a4a; }
-.scenario-header-legend > span > i.short { color: #aa9481; }
+.scenario-header-legend > span > i.short { color: #e0c45d; }
 .scenario-header-legend > span > i.debt { color: #c4b17d; }
 .scenario-header-legend > span > i.perp { color: #cf7961; }
 
@@ -2911,4 +2933,51 @@ main.web-app .chart-panel .chart-series-legend {
   min-height: 18px;
   margin: -8px 20px 1px;
   padding: 0;
+}
+
+/* Cash-out uses the rail's existing button language without an extra container. */
+.rail .cashback-degen-capsule {
+  margin-top: 7px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.rail .cashback-routing-row {
+  margin: 0;
+  padding: 3px;
+}
+.rail .cashback-routing-row button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 6px;
+  background: transparent;
+}
+.rail .cashback-routing-row button + button { margin-left: 0; }
+.rail .cashback-routing-row button.on {
+  background: linear-gradient(145deg, #765038, #4e3327);
+  box-shadow: inset 0 1px #ffd0a638, 0 4px 9px #0007;
+}
+.rail .degen-control-row {
+  gap: 5px;
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 1;
+}
+.rail .degen-control-row.disabled { opacity: .52; }
+.rail .degen-toggle,
+.rail .degen-selector-trigger {
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: #0e0f0f;
+  box-shadow: inset 0 2px 5px #000a, 0 1px #ffffff08;
+}
+.rail .degen-control-row.enabled .degen-toggle {
+  background: linear-gradient(145deg, #765038, #4e3327);
+  box-shadow: inset 0 1px #ffd0a638, 0 4px 9px #0007;
 }

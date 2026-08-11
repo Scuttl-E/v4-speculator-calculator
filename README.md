@@ -2,7 +2,7 @@
 
 An independent Windows desktop modelling and optimisation tool for exploring potential Peapods Finance V4 strategy behaviour across different underlying asset price moves.
 
-V4 Speculator lets you model Long V4 and Short V4 allocations, leverage, cashback treatment, and drawdown constraints, then compare the resulting response curve against spot, leveraged lending positions, and perpetual futures.
+V4 Speculator lets you model Long V4 and Short V4 allocations, leverage, eligible Long cash-out treatment, and drawdown constraints, then compare the resulting response curve against spot, leveraged lending positions, and perpetual futures.
 
 > **Web version:** The web version is an experimental beta release with the latest feature set. It may offer capabilities ahead of the desktop version, but is also more likely to experience instability or breaking changes while development continues. Try it at [scuttl-e.github.io/v4-speculator-calculator](https://scuttl-e.github.io/v4-speculator-calculator/).
 
@@ -21,14 +21,14 @@ It can:
 
 - combine Long V4 and Short V4 positions;
 - model leverage up to the currently supported V4 range;
-- account for the modelled V4 cashback structure;
-- compare holding cashback as cash with reinvesting it into the underlying asset;
+- account for the modelled eligible Long V4 cash-out structure;
+- compare holding genuine cash-out as cash with reinvesting it into the underlying asset;
 - constrain strategies by maximum drawdown and optional leverage limits;
-- optimise allocations, leverage, and cashback treatment for different objectives;
+- optimise allocations, leverage, and cash-out treatment for different objectives;
 - compare V4 against spot, leveraged lending positions, and perpetual futures;
 - model lending and perp liquidation boundaries;
 - show scenario returns across a range of asset-price moves;
-- analyse breakeven, downside recovery, cashback switch points, parity protection, and benchmark dominance; and
+- analyse breakeven, downside recovery, cash-out switch points, parity protection, and benchmark dominance; and
 - expand the Strategy Response chart into an immersive PEA-NILE analytical view.
 
 The aim is not to predict the price of an asset. The app asks a different question:
@@ -53,7 +53,7 @@ Typical uses include:
 - balancing Long V4 and Short V4;
 - constraining maximum drawdown;
 - comparing V4 with spot;
-- testing cashback treatment; and
+- testing eligible cash-out treatment; and
 - finding configurations that perform well across a broad price range.
 
 This is the simplest mode when there is no existing leveraged position to reproduce or replace.
@@ -126,7 +126,7 @@ Funding, trading fees, and other time-dependent perp costs are currently outside
 
 Manual mode lets you choose the configuration yourself.
 
-**Optimise** searches the available Long V4 and Short V4 allocation, leverage, and cashback choices to find a configuration suited to a particular objective while respecting the selected constraints.
+**Optimise** searches the available Long V4 and Short V4 allocation, leverage, and eligible cash-out choices to find a configuration suited to a particular objective while respecting the selected constraints.
 
 The shipped default configurations include precomputed example results for each valid mode/objective combination, so first-time users can inspect the response curves immediately. For any changed setting, optimisation runs only when explicitly requested; changing a relevant input marks the displayed result as stale rather than silently recalculating it.
 
@@ -134,13 +134,13 @@ The shipped default configurations include precomputed example results for each 
 
 Optimises for the strongest V4 payoff at a selected **positive underlying price target**.
 
-Maximum Drawdown acts as the main risk constraint. Rather than simply choosing 100% maximum-leverage Long V4, the optimiser may introduce Short V4 exposure, lower leverage, or alter cashback treatment if doing so produces the best feasible result.
+Maximum Drawdown acts as the main risk constraint. Rather than simply choosing 100% maximum-leverage Long V4, the optimiser may introduce Short V4 exposure, lower leverage, or alter eligible cash-out treatment if doing so produces the best feasible result.
 
 In simple terms:
 
 **Get as much upside as possible without exceeding the downside limit you set.**
 
-The Bullish analysis can also identify the **Cashback Switch Point** where holding cashback as cash versus reinvesting it into spot becomes the more efficient configuration as permitted drawdown changes.
+The Bullish analysis can also identify the **Cash-out Switch Point** where holding eligible cash-out as cash versus reinvesting it into spot becomes the more efficient configuration as permitted drawdown changes.
 
 ### Maximise Bearish Exposure
 
@@ -242,13 +242,13 @@ In simple terms:
 
 ### Maximum Drawdown
 
-Sets the maximum portfolio drawdown the optimiser is allowed to accept. The value is the worst portfolio return found within the configured **Analysis Range**, rather than an unbounded claim about every possible asset price.
+Sets the maximum isolated-leg loss contribution the optimiser is allowed to accept, capped at **99%**. Long and Short contributions are checked separately within the configured **Analysis Range**, so one leg cannot hide losses in the other.
 
 The control supports **0.1 percentage-point increments**, allowing calculated thresholds such as `-46.6%` to be used directly without changing the optimiser's underlying global search resolution.
 
 ### Analysis Range
 
-Defines the asset-price interval used to evaluate maximum drawdown and other full-range portfolio risk and comparison calculations. Its minimum and maximum are adjustable in Settings and default to **-80% through +200%**.
+Defines the asset-price interval used to evaluate drawdown and other full-range risk and comparison calculations. Its minimum and maximum are adjustable in Settings and default to **-99% through +200%**.
 
 Analysis Range is independent from:
 
@@ -264,28 +264,44 @@ Long and Short V4 leverage can be left on automatic limits or restricted indepen
 
 The current model supports the V4 leverage range up to:
 
-- **80% LTV**
-- **2.50× modelled exposure**
+- **75% LTV**
+- **2.50× Peapods leverage factor (LF)**
 
 The optimiser can independently select Long and Short leverage within the permitted limits.
 
-### Cashback
+Peapods LF and the calculator's payoff exponent are separate quantities. The protocol-facing mapping is `LF = 1 + 2 × LTV`, so 50% LTV is 2.00× LF and the supported 75% maximum is 2.50× LF. The calibrated price model continues to use `m = 0.5 ÷ (1 − LTV)` as its payoff exponent, giving `m = 2.00` at 75% LTV. The exponent is not displayed or described as protocol leverage.
 
-The current model assumes the publicly demonstrated V4 structure in which **50% of the supplied amount is returned as cashback while the supplied capital remains deployed**.
+### V4 cash-out
 
-Cashback can be modelled as:
+The current model assigns cash-out only to the eligible Long component of a V4 position:
+
+- Long below 75% LTV: no cash-out;
+- Long at the supported 75% maximum: a fixed 50% of Long capital; and
+- Short at every supported LTV: no cash-out.
+
+The percentage is discrete. In a mixed portfolio, the Short allocation never contributes to the available cash-out.
+
+Genuine cash-out can be modelled as:
 
 #### Hold as cash
 
-Cashback remains fixed and acts as additional downside ballast.
+Eligible Long cash-out remains fixed and acts as downside ballast.
 
 #### Reinvest in spot
 
-Cashback is used to purchase the underlying asset, increasing directional exposure.
+Eligible Long cash-out is used to purchase the underlying asset, increasing directional exposure.
 
 #### Auto
 
-In Optimise mode, the optimiser may select whichever of the two existing treatments produces the stronger feasible result for the chosen objective and constraints.
+In Optimise mode, the optimiser may select whichever treatment produces the stronger feasible result. When a candidate has no eligible cash-out, the treatments are financially identical.
+
+The **Cash-out & Degen** master toggle is on by default. Turning it off removes cash-out routing and Degen recycling from the active position and optimiser, while keeping the 75% LTV choice available as a no-cash-out payoff position. In Optimise mode, **Force cash-out** requires a non-zero Long position at 75% LTV; use it when the result must include eligible cash-out rather than merely selecting the strongest unrestricted position.
+
+Cash-out is part of the position accounting, not additional wealth. Structural V4 exposure plus held, reinvested, or recycled cash-out always equals the original capital at entry.
+
+### Degen recycling
+
+Degen rounds are funded only by cash-out generated from eligible Long capital. Each round can recycle the eligible Long cash-out produced by the preceding deposit; Short capital produces nothing to recycle. Custom targets are capped at the maximum the selected allocation and Long LTV can mathematically fund.
 
 ---
 
@@ -322,7 +338,7 @@ Shows the modelled capital allocation between:
 
 - Long V4;
 - Short V4;
-- cashback treatment; and
+- eligible cash-out treatment; and
 - selected leverage.
 
 ### Objective-specific analysis
@@ -331,7 +347,7 @@ The bottom-right analysis changes according to the optimiser objective.
 
 Examples include:
 
-- **Cashback Switch Point** for Bullish optimisation;
+- **Cash-out Switch Point** for Bullish optimisation;
 - **Downside Recovery** for Bearish optimisation;
 - **Protection at Parity** for Spot;
 - **Benchmark Protection** for Lending and Perp parity; and
@@ -434,11 +450,15 @@ The published 75% LTV V4 long examples provide a strong anchor for the current l
 
 Behaviour at other LTV levels is modelled from that anchor and should be treated as estimated until complete official mechanics are available.
 
+For Long positions below the 75% cash-out threshold, the calculator applies the existing modelled `p^m` structural curve to the full Long capital so entry remains normalised without inventing released cash. This no-cash-out curve remains an estimate rather than a separately published payoff anchor.
+
 ### V4 short side
 
 The public 50% LTV SuperUSDC example provides the main short-side anchor.
 
 Behaviour at higher leverage levels is extrapolated from that observed relationship and therefore carries greater modelling uncertainty.
+
+The anchored Short payoff is modelled as structural position behaviour. Short capital does not receive or route cash-out.
 
 ### Liquidation
 
