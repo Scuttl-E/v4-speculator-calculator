@@ -22,7 +22,7 @@ import {
   MAX_V4_LTV,
   longLtvForMode,
   longModeLabel,
-  peapodsLeverageFactor,
+  shortModeLabel,
   portfolioComponents,
   portfolioReturn,
 } from "./model/v4Math";
@@ -42,23 +42,26 @@ import {
 } from "./model/perpPosition";
 import type {
   CashbackMode,
+  CashbackPolicy,
+  CashbackRoutingPreference,
   ComparisonMode,
   Config,
   DegenMode,
   Objective,
-  OptimiserCashbackMode,
   OptimiseOptions,
   OptimiseOutcome,
   LongV4Mode,
+  ShortV4Mode,
 } from "./model/types";
 import { degenRecycleTargetRatio } from "./model/degen";
-import {
-  type CashbackCrossoverResult,
-} from "./model/cashbackCrossover";
 import {
   createObjectiveAnalysis,
   type ObjectiveAnalysis,
 } from "./model/objectiveAnalysis";
+import {
+  createProductRoutingDecision,
+  type ProductRoutingDecision,
+} from "./model/productRoutingDecision";
 import {
   createDefaultOptimisationOptions,
   DEFAULT_OPTIMISATION_PRESETS,
@@ -89,6 +92,7 @@ const money = (n: number) =>
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(n);
+const signedMoney = (n: number) => `${n >= 0 ? "+" : "−"}${money(Math.abs(n))}`;
 const pct = (n: number) => `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%`;
 const normaliseDisplayZero = (n: number, precision = 1) =>
   Math.abs(n) < 0.5 * 10 ** -precision ? 0 : n;
@@ -134,14 +138,6 @@ function OptimisationRequiredBadge({
     </div>
   );
 }
-
-const crossoverTradeoffText = (result: CashbackCrossoverResult) => {
-  if (result.efficiency === null) return "No material drawdown change";
-  const ratio = result.efficiency < 0.005 ? "<0.01" : result.efficiency.toFixed(2);
-  const drawdownDirection = result.changePts > 0 ? "more" : "less";
-  const payoffEffect = result.payoffDeltaPts < -0.05 ? "costs" : "buys";
-  return `1 pt ${drawdownDirection} drawdown ${payoffEffect} ${ratio} payoff pts`;
-};
 
 function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
   if (analysis.kind === "bearish") return (
@@ -246,6 +242,34 @@ function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
     </section>
   );
 }
+
+const routingLabel = (routing: CashbackMode) => routing === "cash" ? "Cash" : "Spot asset";
+
+function ProductRoutingDecisionBlock({ decision }: { decision: ProductRoutingDecision }) {
+  const selectedAdvantagePoints = decision.selected.targetReturn - decision.alternative.targetReturn;
+  const selectedAdvantagePercent = Math.abs(decision.alternative.targetReturn) > 1e-9
+    ? selectedAdvantagePoints / Math.abs(decision.alternative.targetReturn) * 100
+    : null;
+
+  return <section className="analytical-section product-routing-decision" aria-label="Product and routing decision">
+    <h3>PRODUCT &amp; ROUTING DECISION</h3>
+    <div className="analytical-stat-grid routing-decision-grid">
+      <span>Selected routing</span>
+      <b className="routing-decision-route">{routingLabel(decision.selected.routing)}</b>
+      <span>Return at {signedFixed(decision.targetPercent)}%</span>
+      <b>{signedFixed(decision.selected.targetReturn)}%</b>
+      <span className="routing-decision-opposing">Best opposing route</span>
+      <b className="routing-decision-route routing-decision-opposing">{routingLabel(decision.alternative.routing)}</b>
+      <span>Return at {signedFixed(decision.targetPercent)}%</span>
+      <b>{signedFixed(decision.alternative.targetReturn)}%</b>
+      <span>Selected-route advantage</span>
+      <b>
+        {signedFixed(selectedAdvantagePoints)} pts
+        <small> ({selectedAdvantagePercent === null ? "n/a" : `${signedFixed(selectedAdvantagePercent)}%`})</small>
+      </b>
+    </div>
+  </section>;
+}
 const formatLtv = (ltv: number) => {
   const percent = ltv * 100;
   return `${Math.abs(percent - Math.round(percent)) < 1e-8 ? percent.toFixed(0) : percent.toFixed(2)}%`;
@@ -263,6 +287,7 @@ const INITIAL_CONFIG: Config = {
   longAllocation: 0.5,
   longLtv: 0.5,
   longMode: "2x",
+  shortMode: "2x",
   shortLtv: 0.5,
   cashbackMode: "cash",
   cashOutEnabled: true,
@@ -289,7 +314,7 @@ const SCUTTLE_LINK = "https://x.com/chainsandtrains";
 const DEFAULT_MAX_DRAWDOWN = DEFAULT_OPTIMISER_MAX_DRAWDOWN_PERCENT;
 const DEFAULT_ANALYSIS_MIN_PERCENT = DEFAULT_OPTIMISER_ANALYSIS_MIN_PERCENT;
 const DEFAULT_ANALYSIS_MAX_PERCENT = DEFAULT_OPTIMISER_ANALYSIS_MAX_PERCENT;
-const CURRENT_INPUT_DEFAULTS_VERSION = 8;
+const CURRENT_INPUT_DEFAULTS_VERSION = 9;
 const DEFAULT_MAX_DRAWDOWN_BY_MODE: Record<ComparisonMode, number> = {
   base: DEFAULT_MAX_DRAWDOWN,
   lending: DEFAULT_MAX_DRAWDOWN,
@@ -349,9 +374,8 @@ const defaultOptimisationInputs = (options: OptimiseOptions): Record<string, unk
     spotParityPercent: options.objective === "spotParity" ? options.spotParityPercent : null,
     debtParityPercent: options.objective === "debtParity" ? options.debtParityPercent : null,
     perpParityPercent: options.objective === "perpParity" ? options.perpParityPercent : null,
-    cashbackMode: options.cashbackMode,
-    cashOutEnabled: options.cashOutEnabled !== false,
-    forceCashOut: options.forceCashOut === true,
+    cashbackPolicy: options.cashbackPolicy ?? "auto",
+    cashbackRouting: options.cashbackRouting ?? "auto",
     degenEnabled: options.degenEnabled,
     degenMode: options.degenMode,
     customRecyclePct: options.degenMode === "custom" ? options.customRecyclePct : null,
@@ -377,7 +401,7 @@ const createDefaultOptimisationCache = () => {
       inputs: defaultOptimisationInputs(options),
       result: preset.outcome.config,
       outcome: preset.outcome,
-      crossover: preset.crossover,
+      productRoutingDecision: createProductRoutingDecision(options, preset.outcome),
       objectiveAnalysis: createObjectiveAnalysis({
         objective: preset.objective,
         config: preset.outcome.config,
@@ -466,6 +490,7 @@ function Slider({
   signedDisplay = false,
   autoWhenMax = false,
   disabled = false,
+  deferRangeCommit = false,
   step = 1,
   displayPrecision,
 }: {
@@ -479,18 +504,35 @@ function Slider({
   signedDisplay?: boolean;
   autoWhenMax?: boolean;
   disabled?: boolean;
+  deferRangeCommit?: boolean;
   step?: number;
   displayPrecision?: number;
 }) {
-  const sliderValue = value,
-    displayValue = value,
+  const [rangeDraft, setRangeDraft] = useState(value);
+  const rangeDraftRef = useRef(value);
+  useEffect(() => {
+    rangeDraftRef.current = value;
+    setRangeDraft(value);
+  }, [value]);
+  const sliderValue = deferRangeCommit ? rangeDraft : value,
+    displayValue = sliderValue,
     inputValue = signedDisplay ? -displayValue : displayValue,
     isAuto = autoWhenMax && value >= max,
     snapValue = (next: number) => {
       const snapped = min + Math.round((next - min) / step) * step;
       return Math.min(max, Math.max(min, +snapped.toFixed(10)));
     },
-    commitValue = (next: number) => onChange(snapValue(next)),
+    commitValue = (next: number) => {
+      const snapped = snapValue(next);
+      if (deferRangeCommit) {
+        rangeDraftRef.current = snapped;
+        setRangeDraft(snapped);
+      }
+      else onChange(snapped);
+    },
+    commitRangeDraft = () => {
+      if (deferRangeCommit && rangeDraftRef.current !== value) onChange(rangeDraftRef.current);
+    },
     stepUp = () => {
       const next = signedDisplay
           ? Math.min(max, value + step)
@@ -526,6 +568,9 @@ function Slider({
             } as React.CSSProperties
           }
           onChange={(e) => commitValue(+e.target.value)}
+          onPointerUp={commitRangeDraft}
+          onKeyUp={commitRangeDraft}
+          onBlur={commitRangeDraft}
           disabled={disabled}
         />
         <div className="number-step">
@@ -675,6 +720,11 @@ function ChartTooltip({
   const p = 1 + (label ?? 0) / 100;
   const v4 = dollarValue(p, config);
   const v4Return = portfolioReturn(p, config);
+  const v4Components = portfolioComponents(p, config);
+  const cashbackInitialValue = config.deposit * v4Components.cashOut;
+  const insideV4InitialValue = config.deposit - cashbackInitialValue;
+  const cashbackValue = config.deposit * v4Components.cashbackValue;
+  const insideV4Value = config.deposit * v4Components.insideV4;
   const debtReturn = debtPositionReturn(p, debtPosition);
   const debtLiquidated = isDebtPositionLiquidated(p, debtPosition);
   const perpReturn = perpPositionReturn(p, perpPosition);
@@ -736,13 +786,25 @@ function ChartTooltip({
         <b>{pct(p - 1)}</b>
       </div>
       <div className={`tooltip-values${primaryMetric ? "" : " single"}`}>
-        <div className="tooltip-value">
+        <div className="tooltip-value v4">
           <i className="teal" />
-          V4 STRATEGY <b>{pct(v4Return)}</b>
+          V4 STRATEGY COMBINED <b>{pct(v4Return)}</b>
           <em>{money(v4)}</em>
         </div>
         {primaryMetric && renderMetric(primaryMetric)}
       </div>
+      {v4Components.cashOut > 1e-12 && <div className="tooltip-cashback-split">
+        <span className="v4">
+          INSIDE V4
+          <b>{money(insideV4Value)}</b>
+          <small>P/L {signedMoney(insideV4Value - insideV4InitialValue)}</small>
+        </span>
+        <span className="v4">
+          CASHBACK · {config.cashbackMode === "cash" ? "CASH" : "SPOT"}
+          <b>{money(cashbackValue)}</b>
+          <small>P/L {signedMoney(cashbackValue - cashbackInitialValue)}</small>
+        </span>
+      </div>}
       {primaryMetric && primaryMetric.returnValue !== null && (
         <div className="edge">
           V4 EDGE VS {primaryMetric.edgeLabel} <b>{pct(v4Return - primaryMetric.returnValue).replace("%", " pts")}</b>
@@ -768,10 +830,8 @@ export default function App() {
     [perpParityMagnitude, setPerpParityMagnitude] = useState(50),
     [downsideBreakevenMagnitude, setDownsideBreakevenMagnitude] = useState(80),
     [upsideBreakevenMagnitude, setUpsideBreakevenMagnitude] = useState(400),
-    [cashbackPreference, setCashbackPreference] =
-      useState<OptimiserCashbackMode>("optimise"),
-    [cashOutEnabled, setCashOutEnabled] = useState(true),
-    [forceCashOut, setForceCashOut] = useState(false),
+    [cashbackPolicy, setCashbackPolicy] = useState<CashbackPolicy>("auto"),
+    [cashbackRouting, setCashbackRouting] = useState<CashbackRoutingPreference>("auto"),
     [degenSettingsByMode, setDegenSettingsByMode] = useState<DegenSettingsByMode>(
       createDefaultDegenSettingsByMode,
     ),
@@ -890,13 +950,6 @@ export default function App() {
     };
   }, [comparisonMode, mode, leverageLimitsExpanded, requireBreakeven, displayedResult]);
   useEffect(() => {
-    if (forceCashOut) setLongLtvLimit(MAX_V4_LTV * 100);
-  }, [forceCashOut]);
-  useEffect(() => {
-    if (longLtvLimit < MAX_V4_LTV * 100 && cashbackPreference !== "optimise")
-      setCashbackPreference("optimise");
-  }, [cashbackPreference, longLtvLimit]);
-  useEffect(() => {
     let cancelled = false;
     const isNumber = (value: unknown): value is number =>
       typeof value === "number" && Number.isFinite(value);
@@ -919,6 +972,8 @@ export default function App() {
       const input = value as Record<string, unknown>;
       return isNumber(input.deposit) && isNumber(input.longAllocation) &&
         isNumber(input.longLtv) && isNumber(input.shortLtv) &&
+        (input.longMode === "2x" || input.longMode === "2.5x-cashback" || input.longMode === "2.5x-looped") &&
+        (input.shortMode === "2x" || input.shortMode === "2.5x-cashback" || input.shortMode === "2.5x-looped") &&
         (input.cashbackMode === "cash" || input.cashbackMode === "spot") &&
         typeof input.degenEnabled === "boolean" && isDegenMode(input.degenMode) &&
         isNumber(input.customRecyclePct);
@@ -971,9 +1026,8 @@ export default function App() {
       if (isNumber(saved.perpParityMagnitude)) setPerpParityMagnitude(saved.perpParityMagnitude);
       if (isNumber(saved.downsideBreakevenMagnitude)) setDownsideBreakevenMagnitude(saved.downsideBreakevenMagnitude);
       if (isNumber(saved.upsideBreakevenMagnitude)) setUpsideBreakevenMagnitude(saved.upsideBreakevenMagnitude);
-      if (saved.cashbackPreference === "cash" || saved.cashbackPreference === "spot" || saved.cashbackPreference === "optimise") setCashbackPreference(saved.cashbackPreference);
-      if (typeof saved.cashOutEnabled === "boolean") setCashOutEnabled(saved.cashOutEnabled);
-      if (typeof saved.forceCashOut === "boolean") setForceCashOut(saved.forceCashOut);
+      if (saved.cashbackPolicy === "off" || saved.cashbackPolicy === "forced" || saved.cashbackPolicy === "auto") setCashbackPolicy(saved.cashbackPolicy);
+      if (saved.cashbackRouting === "cash" || saved.cashbackRouting === "spot" || saved.cashbackRouting === "auto") setCashbackRouting(saved.cashbackRouting);
       if (isDegenSettingsByMode(saved.degenSettingsByMode)) {
         setDegenSettingsByMode({
           base: { ...saved.degenSettingsByMode.base, customRecyclePct: Math.min(100, Math.max(0, saved.degenSettingsByMode.base.customRecyclePct)) },
@@ -1046,7 +1100,7 @@ export default function App() {
         inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
         comparisonMode, mode, manualConfig, optimiserDeposit, objective,
         spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-        upsideBreakevenMagnitude, cashbackPreference, cashOutEnabled, forceCashOut, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
+        upsideBreakevenMagnitude, cashbackPolicy, cashbackRouting, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
         minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
@@ -1054,7 +1108,7 @@ export default function App() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [
-    analysisMaxPercent, analysisMinPercent, assetAmount, assetName, assetPrice, baseAssetValue, cashbackPreference, cashOutEnabled, comparisonMode, debtParityMagnitude, degenSettingsByMode, forceCashOut,
+    analysisMaxPercent, analysisMinPercent, assetAmount, assetName, assetPrice, baseAssetValue, cashbackPolicy, cashbackRouting, comparisonMode, debtParityMagnitude, degenSettingsByMode,
     bearishTarget, bullishTarget, defaultMaxDrawdown, downsideBreakevenMagnitude, liquidationLtv, longLtvLimit, manualConfig, maxDrawdownByMode, maxMove,
     minMove, mode, objective, optimiserDeposit, perpParityMagnitude, perpState, persistenceLoaded,
     requireBreakeven, searchStep, shortLtvLimit, chartSeriesVisibility, showDebt, showDrawdownLine, showLiquidationLine,
@@ -1082,7 +1136,11 @@ export default function App() {
   const displayComparisonMode = mode === "optimise" && displayedResult
     ? displayedResult.options.comparisonMode ?? "base"
     : comparisonMode;
-  const { spot: showSpot } = chartSeriesVisibility[displayComparisonMode];
+  const {
+    spot: showSpot,
+    long: showLongSeries,
+    short: showShortSeries,
+  } = chartSeriesVisibility[displayComparisonMode];
   const setChartSeriesVisible = (series: keyof ChartSeriesVisibility, visible: boolean) => {
     setChartSeriesVisibility((current) => ({
       ...current,
@@ -1106,8 +1164,10 @@ export default function App() {
   const config = mode === "optimise" && displayedResult
     ? displayedResult.result
     : pendingConfig;
-  const showLong = config.longAllocation > 1e-12;
-  const showShort = config.longAllocation < 1 - 1e-12;
+  const hasLong = config.longAllocation > 1e-12;
+  const hasShort = config.longAllocation < 1 - 1e-12;
+  const showLong = hasLong && showLongSeries;
+  const showShort = hasShort && showShortSeries;
   const displayObjective = mode === "optimise" && displayedResult
     ? displayedResult.options.objective
     : objective;
@@ -1119,9 +1179,6 @@ export default function App() {
   const displayComparisonIsValid = mode === "optimise" && displayedResult
     ? true
     : pendingComparisonIsValid;
-  // Legacy controls below are intentionally unreachable during the transition.
-  const displayedCashbackMode = config.cashbackMode;
-  const cashbackRoutingUnavailable = false;
   const optimisationCache = useRef(createDefaultOptimisationCache());
   const lastRun = displayedResult;
   const optimising = runState.kind === "running";
@@ -1139,21 +1196,29 @@ export default function App() {
     breakeven: findDownsideBreakeven(config),
   }), [config, displayAnalysisRange]);
   const positionBreakdown = useMemo(() => {
-    const cashOutAmount = config.deposit * config.longAllocation *
-      (config.longMode === "2.5x-cashback" ? .5 : 0);
+    const longCashback = config.longMode === "2.5x-cashback" ? config.longAllocation * .5 : 0;
+    const shortCashback = config.shortMode === "2.5x-cashback" ? (1 - config.longAllocation) * .5 : 0;
+    const longLooped = config.longMode === "2.5x-looped" ? config.longAllocation * .5 : 0;
+    const shortLooped = config.shortMode === "2.5x-looped" ? (1 - config.longAllocation) * .5 : 0;
+    const cashOutAmount = config.deposit * (longCashback + shortCashback);
+    const currentAssetPrice = displayComparisonMode === "base"
+      ? displayBaseAssetValue > 0 ? displayBaseAssetValue : null
+      : displayComparisonMode === "lending"
+        ? displayDebtPosition.assetPrice
+        : displayPerpState.assetPrice;
     return {
       longCapital: config.deposit * config.longAllocation * (config.longMode === "2.5x-looped" ? 1.5 : 1),
-      shortCapital: config.deposit * (1 - config.longAllocation),
+      shortCapital: config.deposit * (1 - config.longAllocation) * (config.shortMode === "2.5x-looped" ? 1.5 : 1),
       recycledLongCapital: 0,
       recycledShortCapital: 0,
       cashOutAmount,
-      loopedAmount: config.longMode === "2.5x-looped"
-        ? config.deposit * config.longAllocation * .5
-        : 0,
-      spotUnits: null as number | null,
+      loopedAmount: config.deposit * (longLooped + shortLooped),
+      spotUnits: config.cashbackMode === "spot" && currentAssetPrice && currentAssetPrice > 0
+        ? cashOutAmount / currentAssetPrice
+        : null,
       recycledIntoV4: 0,
     };
-  }, [config]);
+  }, [config, displayBaseAssetValue, displayComparisonMode, displayDebtPosition.assetPrice, displayPerpState.assetPrice]);
   const points = useMemo(
     () => {
       const moves = Array.from(
@@ -1214,21 +1279,22 @@ export default function App() {
     if (!ticks.includes(yAxisMax)) ticks.push(yAxisMax);
     return [...new Set(ticks)].sort((a, b) => a - b);
   }, [yAxisMax]);
-  const update = (key: keyof Config, v: number | CashbackMode | LongV4Mode) => {
+  const update = (key: keyof Config, v: number | CashbackMode | LongV4Mode | ShortV4Mode) => {
     const value = (key === "longLtv" || key === "shortLtv") && typeof v === "number"
       ? clampV4Ltv(v)
       : v;
-    const updateConfig = (current: Config) => ({ ...current, [key]: value });
+    const updateConfig = (current: Config) => {
+      const next = { ...current, [key]: value } as Config;
+      if (key === "longMode") next.longLtv = value === "2x" ? .5 : .75;
+      if (key === "shortMode") next.shortLtv = value === "2x" ? .5 : .75;
+      return next;
+    };
     if (mode === "manual") setManualConfig(updateConfig);
     else if (key === "deposit" && typeof v === "number") setOptimiserDeposit(v);
     else setOptimisedConfigsByMode((current) => ({
       ...current,
       [comparisonMode]: updateConfig(current[comparisonMode]),
     }));
-  };
-  const setCashbackMode = (cashbackMode: CashbackMode) => {
-    if (mode === "manual") update("cashbackMode", cashbackMode);
-    else setCashbackPreference(cashbackMode);
   };
   const updateDegenSettings = (patch: Partial<Pick<Config, "degenEnabled" | "degenMode" | "customRecyclePct">>) => {
     if (mode === "manual") {
@@ -1246,16 +1312,6 @@ export default function App() {
       },
     }));
   };
-  const toggleCashOutAndDegen = () => {
-    setCashOutEnabled((enabled) => {
-      const next = !enabled;
-      if (!next) {
-        setForceCashOut(false);
-        setShowDegenSelector(false);
-      }
-      return next;
-    });
-  };
   const selectedRecycleRatio = degenRecycleTargetRatio({ ...pendingConfig, degenEnabled: true });
   const selectedRecyclePercentage = `${(selectedRecycleRatio * 100).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}%`;
   const degenSelectorLabel = pendingConfig.degenMode === "custom"
@@ -1265,6 +1321,7 @@ export default function App() {
       : `${pendingConfig.degenMode.replace("x", "×")} · ${selectedRecyclePercentage}`;
   const manualPositionIsDefault = manualConfig.longAllocation === 0.5 &&
     manualConfig.longLtv === 0.5 && manualConfig.shortLtv === 0.5 &&
+    manualConfig.longMode === "2x" && manualConfig.shortMode === "2x" &&
     manualConfig.cashbackMode === "cash";
   const activeComparisonIsDefault = (comparisonMode === "base"
     ? pendingConfig.deposit === INITIAL_CONFIG.deposit && baseAssetValue === 0
@@ -1305,7 +1362,9 @@ export default function App() {
         ...current,
         longAllocation: 0.5,
         longLtv: 0.5,
+        longMode: "2x",
         shortLtv: 0.5,
+        shortMode: "2x",
         cashbackMode: "cash",
         degenEnabled: false,
         degenMode: "x1",
@@ -1335,7 +1394,7 @@ export default function App() {
     inputDefaultsVersion: CURRENT_INPUT_DEFAULTS_VERSION,
     comparisonMode, mode, manualConfig, optimiserDeposit, objective,
     spotParityMagnitude, debtParityMagnitude, perpParityMagnitude, downsideBreakevenMagnitude,
-    upsideBreakevenMagnitude, cashbackPreference, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
+    upsideBreakevenMagnitude, cashbackPolicy, cashbackRouting, degenSettingsByMode, requireBreakeven, defaultMaxDrawdown, maxDrawdownByMode, longLtvLimit, shortLtvLimit, bullishTarget, bearishTarget, analysisMinPercent, analysisMaxPercent, searchStep,
     minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
@@ -1402,10 +1461,9 @@ export default function App() {
     usdDebt: comparisonMode === "lending" ? usdDebt : null,
     liquidationLtv: comparisonMode === "lending" ? liquidationLtv : null,
     perpState: comparisonMode === "perp" ? perpState : null,
-    cashbackMode: cashbackPreference,
-    cashOutEnabled,
-    forceCashOut: cashOutEnabled && forceCashOut,
-    degenEnabled: cashOutEnabled && degenEnabled,
+    cashbackPolicy,
+    cashbackRouting,
+    degenEnabled,
     degenMode,
     customRecyclePct: degenMode === "custom" ? customRecyclePct : null,
     requireBreakeven,
@@ -1444,10 +1502,9 @@ export default function App() {
       liquidationLtv: debtPosition.liquidationLtv ?? 0.9,
     },
     perpPosition: perpState,
-    cashbackMode: cashbackPreference,
-    cashOutEnabled,
-    forceCashOut: cashOutEnabled && forceCashOut,
-    degenEnabled: cashOutEnabled && degenEnabled,
+    cashbackPolicy,
+    cashbackRouting,
+    degenEnabled,
     degenMode,
     customRecyclePct,
     requireBreakeven,
@@ -1486,14 +1543,14 @@ export default function App() {
   const optimiseError = runState.kind === "failed" && runState.signature === pendingSignature
     ? runState.message
     : null;
-  const cashbackCrossover = mode === "optimise" && displayedResult?.options.objective === "bullish"
-    ? displayedResult.crossover
+  const productRoutingDecision = mode === "optimise" && displayedResult?.options.objective === "bullish"
+    ? displayedResult.productRoutingDecision
     : null;
   const objectiveAnalysis = mode === "optimise" ? displayedResult?.objectiveAnalysis ?? null : null;
-  const longReferenceLabel = `Long component · ${formatLtv(config.longLtv)} LTV · ${peapodsLeverageFactor(config.longLtv).toFixed(2)}× LF`;
-  const shortReferenceLabel = `Short component · ${formatLtv(config.shortLtv)} LTV · ${peapodsLeverageFactor(config.shortLtv).toFixed(2)}× LF`;
-  const longControlLabel = `Long component · ${formatLtv(config.longLtv)} · ${peapodsLeverageFactor(config.longLtv).toFixed(2)}× LF`;
-  const shortControlLabel = `Short component · ${formatLtv(config.shortLtv)} · ${peapodsLeverageFactor(config.shortLtv).toFixed(2)}× LF`;
+  const longReferenceLabel = `Long component · ${longModeLabel(config.longMode ?? "2x")}`;
+  const shortReferenceLabel = `Short component · ${shortModeLabel(config.shortMode ?? "2x")}`;
+  const longControlLabel = longReferenceLabel;
+  const shortControlLabel = shortReferenceLabel;
   const staleReason =
     lastRun && lastRun.inputs.objective !== objective
       ? "Objective changed"
@@ -1514,16 +1571,15 @@ export default function App() {
             maxDD
         ? "Risk target changed"
       : lastRun &&
-            (lastRun.inputs.cashbackMode !== cashbackPreference ||
+            (lastRun.inputs.cashbackPolicy !== cashbackPolicy ||
+              (cashbackPolicy !== "off" && lastRun.inputs.cashbackRouting !== cashbackRouting) ||
               lastRun.inputs.longLtvLimit !== longLtvLimit ||
               lastRun.inputs.shortLtvLimit !== shortLtvLimit)
           ? "Product selection changed"
       : lastRun &&
-            (lastRun.inputs.cashOutEnabled !== cashOutEnabled ||
-              lastRun.inputs.forceCashOut !== (cashOutEnabled && forceCashOut) ||
-              lastRun.inputs.degenEnabled !== (cashOutEnabled && degenEnabled) ||
-              (cashOutEnabled && degenEnabled && lastRun.inputs.degenMode !== degenMode) ||
-              (cashOutEnabled && degenEnabled && degenMode === "custom" &&
+            (lastRun.inputs.degenEnabled !== degenEnabled ||
+              (degenEnabled && lastRun.inputs.degenMode !== degenMode) ||
+              (degenEnabled && degenMode === "custom" &&
                 lastRun.inputs.customRecyclePct !== customRecyclePct))
           ? "Degen settings changed"
         : lastRun &&
@@ -1571,7 +1627,7 @@ export default function App() {
       event: MessageEvent<{
         ok: boolean;
         outcome?: OptimiseOutcome;
-        crossover?: CashbackCrossoverResult | null;
+        productRoutingDecision?: ProductRoutingDecision | null;
         error?: string;
       }>,
     ) => {
@@ -1593,7 +1649,7 @@ export default function App() {
         inputs: jobInputs,
         result,
         outcome,
-        crossover: event.data.crossover ?? null,
+        productRoutingDecision: event.data.productRoutingDecision ?? null,
         objectiveAnalysis: createObjectiveAnalysis({
           objective: jobOptions.objective,
           config: result,
@@ -1838,7 +1894,7 @@ export default function App() {
                 <em>%</em>
               </label>
             </div>
-            <p>V4 leverage remains capped at 75% LTV / 2.50× LF.</p>
+            <p>V4 products remain capped at 75% LTV.</p>
           </section>
         </div>
       )}
@@ -1913,15 +1969,16 @@ export default function App() {
                 <div className="equation-stack">
                   <code><var>p</var> = 1 + {assetLabelLower} move ÷ 100</code>
                   <code>LF<sub>L/S</sub> = 1 + 2 × LTV<sub>L/S</sub></code>
-                  <code><var>m</var><sub>L/S</sub> = 0.5 ÷ (1 − LTV<sub>L/S</sub>)</code>
-                  <code><var>V</var><sub>4</sub>(p) = <var>a</var>L(p) + (1 − <var>a</var>)S(p)</code>
+                  <code><var>m</var><sub>S</sub> = 0.5 ÷ (1 − LTV<sub>S</sub>)</code>
+                  <code>S<sub>m</sub>(p) = 0.5 + 0.5p + 0.5m ÷ p − 0.5m</code>
+                  <code><var>V</var><sub>4</sub>(p) = <var>a</var>L<sub>product</sub>(p) + (1 − <var>a</var>)S<sub>product</sub>(p)</code>
                   <code>chart return = 100 × [<var>V</var><sub>4</sub>(p) − 1]</code>
                 </div>
                 <p>
                   <var>a</var> is the long allocation; the remainder is short.
                   Dollar value is deposit × <var>V</var><sub>4</sub>(p). The held-spot
-                  comparator is simply deposit × <var>p</var>. LF is the Peapods
-                  leverage factor; <var>m</var> is the separate model payoff exponent.
+                  comparator is simply deposit × <var>p</var>. Long products are
+                  discrete; <var>m</var><sub>S</sub> is the Short model payoff exponent.
                 </p>
               </section>
 
@@ -1930,14 +1987,15 @@ export default function App() {
                   <div className="maths-card-title">
                     <i>02</i>
                     <div>
-                      <b>Eligible cash-out held as cash</b>
-                      <span>Only eligible Long cash-out remains fixed</span>
+                      <b>Long products</b>
+                      <span>Cashback routing is separate from product selection</span>
                     </div>
                   </div>
                   <div className="equation-stack">
-                    <code>c<sub>L</sub> = LTV<sub>L</sub> ≥ 75% ? 0.5 : 0</code>
-                    <code>L<sub>cash</sub>(p) = c<sub>L</sub> + (1 − c<sub>L</sub>)p<sup>m<sub>L</sub></sup></code>
-                    <code>S(p) = 0.5 + 0.5p + 0.5m<sub>S</sub> ÷ p − 0.5m<sub>S</sub></code>
+                    <code>L<sub>50% LTV</sub>(p) = p</code>
+                    <code>L<sub>cashback,cash</sub>(p) = 0.5 + 0.5p<sup>2</sup></code>
+                    <code>L<sub>cashback,spot</sub>(p) = 0.5p + 0.5p<sup>2</sup></code>
+                    <code>L<sub>75% LTV</sub>(p) = p<sup>2</sup></code>
                   </div>
                 </section>
 
@@ -1945,23 +2003,25 @@ export default function App() {
                   <div className="maths-card-title">
                     <i>03</i>
                     <div>
-                      <b>Eligible cash-out reinvested in spot</b>
-                      <span>Only eligible Long cash-out moves with the {assetLabelLower}</span>
+                      <b>Short products</b>
+                      <span>The same Cashback partition is available on Short</span>
                     </div>
                   </div>
                   <div className="equation-stack">
-                    <code>L<sub>spot</sub>(p) = c<sub>L</sub>p + (1 − c<sub>L</sub>)p<sup>m<sub>L</sub></sup></code>
-                    <code>Short V4 generates no cash-out</code>
+                    <code>S<sub>50% LTV</sub>(p) = S<sub>m=1</sub>(p)</code>
+                    <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5S<sub>m=2</sub>(p)</code>
+                    <code>S<sub>cashback,spot</sub>(p) = 0.5p + 0.5S<sub>m=2</sub>(p)</code>
+                    <code>S<sub>75% LTV</sub>(p) = S<sub>m=2</sub>(p)</code>
                   </div>
                 </section>
               </div>
 
               <section className="maths-assumptions">
                 <div>
-                  <small>PEAPODS LF REFERENCE</small>
-                  <strong>50% LTV → 2.00× LF</strong>
-                  <strong>66.67% LTV → 2.33× LF</strong>
-                  <strong>75% LTV → 2.50× LF</strong>
+                  <small>USER-FACING PRODUCTS</small>
+                  <strong>50% LTV</strong>
+                  <strong>75% LTV Cashback</strong>
+                  <strong>75% LTV</strong>
                   <small>MODEL PAYOFF EXPONENT</small>
                   <strong>50% LTV → m = 1.00</strong>
                   <strong>75% LTV → m = 2.00</strong>
@@ -1973,6 +2033,10 @@ export default function App() {
                     <li>
                       Long and short LTVs are independently set and assumed to
                       be maintained through rebalancing.
+                    </li>
+                    <li>
+                      On either side, Cashback partitions the eligible curve once;
+                      the 75% LTV product keeps the complete eligible curve in V4. Nothing is recursively layered.
                     </li>
                     <li>Price-only, static and path-independent.</li>
                     <li>
@@ -2108,15 +2172,22 @@ export default function App() {
             <section className="compact-control cashback-degen-control">
               <div className="section-label"><b>CASHBACK</b></div>
               {mode === "manual" ? <div className="segments wide cashback-segments">
-                <button className={manualConfig.longMode === "2.5x-cashback" ? "on" : ""} onClick={() => update("longMode", "2.5x-cashback")}>Cashback on</button>
-                <button className={manualConfig.longMode === "2.5x-looped" ? "on" : ""} onClick={() => update("longMode", "2.5x-looped")}>Looped</button>
-              </div> : <div className="segments wide cashback-segments">
-                <button className={cashbackPreference === "cash" ? "on" : ""} disabled={longLtvLimit < maxLtv} onClick={() => { setLongLtvLimit(maxLtv); setCashbackPreference("cash"); }}>Cashback</button>
-                <button className={cashbackPreference === "spot" ? "on" : ""} disabled={longLtvLimit < maxLtv} onClick={() => { setLongLtvLimit(maxLtv); setCashbackPreference("spot"); }}>Looped</button>
-                <button className={cashbackPreference === "optimise" ? "on" : ""} onClick={() => setCashbackPreference("optimise")}>Auto</button>
+                <button className={manualConfig.cashbackMode === "cash" ? "on" : ""} onClick={() => update("cashbackMode", "cash")}>Cash</button>
+                <button className={manualConfig.cashbackMode === "spot" ? "on" : ""} onClick={() => update("cashbackMode", "spot")}>Spot asset</button>
+              </div> : <div className="cashback-policy-controls">
+                <div className="segments wide cashback-segments">
+                  <button className={cashbackPolicy === "off" ? "on" : ""} onClick={() => setCashbackPolicy("off")}>Off</button>
+                  <button className={cashbackPolicy === "forced" ? "on" : ""} onClick={() => setCashbackPolicy("forced")}>Forced</button>
+                  <button className={cashbackPolicy === "auto" ? "on" : ""} onClick={() => setCashbackPolicy("auto")}>Auto</button>
+                </div>
+                <div className={`segments wide cashback-segments ${cashbackPolicy === "off" ? "cashout-disabled" : ""}`}>
+                  <button className={cashbackRouting === "cash" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("cash")}>Cash</button>
+                  <button className={cashbackRouting === "spot" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("spot")}>Spot asset</button>
+                  <button className={cashbackRouting === "auto" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("auto")}>Auto</button>
+                </div>
               </div>}
             </section>
-            {false && <>
+            {/* Retired Cash-out and Degen controls.
             <section className="compact-control cashback-degen-control">
               <div className="section-label">
                 <b>CASH-OUT &amp; DEGEN</b>
@@ -2276,7 +2347,7 @@ export default function App() {
                 </label>
               </div>}
             </section>
-            </>}
+            */}
           </div>
 
           {mode === "manual" && (
@@ -2310,24 +2381,16 @@ export default function App() {
               <section>
                 <div className="section-label">
                   <b>LEVERAGE</b>
-                  <span>Up to 75% LTV / 2.50× LF</span>
+                  <span>Up to 75% LTV</span>
                 </div>
                 <label className="field-label">LONG PRODUCT</label>
                 <div className="segments wide cashback-segments">
                   {(["2x", "2.5x-cashback", "2.5x-looped"] as const).map((longMode) => <button key={longMode} className={config.longMode === longMode ? "on" : ""} onClick={() => update("longMode", longMode)}>{longModeLabel(longMode)}</button>)}
                 </div>
-                {false && <Slider label="" value={0} min={0} max={0} onChange={() => undefined}
-                  detail={`${peapodsLeverageFactor(config.longLtv).toFixed(2)}× LF`}
-                  accent="amber"
-                />}
-                <label className="field-label">SHORT LTV</label>
+                <label className="field-label">SHORT PRODUCT</label>
                 <div className="segments wide cashback-segments">
-                  {([0.5, 0.75] as const).map((shortLtv) => <button key={shortLtv} className={config.shortLtv === shortLtv ? "on" : ""} onClick={() => update("shortLtv", shortLtv)}>{formatLtv(shortLtv)} · {peapodsLeverageFactor(shortLtv).toFixed(2)}×</button>)}
+                  {(["2x", "2.5x-cashback", "2.5x-looped"] as const).map((shortMode) => <button key={shortMode} className={config.shortMode === shortMode ? "on" : ""} onClick={() => update("shortMode", shortMode)}>{shortModeLabel(shortMode)}</button>)}
                 </div>
-                {false && <Slider label="" value={0} min={0} max={0} onChange={() => undefined}
-                  detail={`${peapodsLeverageFactor(config.shortLtv).toFixed(2)}× LF`}
-                  accent="violet"
-                />}
               </section>
             </div>
           )}
@@ -2346,13 +2409,13 @@ export default function App() {
                     {leverageLimitsExpanded && <div className="leverage-limit-editor">
                       <label className="field-label">LONG</label>
                       <div className="segments wide cashback-segments">
-                        <button className={longLtvLimit < maxLtv ? "on" : ""} onClick={() => { setLongLtvLimit(50); setCashbackPreference("optimise"); }}>2.0×</button>
-                        <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>2.5×</button>
+                        <button className={longLtvLimit < maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(50)}>50% LTV</button>
+                        <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>75% LTV</button>
                       </div>
                       <label className="field-label">SHORT</label>
                       <div className="segments wide cashback-segments">
-                        <button className={shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(50)}>2.0×</button>
-                        <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>2.5×</button>
+                        <button className={shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(50)}>50% LTV</button>
+                        <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>75% LTV</button>
                       </div>
                       <button type="button" className="reset-leverage-limits" onClick={() => { setLongLtvLimit(maxLtv); setShortLtvLimit(maxLtv); setLeverageLimitsExpanded(false); }}>RESET TO AUTO</button>
                     </div>}
@@ -2368,6 +2431,7 @@ export default function App() {
                     detail=""
                     accent="risk"
                     signedDisplay
+                    deferRangeCommit
                   />
                 </section>
                 <label className="switch precision-switch breakeven-required">
@@ -2651,8 +2715,8 @@ export default function App() {
                       <b>{longModeLabel(lastRun.result.longMode ?? "2x")}</b>
                     </span>}
                     {lastRun.result.longAllocation < 1 - 1e-12 && <span>
-                      SHORT LTV
-                      <b>{formatLtv(lastRun.result.shortLtv)}</b>
+                      SHORT PRODUCT
+                      <b>{shortModeLabel(lastRun.result.shortMode ?? "2x")}</b>
                     </span>}
                   </div>
                     </div>
@@ -2691,12 +2755,14 @@ export default function App() {
             <section className="analytical-section summary-position">
               <h3>POSITION BREAKDOWN</h3>
               <div className="position-breakdown-grid">
-                <span className="position-breakdown-label">LONG V4 <small>&middot; {peapodsLeverageFactor(config.longLtv).toFixed(2)}&times; LF</small></span>
+                <span className="position-breakdown-label">LONG V4</span>
+                <small className="position-product-label">{longModeLabel(config.longMode ?? "2x")}</small>
                 <b className="position-capital-value">
                   {money(positionBreakdown.longCapital)}
                   {positionBreakdown.recycledLongCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledLongCapital)})</small>}
                 </b>
-                <span className="position-breakdown-label">SHORT V4 <small>&middot; {peapodsLeverageFactor(config.shortLtv).toFixed(2)}&times; LF</small></span>
+                <span className="position-breakdown-label">SHORT V4</span>
+                <small className="position-product-label">{shortModeLabel(config.shortMode ?? "2x")}</small>
                 <b className="position-capital-value">
                   {money(positionBreakdown.shortCapital)}
                   {positionBreakdown.recycledShortCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledShortCapital)})</small>}
@@ -2705,12 +2771,19 @@ export default function App() {
                   <span>RECYCLED INTO V4</span>
                   <b className="degen-recycled-value">+{money(positionBreakdown.recycledIntoV4)}</b>
                 </>}
-                {config.longAllocation > 1e-12 && config.longMode === "2.5x-cashback" && <>
-                  <span>AVAILABLE CASH-OUT</span>
-                  <b className="cashback-cash-value">{money(positionBreakdown.cashOutAmount)}</b>
+                {positionBreakdown.cashOutAmount > 0 && <>
+                  <span>{config.cashbackMode === "spot" ? "CASHBACK IN SPOT" : "AVAILABLE CASH-OUT"}</span>
+                  {config.cashbackMode === "cash" ? (
+                    <b className="cashback-cash-value">{money(positionBreakdown.cashOutAmount)}</b>
+                  ) : (
+                    <span className="cashback-spot-value">
+                      <b>{positionBreakdown.spotUnits === null ? "SPOT" : `${positionBreakdown.spotUnits.toFixed(2)} ${assetLabel}`}</b>
+                      <small>({money(positionBreakdown.cashOutAmount)})</small>
+                    </span>
+                  )}
                 </>}
-                {config.longAllocation > 1e-12 && config.longMode === "2.5x-looped" && <>
-                  <span>POSITION LOOPED</span>
+                {positionBreakdown.loopedAmount > 0 && <>
+                  <span>RETAINED IN V4</span>
                   <b className="degen-recycled-value">+{money(positionBreakdown.loopedAmount)}</b>
                 </>}
               </div>
@@ -2726,27 +2799,7 @@ export default function App() {
                 </span>
               </div>
             </section>
-            {cashbackCrossover && <section className="analytical-section cashback-crossover" aria-label="Cash-out switch point analysis">
-              <div className="crossover-section-heading">
-                <h3>CASH-OUT SWITCH POINT</h3>
-                <span className="comparison-settings crossover-objective-tag">BULLISH</span>
-              </div>
-              <div className="analytical-stat-grid crossover-switch-grid">
-                <span>{cashbackCrossover.becomesOptimal === "spot" ? "Spot" : "Cash"} becomes optimal at a<br />drawdown limit of</span>
-                <b><CrossoverValue value={-cashbackCrossover.crossoverDrawdown * 100} suffix="%" /></b>
-                <span>Current &rarr; switch</span>
-                <b><CrossoverValue value={-cashbackCrossover.currentDrawdown * 100} suffix="%" />{" "}<span className="crossover-output-arrow">&rarr;</span>{" "}<CrossoverValue value={-cashbackCrossover.crossoverDrawdown * 100} suffix="%" /></b>
-                <span>Change</span><b><CrossoverValue value={cashbackCrossover.changePts} suffix="pts" /></b>
-              </div>
-              <h4 className="crossover-subheading">TARGET PAYOFF</h4>
-              <div className="analytical-stat-grid crossover-outcome-grid">
-                <span>Current &rarr; switch</span>
-                <b><CrossoverValue value={cashbackCrossover.currentPayoff} suffix="%" />{" "}<span className="crossover-output-arrow">&rarr;</span>{" "}<CrossoverValue value={cashbackCrossover.switchPayoff} suffix="%" /></b>
-                <span>{cashbackCrossover.payoffDeltaPts < -0.05 ? "Cost" : "Gain"}</span><b><CrossoverValue value={cashbackCrossover.payoffDeltaPts} suffix="pts" /></b>
-              </div>
-              <h4 className="crossover-subheading">TRADE-OFF</h4>
-              <p className="crossover-tradeoff">{crossoverTradeoffText(cashbackCrossover)}</p>
-            </section>}
+            {productRoutingDecision && <ProductRoutingDecisionBlock decision={productRoutingDecision} />}
             {objectiveAnalysis && <ObjectiveAnalysisBlock analysis={objectiveAnalysis} />}
           </div>
           <div className={`panel chart-panel${stalePanelActive ? " is-stale" : ""}`}>
@@ -2789,6 +2842,24 @@ export default function App() {
                   </button>
                 </div>
                 <div className="chart-series-controls">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showLongSeries}
+                      disabled={!hasLong}
+                      onChange={(e) => setChartSeriesVisible("long", e.target.checked)}
+                    />{" "}
+                    Long component
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showShortSeries}
+                      disabled={!hasShort}
+                      onChange={(e) => setChartSeriesVisible("short", e.target.checked)}
+                    />{" "}
+                    Short component
+                  </label>
                   <label>
                     <input
                       type="checkbox"
@@ -3079,7 +3150,7 @@ export default function App() {
               </ResponsiveContainer>
               </div>
               <div className="scenario-key scenario-series-key chart-series-legend">
-                <span><i className="v4" /> V4 strategy</span>
+                <span><i className="v4" /> V4 strategy combined</span>
                 {showSpot && <span><i className="spot" /> {assetLabel} value - spot</span>}
                 {showLong && <span><i className="long" /> {longControlLabel}</span>}
                 {showShort && <span><i className="short" /> {shortControlLabel}</span>}

@@ -1,4 +1,3 @@
-import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import { optimisePortfolioWithOutcome } from "./optimiser";
 import { OPTIMISER_STATE_MODEL_VERSION } from "./optimisationState";
 import type { ComparisonMode, Objective, OptimiseOptions, OptimiseOutcome } from "./types";
@@ -8,7 +7,6 @@ export interface DefaultOptimisationPreset {
   comparisonMode: ComparisonMode;
   objective: Objective;
   outcome: OptimiseOutcome;
-  crossover: CashbackCrossoverResult | null;
 }
 
 export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION = OPTIMISER_STATE_MODEL_VERSION;
@@ -63,9 +61,8 @@ export function createDefaultOptimisationOptions(
     perpParityPercent: 50,
     debtPosition: { ...DEFAULT_DEBT_POSITION },
     perpPosition: { ...DEFAULT_PERP_POSITION },
-    cashbackMode: "optimise",
-    cashOutEnabled: true,
-    forceCashOut: false,
+    cashbackPolicy: "auto",
+    cashbackRouting: "auto",
     degenEnabled: false,
     degenMode: "x1",
     customRecyclePct: 50,
@@ -88,5 +85,4 @@ export const DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[] =
       comparisonMode,
       objective,
       outcome: optimisePortfolioWithOutcome(createDefaultOptimisationOptions(comparisonMode, objective)),
-      crossover: null,
     })));

@@ -1,8 +1,8 @@
-import type { CashbackCrossoverResult } from "./cashbackCrossover";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
+import type { ProductRoutingDecision } from "./productRoutingDecision";
 import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-08-11-allocated-leg-risk-2";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-08-11-short-cashback-routing-4";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {
@@ -33,7 +33,10 @@ export function createOptimisationSignature(options: OptimiseOptions) {
     maxLtv: options.maxLtv,
     longMaxLtv: options.longMaxLtv ?? options.maxLtv,
     shortMaxLtv: options.shortMaxLtv ?? options.maxLtv,
-    longProductSelection: options.cashbackMode ?? "optimise",
+    cashbackPolicy: options.cashbackPolicy ?? "auto",
+    cashbackRouting: (options.cashbackPolicy ?? "auto") === "off"
+      ? null
+      : options.cashbackRouting ?? "auto",
     requireBreakeven: options.requireBreakeven,
     adverseBreakevenPercent: !options.requireBreakeven
       ? null
@@ -66,7 +69,7 @@ export interface SuccessfulOptimisationResult {
   inputs: Record<string, unknown>;
   result: Config;
   outcome: OptimiseOutcome;
-  crossover: CashbackCrossoverResult | null;
+  productRoutingDecision: ProductRoutingDecision | null;
   objectiveAnalysis: ObjectiveAnalysis | null;
   baseAssetValue: number;
 }

@@ -12,7 +12,6 @@ import {
   createBenchmarkDominanceEvaluator,
   type BenchmarkDominanceResult,
 } from "./benchmarkDominance";
-import type { CashbackFrontierCandidate } from "./cashbackCrossover";
 import {
   runExhaustiveReferenceSearch,
   runExhaustiveSearch,
@@ -21,11 +20,12 @@ import {
 import type {
   AdverseDirection,
   Config,
+  CashbackMode,
   LongV4Mode,
   OptimiseOptions,
   OptimiseOutcome,
   ParityOutcome,
-  SupportedV4Ltv,
+  ShortV4Mode,
   Trough,
 } from "./types";
 
@@ -115,17 +115,23 @@ function permittedProducts(options: OptimiseOptions) {
   let longModes: readonly LongV4Mode[] = longLimit < 0.75
     ? ["2x"]
     : ["2x", "2.5x-cashback", "2.5x-looped"];
-  if (options.cashbackMode === "cash")
-    longModes = longModes.filter((mode) => mode === "2.5x-cashback");
-  if (options.cashbackMode === "spot")
-    longModes = longModes.filter((mode) => mode === "2.5x-looped");
-  const shortLtvs: readonly SupportedV4Ltv[] = shortLimit < 0.75 ? [0.5] : [0.5, 0.75];
-  return { longModes, shortLtvs };
+  let shortModes: readonly ShortV4Mode[] = shortLimit < 0.75
+    ? ["2x"]
+    : ["2x", "2.5x-cashback", "2.5x-looped"];
+  if ((options.cashbackPolicy ?? "auto") === "off") {
+    longModes = longModes.filter((mode) => mode !== "2.5x-cashback");
+    shortModes = shortModes.filter((mode) => mode !== "2.5x-cashback");
+  }
+  const policy = options.cashbackPolicy ?? "auto";
+  const routing = options.cashbackRouting ?? "auto";
+  const cashbackModes: readonly CashbackMode[] = policy === "off"
+    ? ["cash"]
+    : routing === "auto" ? ["cash", "spot"] : [routing];
+  return { longModes, shortModes, cashbackModes };
 }
 
 function optimisePortfolioInternal(
   options: OptimiseOptions,
-  _frontierCandidates?: CashbackFrontierCandidate[],
   reference = false,
 ): OptimiseOutcome {
   validateOptions(options);
@@ -148,7 +154,7 @@ function optimisePortfolioInternal(
   if (options.objective === "benchmarkDominance" && !dominanceEvaluator)
     throw new RangeError("Benchmark dominance range is unavailable for the active comparison");
 
-  const { longModes, shortLtvs } = permittedProducts(options);
+  const { longModes, shortModes, cashbackModes } = permittedProducts(options);
   let best: CandidateEvaluation | null = null;
   let bestRelaxed: CandidateEvaluation | null = null;
   let smallestRelaxedLimit = Infinity;
@@ -214,21 +220,24 @@ function optimisePortfolioInternal(
   const evaluate = (candidate: {
     longAllocation: number;
     longMode: LongV4Mode;
-    shortLtv: SupportedV4Ltv;
+    shortMode: ShortV4Mode;
+    cashbackMode: CashbackMode;
   }): SearchAssessment => {
-    // A forced Cashback or Looped policy describes a real Long product, not a
-    // label that may be attached to a zero-Long portfolio.
-    if (options.cashbackMode !== undefined && options.cashbackMode !== "optimise" && candidate.longAllocation <= EPSILON)
+    const activeCashback =
+      (candidate.longAllocation > EPSILON && candidate.longMode === "2.5x-cashback") ||
+      (candidate.longAllocation < 1 - EPSILON && candidate.shortMode === "2.5x-cashback");
+    if ((options.cashbackPolicy ?? "auto") === "forced" && !activeCashback)
       return { eligible: false, quality: [], boundaryDistances: [] };
 
     const config: Config = {
       deposit: options.deposit,
       longAllocation: candidate.longAllocation,
       longMode: candidate.longMode,
-      shortLtv: candidate.shortLtv,
+      shortMode: candidate.shortMode,
+      shortLtv: candidate.shortMode === "2x" ? 0.5 : 0.75,
       longLtv: candidate.longMode === "2x" ? 0.5 : 0.75,
-      cashbackMode: candidate.longMode === "2.5x-looped" ? "spot" : "cash",
-      cashOutEnabled: candidate.longMode === "2.5x-cashback",
+      cashbackMode: candidate.cashbackMode,
+      cashOutEnabled: activeCashback,
       degenEnabled: false,
       degenMode: "x1",
       customRecyclePct: 0,
@@ -283,18 +292,15 @@ function optimisePortfolioInternal(
   const diagnostics = search({
     finalResolutionPercent: options.searchStepPercent ?? 1,
     longModes,
-    shortLtvs,
+    shortModes,
+    cashbackModes,
     assess: evaluate,
   });
   // Search invokes evaluate synchronously, but TypeScript does not infer
   // assignments made through that callback when narrowing this value.
   const selected = (best ?? bestRelaxed) as CandidateEvaluation | null;
   if (!selected) {
-    const forcedProduct = options.cashbackMode === "cash"
-      ? "Cashback"
-      : options.cashbackMode === "spot"
-        ? "Looped"
-        : null;
+    const forcedProduct = (options.cashbackPolicy ?? "auto") === "forced";
     return {
       status: "no-valid-configuration",
       config: null,
@@ -308,7 +314,7 @@ function optimisePortfolioInternal(
       perpParity: null,
       parity: null,
       failure: forcedProduct
-        ? `No valid configuration can include a positive ${forcedProduct} Long within the active leverage, risk and recovery constraints.`
+        ? "No valid configuration can include a positive Cashback Long or Short within the active leverage, risk and recovery constraints."
         : "No valid configuration satisfies the active product, risk and recovery constraints.",
       diagnostics,
     };
@@ -361,14 +367,7 @@ export function optimisePortfolioWithOutcome(options: OptimiseOptions): Optimise
 /** Production is exhaustive too; this separate entry point protects the
  * validation contract from future search changes. */
 export function optimisePortfolioExhaustiveReference(options: OptimiseOptions): OptimiseOutcome {
-  return optimisePortfolioInternal(options, undefined, true);
-}
-
-export function optimisePortfolioWithCashbackFrontier(options: OptimiseOptions) {
-  return {
-    outcome: optimisePortfolioInternal(options),
-    candidates: [] as CashbackFrontierCandidate[],
-  };
+  return optimisePortfolioInternal(options, true);
 }
 
 export function optimisePortfolio(options: OptimiseOptions): Config {

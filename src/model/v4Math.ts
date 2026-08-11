@@ -1,49 +1,71 @@
-import type { AnalysisRange, Config, LongV4Mode, SupportedV4Ltv, Trough } from "./types";
+import type { AnalysisRange, CashbackMode, Config, LongV4Mode, ShortV4Mode, SupportedV4Ltv, Trough, V4ProductMode } from "./types";
 export const MIN_V4_LTV = 0.5;
 export const MAX_V4_LTV = 0.75;
 export const peapodsLeverageFactor = (ltv: number) => 1 + 2 * ltv;
 export const longLtvForMode = (mode: LongV4Mode): SupportedV4Ltv => mode === "2x" ? 0.5 : 0.75;
+export const shortLtvForMode = (mode: ShortV4Mode): SupportedV4Ltv => mode === "2x" ? 0.5 : 0.75;
 export const clampV4Ltv = (ltv:number) => ltv >= .625 ? .75 : .5;
 export const payoffExponent = (ltv:number) => .5 / (1-ltv);
 export const MAX_V4_PAYOFF_EXPONENT = payoffExponent(MAX_V4_LTV);
 export const MAX_V4_LEVERAGE_FACTOR = peapodsLeverageFactor(MAX_V4_LTV);
-export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "2.0×" : mode === "2.5x-cashback" ? "2.5× Cashback" : "2.5× Looped";
+export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "50% LTV" : mode === "2.5x-cashback" ? "75% LTV Cashback" : "75% LTV";
+export const shortModeLabel = (mode: ShortV4Mode) => longModeLabel(mode);
 export const validP = (p: number) => Math.max(0.000001, p);
 
 /**
- * A 2.5× long makes one 50% cash-out option.  Cashback pays it outside the
- * position; Looped puts that exact amount back in once, so it is 1.5× gross
- * V4 capital with a 0.5× liability.  It is not a second leverage layer.
+ * A 2.5× long makes one 50% cash-out option. Cashback holds half outside the
+ * rebalanced exposure; Looped retains that same half inside the protocol, so
+ * the complete eligible Long follows the p² payoff. No fixed liability or
+ * additional leverage layer is applied.
  */
-export const longValue = (p: number, mode: LongV4Mode | number, legacyMode?: "cash" | "spot") => {
-  if (typeof mode === "number") mode = mode >= .625 ? (legacyMode === "spot" ? "2.5x-looped" : "2.5x-cashback") : "2x";
+export const longValue = (p: number, mode: LongV4Mode | number, routing: CashbackMode = "cash") => {
+  if (typeof mode === "number") mode = mode >= .625 ? (routing === "spot" ? "2.5x-looped" : "2.5x-cashback") : "2x";
   p = validP(p);
   if (mode === "2x") return p;
-  if (mode === "2.5x-cashback") return 0.5 * p ** 2 + 0.5;
-  return 1.5 * p ** 2 - 0.5;
+  if (mode === "2.5x-cashback") return 0.5 * p ** 2 + 0.5 * (routing === "spot" ? p : 1);
+  return p ** 2;
 };
 const normaliseLongMode = (c: Config): LongV4Mode => c.longMode ?? (c.longLtv && c.longLtv >= .625 ? (c.cashOutEnabled === false || c.degenEnabled ? "2.5x-looped" : "2.5x-cashback") : "2x");
-export const longCashOutRate = (mode: LongV4Mode) => mode === "2.5x-cashback" ? 0.5 : 0;
+export const normaliseShortMode = (c: Config): ShortV4Mode => c.shortMode ?? (clampV4Ltv(c.shortLtv) === .75 ? "2.5x-looped" : "2x");
+export const productCashOutRate = (mode: V4ProductMode) => mode === "2.5x-cashback" ? 0.5 : 0;
+export const longCashOutRate = productCashOutRate;
 /** Value of the capital still inside the Long product, normalised to that
  * product's own entry value. External Cashback is deliberately excluded. */
 export const longPositionValue = (p: number, mode: LongV4Mode) => {
   p = validP(p);
   if (mode === "2x") return p;
-  if (mode === "2.5x-cashback") return p ** 2;
-  return 1.5 * p ** 2 - 0.5;
+  return p ** 2;
 };
-export const shortValue = (p: number, ltv: SupportedV4Ltv) => {
+const shortRebalancedValue = (p: number, ltv: SupportedV4Ltv) => {
   p = validP(p); const m = 0.5 / (1 - ltv);
   return 0.5 + 0.5 * p + (0.5 * m) / p - 0.5 * m;
 };
-export interface PortfolioComponents { long: number; short: number; cashOut: number; total: number; }
+export const shortValue = (p: number, mode: ShortV4Mode | SupportedV4Ltv, routing: CashbackMode = "cash") => {
+  if (typeof mode === "number") return shortRebalancedValue(p, mode);
+  if (mode === "2x") return shortRebalancedValue(p, .5);
+  const eligible = shortRebalancedValue(p, .75);
+  if (mode === "2.5x-cashback") return .5 * eligible + .5 * (routing === "spot" ? validP(p) : 1);
+  return eligible;
+};
+export const shortPositionValue = (p: number, mode: ShortV4Mode) => shortRebalancedValue(p, shortLtvForMode(mode));
+export interface PortfolioComponents {
+  long: number;
+  short: number;
+  cashOut: number;
+  cashbackValue: number;
+  insideV4: number;
+  total: number;
+}
 export const portfolioComponents = (p: number, c: Config): PortfolioComponents => {
   p = validP(p);
   const longMode = normaliseLongMode(c);
-  const long = c.longAllocation * longValue(p, longMode);
-  const short = (1 - c.longAllocation) * shortValue(p, clampV4Ltv(c.shortLtv));
-  const cashOut = c.longAllocation * longCashOutRate(longMode);
-  return { long, short, cashOut, total: long + short };
+  const shortMode = normaliseShortMode(c);
+  const long = c.longAllocation * longValue(p, longMode, c.cashbackMode);
+  const short = (1 - c.longAllocation) * shortValue(p, shortMode, c.cashbackMode);
+  const cashOut = c.longAllocation * productCashOutRate(longMode) + (1 - c.longAllocation) * productCashOutRate(shortMode);
+  const total = long + short;
+  const cashbackValue = cashOut * (c.cashbackMode === "spot" ? p : 1);
+  return { long, short, cashOut, cashbackValue, insideV4: total - cashbackValue, total };
 };
 export const portfolioValue = (p: number, c: Config) => portfolioComponents(p, c).total;
 export const portfolioReturn = (p: number, c: Config) => portfolioValue(p, c) - 1;
@@ -69,7 +91,9 @@ export function findWorstComponentDrawdown(c:Config,range:AnalysisRange):Trough 
     troughs.push({p,value:1+drawdown,drawdown});
   }
   if(c.longAllocation<1-1e-12) {
-    const shortTrough=findMinimumOnInterval({...c,longAllocation:0},range.minPriceRatio,range.maxPriceRatio);
+    const mode=normaliseShortMode(c);
+    const positionMode:ShortV4Mode=mode === "2.5x-cashback" ? "2.5x-looped" : mode;
+    const shortTrough=findMinimumOnInterval({...c,longAllocation:0,shortMode:positionMode},range.minPriceRatio,range.maxPriceRatio);
     const drawdown=(1-c.longAllocation)*shortTrough.drawdown;
     troughs.push({p:shortTrough.p,value:1+drawdown,drawdown});
   }
