@@ -9,6 +9,7 @@
     "dev": "concurrently -k \"vite --port 5173 --strictPort\" \"wait-on tcp:5173 && electron .\"",
     "build": "tsc -b && vite build && tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron",
     "build:web": "tsc -p tsconfig.app.json && vite build",
+    "generate:presets": "node scripts/generate-default-optimisation-presets.mjs",
     "test": "vitest run",
     "dist": "npm run dist:win",
     "dist:win": "npm run build && electron-builder --win",

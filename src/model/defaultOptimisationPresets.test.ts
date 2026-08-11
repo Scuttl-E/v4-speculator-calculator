@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultOptimisationOptions,
+  DEFAULT_OPTIMISATION_PRESET_KEYS,
   DEFAULT_OPTIMISATION_PRESETS,
   DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION,
   DEFAULT_OPTIMISER_ANALYSIS_MIN_PERCENT,
@@ -20,8 +21,10 @@ describe("fresh-install optimiser presets", () => {
 
   it("preloads every valid mode and objective combination", () => {
     expect(DEFAULT_OPTIMISATION_PRESETS).toHaveLength(14);
-    expect(new Set(DEFAULT_OPTIMISATION_PRESETS.map(({ comparisonMode, objective }) => `${comparisonMode}:${objective}`)).size)
-      .toBe(14);
+    const generatedKeys = DEFAULT_OPTIMISATION_PRESETS
+      .map(({ comparisonMode, objective }) => `${comparisonMode}:${objective}`);
+    expect(new Set(generatedKeys).size).toBe(14);
+    expect(generatedKeys).toEqual(DEFAULT_OPTIMISATION_PRESET_KEYS);
   });
 
   it("generates every preset from the same current defaults and risk model", () => {

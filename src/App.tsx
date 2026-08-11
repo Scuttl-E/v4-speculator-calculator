@@ -58,10 +58,7 @@ import {
   createObjectiveAnalysis,
   type ObjectiveAnalysis,
 } from "./model/objectiveAnalysis";
-import {
-  createProductRoutingDecision,
-  type ProductRoutingDecision,
-} from "./model/productRoutingDecision";
+import type { ProductRoutingDecision } from "./model/productRoutingDecision";
 import {
   createDefaultOptimisationOptions,
   DEFAULT_OPTIMISATION_PRESETS,
@@ -401,19 +398,8 @@ const createDefaultOptimisationCache = () => {
       inputs: defaultOptimisationInputs(options),
       result: preset.outcome.config,
       outcome: preset.outcome,
-      productRoutingDecision: createProductRoutingDecision(options, preset.outcome),
-      objectiveAnalysis: createObjectiveAnalysis({
-        objective: preset.objective,
-        config: preset.outcome.config,
-        spotParityPercent: options.spotParityPercent,
-        debtParityPercent: options.debtParityPercent,
-        perpParityPercent: options.perpParityPercent,
-        debtPosition: options.debtPosition,
-        perpPosition: options.perpPosition,
-        bearishTargetPercent: options.bearishTargetPercent ?? -75,
-        analysisRange: options.analysisRange,
-        comparisonMode: preset.comparisonMode,
-      }),
+      productRoutingDecision: preset.productRoutingDecision,
+      objectiveAnalysis: preset.objectiveAnalysis,
       baseAssetValue: 0,
     });
   }
@@ -1203,7 +1189,7 @@ export default function App() {
   const displayComparisonIsValid = mode === "optimise" && displayedResult
     ? true
     : pendingComparisonIsValid;
-  const optimisationCache = useRef(createDefaultOptimisationCache());
+  const [optimisationCache] = useState(createDefaultOptimisationCache);
   const lastRun = displayedResult;
   const optimising = runState.kind === "running";
   const maxLtv = MAX_V4_LTV * 100;
@@ -1244,12 +1230,26 @@ export default function App() {
       recycledIntoV4: 0,
     };
   }, [config, displayBaseAssetValue, displayComparisonMode, displayDebtPosition.assetPrice, displayPerpState.assetPrice]);
+  const xAxisTicks = useMemo(
+    () => [
+      minMove,
+      (minMove * 2) / 3,
+      minMove / 3,
+      0,
+      maxMove / 4,
+      maxMove / 2,
+      (maxMove * 3) / 4,
+      maxMove,
+    ],
+    [minMove, maxMove],
+  );
   const points = useMemo(
     () => {
       const moves = Array.from(
         { length: 180 },
         (_, i) => minMove + ((maxMove - minMove) * i) / 179,
       );
+      moves.push(...xAxisTicks);
       const liquidationMove = displayComparisonMode === "lending"
         ? displayDebtSummary.liquidationAssetMove
         : displayComparisonMode === "perp"
@@ -1286,7 +1286,7 @@ export default function App() {
         };
       });
     },
-    [config, displayComparisonMode, displayDebtPosition, displayDebtSummary.liquidationAssetMove, minMove, maxMove, displayPerpState, displayPerpSummary.liquidationAssetMove],
+    [config, displayComparisonMode, displayDebtPosition, displayDebtSummary.liquidationAssetMove, minMove, maxMove, displayPerpState, displayPerpSummary.liquidationAssetMove, xAxisTicks],
   );
   const yAxisMax = useMemo(() => {
     const highest = Math.max(
@@ -1385,13 +1385,13 @@ export default function App() {
   const resetActiveComparison = () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
-    for (const [signature, result] of optimisationCache.current) {
+    for (const [signature, result] of optimisationCache) {
       if ((result.options.comparisonMode ?? "base") === comparisonMode)
-        optimisationCache.current.delete(signature);
+        optimisationCache.delete(signature);
     }
     for (const [signature, result] of createDefaultOptimisationCache()) {
       if ((result.options.comparisonMode ?? "base") === comparisonMode)
-        optimisationCache.current.set(signature, result);
+        optimisationCache.set(signature, result);
     }
     setDisplayedResultsByMode((current) => ({ ...current, [comparisonMode]: null }));
     setRunState({ kind: "idle" });
@@ -1575,9 +1575,12 @@ export default function App() {
   useLayoutEffect(() => {
     if (mode !== "optimise") return;
     setDisplayedResultsByMode((current) => {
+      // Pending controls only invalidate the existing result. They must not
+      // replace the displayed strategy until Optimise is explicitly run.
+      if (current[comparisonMode]) return current;
       const restored = restoreCachedResult(
         current[comparisonMode],
-        optimisationCache.current,
+        optimisationCache,
         pendingSignature,
         comparisonMode,
       );
@@ -1590,7 +1593,7 @@ export default function App() {
         ? { kind: "idle" }
         : current,
     );
-  }, [comparisonMode, mode, pendingSignature]);
+  }, [comparisonMode, mode, optimisationCache, pendingSignature]);
   useEffect(() => () => {
     optimiserWorkerRef.current?.terminate();
     optimiserWorkerRef.current = null;
@@ -1658,7 +1661,7 @@ export default function App() {
   };
   const runOptimisation = () => {
     if (optimising || !pendingComparisonIsValid) return;
-    const cached = optimisationCache.current.get(pendingSignature);
+    const cached = optimisationCache.get(pendingSignature);
     if (cached) {
       setDisplayedResultsByMode((current) => ({
         ...current,
@@ -1726,7 +1729,7 @@ export default function App() {
         const displayedForMode = current[jobComparisonMode];
         const next = completeOptimisation(
           displayedForMode,
-          optimisationCache.current,
+          optimisationCache,
           completed,
           pendingSignaturesRef.current[jobComparisonMode],
         );
@@ -3024,16 +3027,7 @@ export default function App() {
                     dataKey="move"
                     type="number"
                     domain={[minMove, maxMove]}
-                    ticks={[
-                      minMove,
-                      (minMove * 2) / 3,
-                      minMove / 3,
-                      0,
-                      maxMove / 4,
-                      maxMove / 2,
-                      (maxMove * 3) / 4,
-                      maxMove,
-                    ]}
+                    ticks={xAxisTicks}
                     tickFormatter={(v) =>
                       `${v > 0 ? "+" : ""}${Math.round(v)}%`
                     }
