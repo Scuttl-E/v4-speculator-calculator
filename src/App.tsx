@@ -2995,7 +2995,7 @@ export default function App() {
                   />}
                   <Area
                     dataKey="v4"
-                    name="V4 strategy"
+                    name="V4 combined position"
                     stroke="#e18a4a"
                     fill="url(#v4Fill)"
                     fillOpacity={1}
