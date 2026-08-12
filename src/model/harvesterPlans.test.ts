@@ -10,6 +10,7 @@ import {
   evaluateEqualCashCandidate,
   evaluateEqualRateCandidate,
   evaluateHarvestPlan,
+  generateCheckpointMoves,
   generateAllHarvesterPlans,
   generateCurrentHarvesterPlan,
   generateEarliestRecoveryHarvestPlan,
@@ -51,9 +52,10 @@ const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
 
 const inputs = (patch: Partial<HarvesterGenerationInputs> = {}): HarvesterGenerationInputs => ({
   benchmark: "spot",
-  finalTargetPercent: 500,
-  intervalPercent: 100,
-  pointCount: 4,
+    finalTargetPercent: 500,
+    intervalPercent: 100,
+    firstCheckpointPercent: null,
+    pointCount: 4,
   defaultHarvestPercent: 100,
   ...patch,
 });
@@ -152,6 +154,13 @@ describe("parity-relative Default Harvest", () => {
     expect(maximumCheckpointCount(500, 50)).toBe(9);
     expect(maximumCheckpointCount(200, 100)).toBe(1);
     expect(maximumCheckpointCount(10, 10)).toBe(0);
+  });
+
+  it("starts generated checkpoints at the selected first checkpoint", () => {
+    expect(generateCheckpointMoves(500, 100, 3, 200)).toEqual([200, 300, 400]);
+    expect(maximumCheckpointCount(500, 100, 200)).toBe(3);
+    const plans = generateAllHarvesterPlans(snapshot(), inputs({ firstCheckpointPercent: 200, pointCount: 3 }));
+    expect(Object.values(plans).every((plan) => plan?.points[0]?.movePercent === 200)).toBe(true);
   });
 
   it("exposes only the required preset values", () => {

@@ -62,6 +62,7 @@ export interface HarvesterGenerationInputs {
   benchmark: HarvesterBenchmark;
   finalTargetPercent: number;
   intervalPercent: number;
+  firstCheckpointPercent: number | null;
   pointCount: number;
   defaultHarvestPercent: number;
 }
@@ -500,25 +501,32 @@ export const generateCheckpointMoves = (
   finalTargetPercent: number,
   intervalPercent: number,
   pointCount: number,
+  firstCheckpointPercent: number | null = null,
 ) => {
-  const count = Math.min(maximumCheckpointCount(finalTargetPercent, intervalPercent), Math.max(0, Math.floor(pointCount)));
-  const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
-  const moves: number[] = [];
-  for (let index = 1; index <= count; index += 1) {
-    const move = interval * index;
-    if (move >= finalTargetPercent) break;
-    moves.push(move);
-  }
-  return moves;
+  const available = availableCheckpointMoves(finalTargetPercent, intervalPercent);
+  const firstIndex = firstCheckpointPercent === null ? 0 : available.indexOf(firstCheckpointPercent);
+  if (firstIndex < 0) return [];
+  return available.slice(firstIndex, firstIndex + Math.max(0, Math.floor(pointCount)));
 };
 
-export const maximumCheckpointCount = (
+export const availableCheckpointMoves = (
   finalTargetPercent: number,
   intervalPercent: number,
 ) => {
   const target = Math.max(0, finalTargetPercent);
   const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
-  return Math.max(0, Math.floor((target - HARVESTER_MOVE_STEP) / interval));
+  const count = Math.max(0, Math.floor((target - HARVESTER_MOVE_STEP) / interval));
+  return Array.from({ length: count }, (_, index) => interval * (index + 1));
+};
+
+export const maximumCheckpointCount = (
+  finalTargetPercent: number,
+  intervalPercent: number,
+  firstCheckpointPercent: number | null = null,
+) => {
+  const available = availableCheckpointMoves(finalTargetPercent, intervalPercent);
+  const firstIndex = firstCheckpointPercent === null ? 0 : available.indexOf(firstCheckpointPercent);
+  return firstIndex < 0 ? 0 : available.length - firstIndex;
 };
 
 interface ScheduleAttempt {
@@ -575,7 +583,7 @@ export const generateUserHarvestPlan = (
   snapshot: HarvesterSnapshot,
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
-  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const rate = Math.max(0, inputs.defaultHarvestPercent) / 100;
   const attempt = buildSchedule(
     snapshot,
@@ -607,7 +615,7 @@ export const generateEqualRateHarvestPlan = (
   snapshot: HarvesterSnapshot,
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
-  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
   const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
   const baselineSurpluses = baselineResult.points.map((point) => Math.max(0, point.surplusBefore));
@@ -651,7 +659,7 @@ export const evaluateEqualRateCandidate = (
   inputs: HarvesterGenerationInputs,
   ratePercent: number,
 ) => {
-  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
   const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
   const baselineSurpluses = baselineResult.points.map((point) => Math.max(0, point.surplusBefore));
@@ -675,7 +683,7 @@ export const generateEqualCashHarvestPlan = (
   snapshot: HarvesterSnapshot,
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
-  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
   const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
   const participatingIndices = new Set(baselineResult.points
@@ -713,7 +721,7 @@ export const evaluateEqualCashCandidate = (
   inputs: HarvesterGenerationInputs,
   withdrawal: number,
 ) => {
-  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
   const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
   const participatingIndices = baselineResult.points
@@ -736,7 +744,7 @@ export const generateEarliestRecoveryHarvestPlan = (
   snapshot: HarvesterSnapshot,
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
-  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const policy = buildSchedule(
     snapshot,
     inputs.benchmark,

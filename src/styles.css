@@ -3304,16 +3304,27 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-legend .active { color: #e18a4a; }
 .harvester-legend .wealth { color: #78b8aa; }
 .harvester-legend .benchmark { color: #c4b17d; }
-.harvester-bottom { border-top: 1px solid #ffffff0d; background: #101111a8; }
+.harvester-bottom {
+  height: 307px;
+  display: grid;
+  grid-template-columns: minmax(560px, 580px) minmax(330px, 1.05fr) 58px minmax(450px, 1.45fr);
+  border-top: 1px solid #ffffff0d;
+  background: #101111a8;
+}
 .harvester-control-row {
-  min-height: 77px;
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
   display: flex;
+  flex-wrap: wrap;
+  align-content: space-between;
   align-items: flex-end;
   gap: 8px;
-  padding: 7px 13px;
-  border-bottom: 1px solid #ffffff0b;
-  overflow-x: auto;
+  padding: 14px 8px;
+  border: 0;
+  overflow: visible;
 }
+.harvester-control-row-break { flex-basis: 100%; height: 0; }
 .harvester-control-row > label,
 .harvester-exact-controls label { min-width: 90px; display: grid; gap: 6px; }
 .harvester-control-row label > span,
@@ -3342,6 +3353,13 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-unit-input em { position: absolute; right: 9px; color: #90867d; font: normal 11px Atelier; pointer-events: none; }
 .harvester-unit-input.money em { left: 8px; right: auto; }
 .harvester-unit-input.money input { padding-right: 8px; padding-left: 18px; }
+.harvester-combo { position: relative; display: flex; width: 100px; min-width: 100px; }
+.harvester-combo .harvester-unit-input { flex: 1; min-width: 0; }
+.harvester-combo .harvester-unit-input input { min-width: 0; border-radius: 4px 0 0 4px; }
+.harvester-combo .harvester-selector-button { position: relative; display: grid; place-items: center; width: 28px; min-width: 28px; padding: 0; border-left: 0; border-radius: 0 4px 4px 0; }
+.harvester-combo .harvester-selector-button::before { content: ""; width: 8px; height: 8px; border-right: 2px solid #d8b38e; border-bottom: 2px solid #d8b38e; transform: rotate(45deg) translate(-2px, -2px); }
+.harvester-selector-menu { position: absolute; z-index: 5; top: calc(100% + 4px); right: 0; display: grid; width: 100%; max-height: 180px; overflow-y: auto; padding: 3px; border: 1px solid #d4874c4d; border-radius: 4px; background: #171514; box-shadow: 0 8px 18px #0008; }
+.harvester-selector-menu button { height: 27px !important; padding: 0 8px !important; border: 0; border-radius: 2px; text-align: left; }
 .harvester-action-group { min-width: 112px; display: grid; gap: 3px; }
 .harvester-action-group button { width: 100%; }
 .harvester-action-group small { max-width: 160px; color: #a99e93; font-size: 8px; line-height: 1.1; }
@@ -3377,17 +3395,21 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-exact-controls label:nth-child(2) { min-width: 135px; }
 .harvester-exact-controls .danger { color: #d98b79; }
 .harvester-output-row {
-  height: 230px;
-  min-height: 185px;
-  max-height: 230px;
-  display: grid;
-  grid-template-columns: minmax(250px, .8fr) minmax(410px, 1.25fr) minmax(520px, 1.7fr);
-  gap: 0;
-  overflow: hidden;
+  display: contents;
 }
 .harvester-output-row > section { min-width: 0; min-height: 0; padding: 14px 16px; }
 .harvester-output-row > section + section { border-left: 1px solid #ffffff0c; }
-.harvester-output-row > section > small { color: var(--bright); font: 600 11px Atelier; letter-spacing: .075em; }
+.secured-capital { display: none; }
+.harvester-final-metrics { grid-column: 2; grid-row: 1; }
+.harvester-plan-actions { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 9px !important; }
+.harvester-plan-actions button { width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff12; border-radius: 7px; background: #ffffff08; color: #cdbda9; font: 600 20px Atelier; line-height: 1; cursor: pointer; }
+.harvester-plan-actions button:hover:not(:disabled) { color: var(--cream); background: #d4874c1c; }
+.harvester-plan-actions button.armed { border-color: #e39a62; background: #d4874c32; color: #ffe3ca; box-shadow: 0 0 0 2px #d4874c17; }
+.harvester-plan-actions button.danger { color: #d98b79; }
+.harvester-plan-actions button.placeholder { color: #746d66; cursor: default; }
+.harvester-plan-actions button:disabled:not(.placeholder) { opacity: .4; cursor: default; }
+.harvester-ledger { grid-column: 4; grid-row: 1; border-left: 0 !important; }
+.harvester-output-row > section > small { color: var(--bright); font: 600 12px Atelier; letter-spacing: .075em; }
 .secured-capital > strong { display: block; margin: 4px 0 7px; color: #80b8a8; font: 600 29px var(--mono); letter-spacing: -.02em; }
 .secured-capital > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .secured-capital span { color: #a99e93; font-size: 11px; }
@@ -3397,9 +3419,23 @@ main.web-app .chart-panel .chart-series-legend {
 .secured-capital progress { width: 170px; height: 5px; border: 0; accent-color: #78b8aa; vertical-align: middle; }
 .secured-capital > em { margin-left: 8px; color: #92877d; font: normal 10px var(--mono); }
 .secured-capital > em.cashback-excluded { display: block; margin: 6px 0 0; color: #bd9b7f; font-family: Atelier; }
-.harvester-final-metrics > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px 15px; margin-top: 11px; }
-.harvester-final-metrics span { min-width: 0; color: #a99e93; font-size: 11px; line-height: 1.2; }
-.harvester-final-metrics b { display: block; margin-top: 2px; overflow: hidden; color: #e0d3c6; font: 600 14px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.harvester-final-metrics { display: flex; min-height: 0; flex-direction: column; }
+.harvester-final-summary-card { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+.harvester-final-summary-card span { display: flex; justify-content: space-between; gap: 10px; color: #a99e93; font-size: 13px; }
+.harvester-final-summary-card b { overflow: hidden; color: #e0d3c6; font: 600 15px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.harvester-final-summary-card .benchmark { margin-bottom: 2px; padding-bottom: 7px; border-bottom: 1px solid #ffffff0d; color: #c4b17d; }
+.harvester-final-summary-card .active,
+.harvester-final-summary-card .harvested { color: #e18a4a; }
+.harvester-final-summary-card .v4-delta { font-size: 12px; font-style: italic; font-weight: 400; }
+.harvester-final-summary-card .v4-delta b { color: inherit; font-size: 14px; font-style: italic; font-weight: 500; }
+.harvester-final-summary-card .cashback { color: #d7a276; }
+.harvester-final-summary-card > strong { display: flex; justify-content: space-between; gap: 10px; margin-top: 2px; padding-top: 7px; border-top: 1px solid #ffffff0d; font: 600 16px var(--mono); }
+.harvester-final-summary-card > strong b { color: inherit; font: inherit; }
+.harvester-final-summary-card .initial-capital,
+.harvester-final-summary-card .recovery-status { margin: 0; color: #a99e93; font-size: 11px; line-height: 1.25; }
+.harvester-final-summary-card .initial-capital { margin-top: auto; }
+.harvester-final-summary-card .initial-capital b,
+.harvester-final-summary-card .recovery-status b { color: #e0d3c6; font: 600 11px var(--mono); }
 .harvester-ledger { display: flex; min-height: 0; flex-direction: column; }
 .harvester-ledger-scroll { min-height: 0; flex: 1 1 auto; margin-top: 9px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; touch-action: pan-y; }
 .harvester-ledger-scroll::-webkit-scrollbar { width: 0; height: 0; }
@@ -3409,8 +3445,11 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-ledger td:first-child { text-align: left; }
 .harvester-ledger td { padding: 6px 7px; border-top: 1px solid #ffffff09; color: #c9bdb1; text-align: right; white-space: nowrap; cursor: pointer; }
 .harvester-ledger tr.selected td { color: #f2c49f; background: #d4874c0d; }
-.harvester-plan-table table { table-layout: fixed; }
-.harvester-plan-table th { width: 25%; }
+.harvester-plan-table table { min-width: 436px; table-layout: fixed; }
+.harvester-plan-table col.checkpoint,
+.harvester-plan-table col.harvest-rate { width: 78px; }
+.harvester-plan-table col.withdrawn { width: 165px; }
+.harvester-plan-table col.v4-after { width: 115px; }
 .harvester-plan-table td { cursor: default; }
 .harvester-plan-table td b { color: #e3d5c7; font-weight: 600; }
 .harvester-plan-table td > small { color: #817870; font-size: 8px; }
