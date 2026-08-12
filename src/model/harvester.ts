@@ -845,6 +845,52 @@ export const generateCurrentHarvesterPlan = (
   kind: HarvesterPlanKind,
 ): HarvesterPlans => ({ ...plans, [kind]: createHarvesterPlanState(generateHarvesterPlan(snapshot, inputs, kind), inputs) });
 
+const hasPointOverride = (point: HarvestPoint, baseline: HarvestPoint) =>
+  Math.abs(point.movePercent - baseline.movePercent) > EPSILON ||
+  Math.abs(point.activeAfter - baseline.activeAfter) > EPSILON;
+
+export const regenerateHarvesterPlanPreservingEdits = (
+  state: HarvesterPlanState | null,
+  snapshot: HarvesterSnapshot,
+  inputs: HarvesterGenerationInputs,
+  kind: HarvesterPlanKind,
+): HarvesterPlanState => {
+  const regenerated = createHarvesterPlanState(generateHarvesterPlan(snapshot, inputs, kind), inputs);
+  if (!state?.modified) return regenerated;
+
+  const currentById = new Map(state.points.map((point) => [point.id, point]));
+  const overridesByIndex = new Map(state.baseline.flatMap((baselinePoint, index) => {
+    const currentPoint = currentById.get(baselinePoint.id);
+    const targetPoint = regenerated.points[index];
+    return currentPoint && targetPoint && hasPointOverride(currentPoint, baselinePoint)
+      ? [[index, { ...targetPoint, movePercent: currentPoint.movePercent, activeAfter: currentPoint.activeAfter }] as const]
+      : [];
+  }));
+  const baselineIds = new Set(state.baseline.map((point) => point.id));
+  const customPoints = state.points.filter((point) => !baselineIds.has(point.id) && point.movePercent < inputs.finalTargetPercent);
+  const merged = regenerated.points.map((point, index) => overridesByIndex.get(index) ?? point);
+  const points = constrainHarvestPoints(snapshot, inputs.benchmark, inputs.finalTargetPercent, [...merged, ...customPoints]);
+  const selectedPointId = points.some((point) => point.id === state.selectedPointId)
+    ? state.selectedPointId
+    : points[0]?.id ?? null;
+  return {
+    ...regenerated,
+    points,
+    harvestRatePercent: state.harvestRatePercent,
+    selectedPointId,
+    modified: !harvestPointsEqual(points, regenerated.baseline) || Math.abs(state.harvestRatePercent - regenerated.baselineHarvestRatePercent) > EPSILON,
+  };
+};
+
+export const regenerateHarvesterPlansPreservingEdits = (
+  plans: HarvesterPlans,
+  snapshot: HarvesterSnapshot,
+  inputs: HarvesterGenerationInputs,
+): HarvesterPlans => Object.fromEntries(HARVESTER_PLAN_KINDS.map((kind) => [
+  kind,
+  regenerateHarvesterPlanPreservingEdits(plans[kind], snapshot, inputs, kind),
+])) as HarvesterPlans;
+
 export const harvestPointsEqual = (left: HarvestPoint[], right: HarvestPoint[], tolerance = 1e-7) =>
   left.length === right.length && left.every((point, index) =>
     point.id === right[index].id &&

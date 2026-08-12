@@ -15,7 +15,33 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac"
   },
-  "dependencies": { "@vitejs/plugin-react": "latest", "recharts": "latest", "react": "latest", "react-dom": "latest" },
-  "devDependencies": { "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest", "concurrently": "latest", "electron": "latest", "electron-builder": "latest", "tsup": "latest", "typescript": "latest", "vite": "latest", "vitest": "latest", "wait-on": "latest" },
-  "build": { "appId": "com.v4speculator.calculator", "productName": "V4 Speculator Calculator", "files": ["dist/**", "dist-electron/**", "package.json"] }
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "geist": "1.7.2",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "concurrently": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "tsup": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest",
+    "wait-on": "latest"
+  },
+  "build": {
+    "appId": "com.v4speculator.calculator",
+    "productName": "V4 Speculator Calculator",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ]
+  }
 }

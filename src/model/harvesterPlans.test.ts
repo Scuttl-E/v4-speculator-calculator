@@ -23,6 +23,7 @@ import {
   originalExternalValue,
   resolveEarliestRecoveryPoints,
   resetHarvesterPlanState,
+  regenerateHarvesterPlansPreservingEdits,
   updateHarvesterPlanPoints,
   type HarvesterGenerationInputs,
 } from "./harvester";
@@ -78,6 +79,42 @@ describe("Harvester four-plan state", () => {
     expect(user.modified).toBe(true);
     expect(plans.equalRate).toEqual(equalRateBefore);
     expect(user.baseline).toEqual(plans.user!.baseline);
+  });
+
+  it("live structural updates regenerate baselines while retaining compatible manual overrides", () => {
+    const snap = snapshot();
+    const plans = generateAllHarvesterPlans(snap, inputs({ pointCount: 3 }));
+    const editedUserPoints = editHarvestPointPercent(snap, "spot", 500, plans.user!.points, plans.user!.points[1].id, 50);
+    const editedEqualCashPoints = editHarvestPointPercent(snap, "spot", 500, plans.equalCash!.points, plans.equalCash!.points[0].id, 25);
+    const editedPlans = {
+      ...plans,
+      user: updateHarvesterPlanPoints(plans.user!, editedUserPoints),
+      equalCash: updateHarvesterPlanPoints(plans.equalCash!, editedEqualCashPoints),
+    };
+    const nextInputs = inputs({ pointCount: 4 });
+    const next = regenerateHarvesterPlansPreservingEdits(editedPlans, snap, nextInputs);
+
+    expect(next.user!.generationInputs).toMatchObject(nextInputs);
+    expect(next.user!.baseline.map((point) => point.movePercent)).toEqual([100, 200, 300, 400]);
+    expect(next.user!.points[1].activeAfter).toBeCloseTo(editedUserPoints[1].activeAfter, 7);
+    expect(next.user!.modified).toBe(true);
+    expect(next.equalCash!.points[0].activeAfter).toBeCloseTo(editedEqualCashPoints[0].activeAfter, 7);
+    expect(next.equalCash!.modified).toBe(true);
+    expect(next.equalRate!.generationInputs).toMatchObject(nextInputs);
+    expect(next.equalCash!.generationInputs).toMatchObject(nextInputs);
+    expect(next.earliestRecovery!.generationInputs).toMatchObject(nextInputs);
+  });
+
+  it("drops only trailing generated overrides when checkpoint count is reduced", () => {
+    const snap = snapshot();
+    const plans = generateAllHarvesterPlans(snap, inputs());
+    const editedPoints = editHarvestPointPercent(snap, "spot", 500, plans.user!.points, plans.user!.points[0].id, 50);
+    const edited = updateHarvesterPlanPoints(plans.user!, editedPoints);
+    const next = regenerateHarvesterPlansPreservingEdits({ ...plans, user: edited }, snap, inputs({ pointCount: 2 }));
+
+    expect(next.user!.points).toHaveLength(2);
+    expect(next.user!.points[0].activeAfter).toBeCloseTo(editedPoints[0].activeAfter, 7);
+    expect(next.user!.modified).toBe(true);
   });
 
   it("Reset restores only the active plan and clears its modified state", () => {

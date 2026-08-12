@@ -24,13 +24,11 @@ import {
   editHarvestPoint,
   editHarvestPointPercent,
   evaluateHarvestPlan,
-  generateAllHarvesterPlans,
-  generateCurrentHarvesterPlan,
   insertHarvestPoint,
   maximumCheckpointCount,
-  otherPlansContainCustomEdits,
   originalExternalValue,
   resetHarvesterPlanState,
+  regenerateHarvesterPlansPreservingEdits,
   resolveEarliestRecoveryPoints,
   updateHarvesterPlanPoints,
   type HarvestPoint,
@@ -57,10 +55,21 @@ const planLabels: Record<HarvesterPlanKind, string> = {
   equalCash: "Max Equal Harvest",
   earliestRecovery: "Fastest Capital Recovery",
 };
+const planDescriptions: Record<HarvesterPlanKind, string> = {
+  user: "Build and fine-tune your own harvest plan.",
+  equalRate: "Maximise one harvest rate across eligible checkpoints while preserving final benchmark parity.",
+  equalCash: "Maximise the same cash withdrawal across eligible checkpoints while preserving final benchmark parity.",
+  earliestRecovery: "Recover initial capital as early as possible while preserving final benchmark parity.",
+};
 const recoverySummary = (recovered: boolean, movePercent: number | null) => recovered
   ? movePercent === 0 ? "Recovered at entry" : `Recovered at ${signedMove(movePercent ?? 0)}`
   : "Not recovered before target";
 const intervalOptions = Array.from({ length: 10 }, (_, index) => (index + 1) * 10);
+const finalSurplusLabel = (value: number | null) => {
+  if (value === null) return "Unavailable";
+  if (value === 0) return "Parity achieved";
+  return `${value > 0 ? "Surplus" : "Shortfall"} ${money(Math.abs(value))}`;
+};
 
 interface HarvesterOverlayProps {
   snapshot: HarvesterSnapshot;
@@ -130,11 +139,9 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   });
   const [plans, setPlans] = useState<HarvesterPlans>(createEmptyHarvesterPlans);
   const [activeKind, setActiveKind] = useState<HarvesterPlanKind>("user");
-  const [generationMode, setGenerationMode] = useState<"current" | "all">("all");
-  const [accountInitialCashback, setAccountInitialCashback] = useState(true);
+  const [accountInitialCashback, setAccountInitialCashback] = useState(false);
   const [dragMode, setDragMode] = useState<HarvesterDragMode>("vertical");
   const [addPointArmed, setAddPointArmed] = useState(false);
-  const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
   const [exportReady, setExportReady] = useState(false);
   const [harvestedTooltipAnchor, setHarvestedTooltipAnchor] = useState<{ x: number; y: number } | null>(null);
   const [showLegendCard, setShowLegendCard] = useState(true);
@@ -211,20 +218,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     const aboveY = harvestedTooltipAnchor.y - 150 - tooltipHeight;
     return { x, y: aboveY >= 0 ? aboveY : harvestedTooltipAnchor.y + 150 };
   }, [harvestedTooltipAnchor]);
-  const activeInputsStale = activePlan !== null && (
-    activePlan.generationInputs.benchmark !== sharedInputs.benchmark ||
-    activePlan.generationInputs.finalTargetPercent !== sharedInputs.finalTargetPercent ||
-    activePlan.generationInputs.intervalPercent !== sharedInputs.intervalPercent ||
-    activePlan.generationInputs.firstCheckpointPercent !== sharedInputs.firstCheckpointPercent ||
-    activePlan.generationInputs.pointCount !== sharedInputs.pointCount
-  );
-  const generationRequired = activePlan === null || activeInputsStale;
   const activeHarvestRate = activePlan?.harvestRatePercent ?? sharedInputs.defaultHarvestPercent;
-  const externalLabel = snapshot.config.cashbackMode === "spot"
-    ? `External Cashback (Spot) · at ${signedMove(result.recovery.externalCashbackValuationMovePercent)}`
-    : "External Cashback (Cash)";
-  const finalExternalLabel = snapshot.config.cashbackMode === "spot" ? "External Cashback (Spot) · at final target" : "External Cashback (Cash)";
-  const activeSummary = activeKind === "earliestRecovery" ? earliestRecoverySummary : activePlan?.summary ?? "No generated plan";
 
   useEffect(() => {
     setIntervalDraft(String(sharedInputs.intervalPercent));
@@ -237,6 +231,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   useEffect(() => {
     setHarvestRateDraft(String(activeHarvestRate));
   }, [activeHarvestRate]);
+
+  useEffect(() => {
+    setPlans((current) => regenerateHarvesterPlansPreservingEdits(current, snapshot, sharedInputs));
+  }, [snapshot, sharedInputs.benchmark, sharedInputs.finalTargetPercent, sharedInputs.intervalPercent, sharedInputs.firstCheckpointPercent, sharedInputs.pointCount]);
 
   useEffect(() => {
     const priorFocus = document.activeElement as HTMLElement | null;
@@ -293,29 +291,6 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       return next;
     });
     setAddPointArmed(false);
-    setConfirmGenerateAll(false);
-  };
-
-  const performGenerateAll = () => {
-    setPlans(generateAllHarvesterPlans(snapshot, sharedInputs));
-    setActiveKind("user");
-    setConfirmGenerateAll(false);
-    setAddPointArmed(false);
-  };
-
-  const generate = () => {
-    if (!hasGeneratedPlans || generationMode === "all") {
-      if (hasGeneratedPlans && otherPlansContainCustomEdits(plans, activeKind)) {
-        setConfirmGenerateAll(true);
-        return;
-      }
-      performGenerateAll();
-      return;
-    }
-    const inputs = { ...sharedInputs, defaultHarvestPercent: activePlan?.harvestRatePercent ?? sharedInputs.defaultHarvestPercent };
-    setPlans((current) => generateCurrentHarvesterPlan(current, snapshot, inputs, activeKind));
-    setConfirmGenerateAll(false);
-    setAddPointArmed(false);
   };
 
   const setLiveHarvestRate = (harvestRatePercent: number) => {
@@ -338,20 +313,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       ),
     };
     setSharedInputs(nextInputs);
-    setPlans((current) => {
-      if (!HARVESTER_PLAN_KINDS.every((kind) => current[kind] !== null)) return current;
-      const nextPlans = generateAllHarvesterPlans(snapshot, nextInputs);
-      for (const kind of ["user", "earliestRecovery"] as const) {
-        const previous = current[kind];
-        const regenerated = nextPlans[kind];
-        if (previous && regenerated && previous.harvestRatePercent !== nextInputs.defaultHarvestPercent) {
-          nextPlans[kind] = applyLiveHarvestRate(regenerated, snapshot, previous.harvestRatePercent);
-        }
-      }
-      return nextPlans;
-    });
     setAddPointArmed(false);
-    setConfirmGenerateAll(false);
   };
 
   const commitInterval = () => {
@@ -441,14 +403,6 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     window.setTimeout(() => setExportReady(false), 1800);
   };
 
-  const benchmarkProblem = result.final.benchmarkStatus === "liquidated"
-    ? `${benchmarkLabels[evaluationInputs.benchmark]} is liquidated at the final target.`
-    : result.final.benchmarkStatus === "unavailable"
-      ? `${benchmarkLabels[evaluationInputs.benchmark]} inputs are unavailable.`
-      : !result.feasible
-        ? "The imported active V4 cannot meet this benchmark at the final target."
-        : null;
-
   return <div className="harvester-backdrop" role="presentation">
     <section ref={dialogRef} className="harvester-workspace" role="dialog" aria-modal="true" aria-labelledby="harvester-title" tabIndex={-1}>
       <header className="harvester-head">
@@ -524,19 +478,18 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
 
       <div className="harvester-bottom">
         <div className="harvester-control-row">
+          <div className="harvester-control-plan-title">
+            <div><small>HARVEST PLAN</small><strong>{planLabels[activeKind]}</strong></div>
+            <span>{planDescriptions[activeKind]}</span>
+          </div>
           <label><span>FINAL TARGET</span><div className="harvester-unit-input"><input type="number" min={10} max={2000} step={5} value={sharedInputs.finalTargetPercent} onChange={(event) => setShared("finalTargetPercent", Math.min(2000, Math.max(10, Number(event.target.value))))} /><em>%</em></div></label>
           <label><span>BENCHMARK</span><select value={sharedInputs.benchmark} onChange={(event) => setShared("benchmark", event.target.value as HarvesterBenchmark)}>{availableBenchmarks.map((value) => <option key={value} value={value}>{benchmarkLabels[value]}</option>)}</select></label>
           <label><span>INTERVAL</span><div className="harvester-combo"><div className="harvester-unit-input"><input aria-label="Interval" inputMode="numeric" value={intervalDraft} onChange={(event) => setIntervalDraft(event.target.value)} onBlur={commitInterval} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose interval" aria-expanded={openSelector === "interval"} onClick={() => setOpenSelector((current) => current === "interval" ? null : "interval")} />{openSelector === "interval" && <div className="harvester-selector-menu">{intervalOptions.map((value) => <button key={value} type="button" onClick={() => { setShared("intervalPercent", value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
           <label><span>CHECKPOINTS</span><select value={sharedInputs.pointCount} disabled={availableCheckpointCounts.length === 0} onChange={(event) => setShared("pointCount", Number(event.target.value))}>{availableCheckpointCounts.length > 0 ? availableCheckpointCounts.map((value) => <option key={value} value={value}>{value}</option>) : <option value={0}>0</option>}</select></label>
-          <div className="harvester-generate-control">
-            <div><select value={generationMode} onChange={(event) => { setGenerationMode(event.target.value as "current" | "all"); setConfirmGenerateAll(false); }}><option value="current">Current</option><option value="all">All</option></select><button type="button" className={generationRequired ? "primary" : ""} disabled={!generationRequired} onClick={generate}>Generate</button></div>
-            {benchmarkProblem && <small className="warning">{benchmarkProblem}</small>}
-          </div>
-          {confirmGenerateAll && <div className="harvester-generate-warning" role="alert"><small>Other plans contain custom edits. Generate All will replace them.</small><button type="button" className="primary" onClick={performGenerateAll}>Proceed</button><button type="button" onClick={() => setConfirmGenerateAll(false)}>Cancel</button></div>}
           <i className="harvester-control-row-break" aria-hidden="true" />
           <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Harvest rate" inputMode="decimal" value={harvestRateDraft} disabled={activeKind === "equalRate" || activeKind === "equalCash"} onChange={(event) => setHarvestRateDraft(event.target.value)} onBlur={commitHarvestRate} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" disabled={activeKind === "equalRate" || activeKind === "equalCash"} aria-label="Choose harvest rate" aria-expanded={openSelector === "harvestRate"} onClick={() => setOpenSelector((current) => current === "harvestRate" ? null : "harvestRate")} />{openSelector === "harvestRate" && <div className="harvester-selector-menu">{DEFAULT_HARVEST_PRESETS.map((value) => <button key={value} type="button" onClick={() => { setLiveHarvestRate(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
           <label><span>FIRST CHECKPOINT</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="First checkpoint" inputMode="numeric" placeholder="Auto" value={firstCheckpointDraft} onChange={(event) => setFirstCheckpointDraft(event.target.value)} onBlur={commitFirstCheckpoint} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose first checkpoint" aria-expanded={openSelector === "firstCheckpoint"} onClick={() => setOpenSelector((current) => current === "firstCheckpoint" ? null : "firstCheckpoint")} />{openSelector === "firstCheckpoint" && <div className="harvester-selector-menu"><button type="button" onClick={() => { setLiveFirstCheckpoint(null); setOpenSelector(null); }}>Auto</button>{availableFirstCheckpoints.map((value) => <button key={value} type="button" onClick={() => { setLiveFirstCheckpoint(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-          <fieldset className="harvester-cashback-toggle"><legend>INCLUDE INITIAL CASHBACK</legend><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => setAccountInitialCashback(true)}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => setAccountInitialCashback(false)}>Off</button></fieldset>
+          <fieldset className="harvester-cashback-toggle" aria-label="Include initial cashback in capital recovery"><div className="harvester-cashback-title"><span>INCLUDE INITIAL CASHBACK</span><span>IN CAPITAL RECOVERY</span></div><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => setAccountInitialCashback(true)}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => setAccountInitialCashback(false)}>Off</button></fieldset>
           <i className="harvester-control-row-break" aria-hidden="true" />
           <fieldset className="harvester-drag-mode"><legend>CHECKPOINT DRAG MODE</legend>{(["vertical", "horizontal", "both"] as const).map((mode) => <button key={mode} type="button" className={dragMode === mode ? "on" : ""} onClick={() => setDragMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</fieldset>
         </div>
@@ -544,7 +497,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
         <div className="harvester-output-row">
           <section className="secured-capital" />
           <section className="harvester-final-metrics">
-            <small>HARVESTING ANALYSIS: {signedMove(evaluationInputs.finalTargetPercent)}</small>
+            <small>HARVESTING ANALYSIS: <span className="harvester-final-target">{signedMove(evaluationInputs.finalTargetPercent)}</span></small>
             <div className="harvester-final-summary-card">
               <section className="harvester-analysis-section harvester-analysis-wealth">
                 <span className="harvested">Harvested <b>{money(result.final.totalHarvested)}</b></span>
@@ -555,7 +508,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               <section className="harvester-analysis-section harvester-analysis-reference">
                 <small>REFERENCE &amp; RECOVERY</small>
                 <span className="benchmark">Benchmark ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
-                <span className={`v4-delta ${result.final.finalSurplus === null ? "" : result.final.finalSurplus >= 0 ? "positive" : "negative"}`}>V4 vs Benchmark <b>{result.final.finalSurplus === null ? "Unavailable" : money(result.final.finalSurplus)}</b></span>
+                <span className="v4-delta">V4 vs Benchmark <b className={result.final.finalSurplus === null || result.final.finalSurplus === 0 ? "" : result.final.finalSurplus > 0 ? "positive" : "negative"}>{finalSurplusLabel(result.final.finalSurplus)}</b></span>
                 <span className="recovery-summary"><span>Initial Capital <b>{money(result.recovery.initialInvestment)}</b></span><span>Recovered <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recovered && result.recovery.recoveredAtMovePercent !== null && <> — at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</span></span>
               </section>
             </div>
@@ -564,10 +517,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
             <button type="button" className="placeholder" disabled aria-label="Reserved harvest plan action" title="Reserved action">↑</button>
             <button type="button" className={addPointArmed ? "armed" : ""} disabled={activeKind !== "user" || !activePlan} aria-label="Add point" title="Add point" onClick={() => setAddPointArmed((armed) => !armed)}>+</button>
             <button type="button" className="danger" disabled={activeKind !== "user" || !selectedPoint || !activePlan} aria-label="Delete selected point" title="Delete selected point" onClick={() => selectedPoint && updateActivePoints(deleteHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, selectedPoint.id), null)}>−</button>
-            <button type="button" disabled={!activePlan} aria-label="Reset harvest plan" title="Reset harvest plan" onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: resetHarvesterPlanState(activePlan) }))}>↺</button>
+            <button type="button" disabled={!activePlan?.modified} aria-label="Reset harvest plan" title="Reset harvest plan" onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: resetHarvesterPlanState(activePlan) }))}>↺</button>
           </section>
           <section className="harvester-ledger harvester-plan-table">
-            <small>HARVEST PLAN</small>
+            <div className="harvester-ledger-title"><small>CHECKPOINT DATA</small><span>View and fine-tune each checkpoint.</span></div>
             <div className="harvester-ledger-scroll">
               <table>
                 <colgroup><col className="checkpoint" /><col className="harvest-rate" /><col className="withdrawn" /><col className="v4-after" /></colgroup>
