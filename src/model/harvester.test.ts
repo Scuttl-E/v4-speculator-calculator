@@ -129,7 +129,7 @@ describe("Harvester constraints and editing", () => {
     const targetActive = originalActiveV4Value(snap, 2) * required;
     const result = evaluateHarvestPlan(snap, "spot", 500, [point("a", 100, targetActive)]);
     expect(result.final.paritySatisfied).toBe(true);
-    expect(result.final.remainingActiveV4 + result.final.originalExternalCapital).toBeGreaterThanOrEqual(result.final.benchmarkValue! - 1e-7);
+    expect(result.final.remainingActiveV4).toBeGreaterThanOrEqual(result.final.benchmarkValue! - 1e-7);
     expect(result.final.totalHarvested).toBeGreaterThan(0);
     expect(result.final.remainingActiveV4 + result.final.originalExternalCapital + result.final.totalHarvested).toBeGreaterThan(result.final.benchmarkValue!);
   });
