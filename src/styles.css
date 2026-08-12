@@ -3253,36 +3253,12 @@ main.web-app .chart-panel .chart-series-legend {
   font-size: 10px;
   pointer-events: none;
 }
-.harvester-target-card {
-  position: absolute;
-  top: 16px;
-  left: 78px;
-  right: auto;
-  z-index: 3;
-  width: 205px;
-  display: grid;
-  gap: 3px;
-  padding: 10px 12px;
-  border: 1px solid #d7a2762c;
-  border-radius: 9px;
-  background: #111212e8;
-  box-shadow: 0 12px 32px #0009;
-  pointer-events: none;
-}
-.harvester-target-card small { margin-bottom: 3px; color: #d7a276; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
-.harvester-target-card span { display: flex; justify-content: space-between; gap: 8px; color: #9f958b; font-size: 9px; }
-.harvester-target-card b { color: #d8cbbd; font: 600 10px var(--mono); }
-.harvester-target-card .benchmark { margin-bottom: 4px; padding-bottom: 5px; border-bottom: 1px solid #ffffff0d; color: #c4b17d; }
-.harvester-target-card .active,
-.harvester-target-card .harvested { color: #e18a4a; }
-.harvester-target-card .cashback { color: #d7a276; }
-.harvester-target-card > strong { margin-top: 4px; padding-top: 5px; border-top: 1px solid #ffffff0d; font: 600 11px var(--mono); }
 .positive { color: #83b7a8 !important; }
 .negative { color: #d97861 !important; }
 .harvester-legend {
   position: absolute;
   top: 16px;
-  left: calc(78px + 217px);
+  left: 78px;
   z-index: 3;
   width: 205px;
   display: grid;
@@ -3297,7 +3273,6 @@ main.web-app .chart-panel .chart-series-legend {
 }
 .harvester-legend small { margin-bottom: 1px; color: #d7a276; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
 .harvester-legend span::before { content: ""; display: inline-block; width: 18px; height: 2px; margin-right: 6px; vertical-align: middle; background: currentColor; }
-.harvester-chart.has-legend-card:not(.has-target-card) .harvester-legend { left: 78px; }
 .harvester-legend .original { color: #8b8178; }
 .harvester-legend .original::before,
 .harvester-legend .benchmark::before { background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); }
@@ -3359,6 +3334,7 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-combo .harvester-selector-button { position: relative; display: grid; place-items: center; width: 28px; min-width: 28px; padding: 0; border-left: 0; border-radius: 0 4px 4px 0; }
 .harvester-combo .harvester-selector-button::before { content: ""; width: 8px; height: 8px; border-right: 2px solid #d8b38e; border-bottom: 2px solid #d8b38e; transform: rotate(45deg) translate(-2px, -2px); }
 .harvester-selector-menu { position: absolute; z-index: 5; top: calc(100% + 4px); right: 0; display: grid; width: 100%; max-height: 180px; overflow-y: auto; padding: 3px; border: 1px solid #d4874c4d; border-radius: 4px; background: #171514; box-shadow: 0 8px 18px #0008; }
+.harvester-combo.opens-up .harvester-selector-menu { top: auto; bottom: calc(100% + 4px); }
 .harvester-selector-menu button { height: 27px !important; padding: 0 8px !important; border: 0; border-radius: 2px; text-align: left; }
 .harvester-action-group { min-width: 112px; display: grid; gap: 3px; }
 .harvester-action-group button { width: 100%; }
@@ -3492,5 +3468,4 @@ main.web-app .chart-panel .chart-series-legend {
   .harvester-control-row { align-items: flex-end; flex-wrap: wrap; overflow: visible; }
   .harvester-output-row { max-height: none; grid-template-columns: 1fr; overflow: visible; }
   .harvester-output-row > section + section { border-left: 0; border-top: 1px solid #ffffff0c; }
-  .harvester-target-card { width: 180px; }
 }
