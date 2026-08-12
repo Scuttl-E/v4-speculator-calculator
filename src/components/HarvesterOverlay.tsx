@@ -12,7 +12,6 @@ import {
 } from "recharts";
 import {
   DEFAULT_HARVEST_PRESETS,
-  HARVESTER_MAX_POINTS,
   HARVESTER_PLAN_KINDS,
   availableHarvesterBenchmarks,
   applyLiveHarvestRate,
@@ -27,6 +26,7 @@ import {
   generateAllHarvesterPlans,
   generateCurrentHarvesterPlan,
   insertHarvestPoint,
+  maximumCheckpointCount,
   otherPlansContainCustomEdits,
   resetHarvesterPlanState,
   resolveEarliestRecoveryPoints,
@@ -121,6 +121,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
 
   const activePlan = plans[activeKind];
   const hasGeneratedPlans = HARVESTER_PLAN_KINDS.every((kind) => plans[kind] !== null);
+  const availableCheckpointCounts = useMemo(() => {
+    const maximum = maximumCheckpointCount(sharedInputs.finalTargetPercent, sharedInputs.intervalPercent);
+    return Array.from({ length: maximum }, (_, index) => index + 1);
+  }, [sharedInputs.finalTargetPercent, sharedInputs.intervalPercent]);
   const evaluationInputs = activePlan?.generationInputs ?? sharedInputs;
   const storedPoints = activePlan?.points ?? [];
   const points = useMemo(() => activePlan && activeKind === "earliestRecovery"
@@ -212,7 +216,15 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   }, [onClose]);
 
   const setShared = <K extends keyof HarvesterGenerationInputs>(key: K, value: HarvesterGenerationInputs[K]) => {
-    setSharedInputs((current) => ({ ...current, [key]: value }));
+    setSharedInputs((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "intervalPercent") {
+        next.pointCount = maximumCheckpointCount(next.finalTargetPercent, next.intervalPercent);
+      } else if (key === "finalTargetPercent") {
+        next.pointCount = Math.min(next.pointCount, maximumCheckpointCount(next.finalTargetPercent, next.intervalPercent));
+      }
+      return next;
+    });
     setAddPointArmed(false);
     setConfirmGenerateAll(false);
   };
@@ -397,7 +409,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
           <label><span>FINAL TARGET</span><div className="harvester-unit-input"><input type="number" min={10} max={2000} step={5} value={sharedInputs.finalTargetPercent} onChange={(event) => setShared("finalTargetPercent", Math.min(2000, Math.max(10, Number(event.target.value))))} /><em>%</em></div></label>
           <label><span>BENCHMARK</span><select value={sharedInputs.benchmark} onChange={(event) => setShared("benchmark", event.target.value as HarvesterBenchmark)}>{availableBenchmarks.map((value) => <option key={value} value={value}>{benchmarkLabels[value]}</option>)}</select></label>
           <label><span>INTERVAL</span><select value={sharedInputs.intervalPercent} onChange={(event) => setShared("intervalPercent", Number(event.target.value))}>{intervalOptions.map((value) => <option key={value} value={value}>{value}%</option>)}</select></label>
-          <label><span>CHECKPOINTS</span><input type="number" min={1} max={HARVESTER_MAX_POINTS} value={sharedInputs.pointCount} onChange={(event) => setShared("pointCount", Math.min(HARVESTER_MAX_POINTS, Math.max(1, Number(event.target.value))))} /></label>
+          <label><span>CHECKPOINTS</span><select value={sharedInputs.pointCount} disabled={availableCheckpointCounts.length === 0} onChange={(event) => setShared("pointCount", Number(event.target.value))}>{availableCheckpointCounts.length > 0 ? availableCheckpointCounts.map((value) => <option key={value} value={value}>{value}</option>) : <option value={0}>0</option>}</select></label>
           <div className="harvester-generate-control">
             <span>GENERATE</span>
             <div><select value={generationMode} onChange={(event) => { setGenerationMode(event.target.value as "current" | "all"); setConfirmGenerateAll(false); }}><option value="current">Current</option><option value="all">All</option></select><button type="button" className="primary" onClick={generate}>Generate</button></div>
@@ -407,7 +419,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
           {confirmGenerateAll && <div className="harvester-generate-warning" role="alert"><small>Other plans contain custom edits. Generate All will replace them.</small><button type="button" className="primary" onClick={performGenerateAll}>Proceed</button><button type="button" onClick={() => setConfirmGenerateAll(false)}>Cancel</button></div>}
           <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><select disabled={activeKind === "equalRate" || activeKind === "equalCash"} value={activeHarvestRate} onChange={(event) => setLiveHarvestRate(Number(event.target.value))}>{DEFAULT_HARVEST_PRESETS.map((value) => <option key={value} value={value}>{value}%</option>)}</select></label>
           <fieldset className="harvester-cashback-toggle"><legend>ACCOUNT INITIAL CASHBACK</legend><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => setAccountInitialCashback(true)}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => setAccountInitialCashback(false)}>Off</button></fieldset>
-          <button type="button" className={addPointArmed ? "armed" : ""} disabled={activeKind !== "user" || !activePlan || points.length >= HARVESTER_MAX_POINTS || !result.feasible} onClick={() => setAddPointArmed((armed) => !armed)}>Add Point</button>
+          <button type="button" className={addPointArmed ? "armed" : ""} disabled={activeKind !== "user" || !activePlan || !result.feasible} onClick={() => setAddPointArmed((armed) => !armed)}>Add Point</button>
           <fieldset className="harvester-drag-mode"><legend>DRAG MODE</legend>{(["vertical", "horizontal", "both"] as const).map((mode) => <button key={mode} type="button" className={dragMode === mode ? "on" : ""} onClick={() => setDragMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</fieldset>
           <button type="button" disabled={!activePlan} onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: resetHarvesterPlanState(activePlan) }))}>Reset</button>
           <button type="button" className="danger" disabled={activeKind !== "user" || !selectedPoint || !activePlan} onClick={() => selectedPoint && updateActivePoints(deleteHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, selectedPoint.id), null)}>Delete</button>

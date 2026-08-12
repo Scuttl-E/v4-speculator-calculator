@@ -3306,11 +3306,11 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-legend .benchmark { color: #c4b17d; }
 .harvester-bottom { border-top: 1px solid #ffffff0d; background: #101111a8; }
 .harvester-control-row {
-  min-height: 95px;
+  min-height: 77px;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 14px 13px;
+  padding: 7px 13px;
   border-bottom: 1px solid #ffffff0b;
   overflow-x: auto;
 }
@@ -3377,9 +3377,9 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-exact-controls label:nth-child(2) { min-width: 135px; }
 .harvester-exact-controls .danger { color: #d98b79; }
 .harvester-output-row {
-  height: 212px;
-  min-height: 167px;
-  max-height: 212px;
+  height: 230px;
+  min-height: 185px;
+  max-height: 230px;
   display: grid;
   grid-template-columns: minmax(250px, .8fr) minmax(410px, 1.25fr) minmax(520px, 1.7fr);
   gap: 0;

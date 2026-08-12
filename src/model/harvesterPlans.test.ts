@@ -7,6 +7,7 @@ import {
   createHarvesterSnapshot,
   editHarvestPoint,
   editHarvestPointPercent,
+  evaluateEqualCashCandidate,
   evaluateEqualRateCandidate,
   evaluateHarvestPlan,
   generateAllHarvesterPlans,
@@ -16,6 +17,7 @@ import {
   generateEqualRateHarvestPlan,
   generateUserHarvestPlan,
   harvestPercentToActiveAfter,
+  maximumCheckpointCount,
   otherPlansContainCustomEdits,
   originalExternalValue,
   resolveEarliestRecoveryPoints,
@@ -145,6 +147,13 @@ describe("Harvester four-plan state", () => {
 });
 
 describe("parity-relative Default Harvest", () => {
+  it("limits selectable checkpoint counts by both interval and the final target", () => {
+    expect(maximumCheckpointCount(500, 100)).toBe(4);
+    expect(maximumCheckpointCount(500, 50)).toBe(9);
+    expect(maximumCheckpointCount(200, 100)).toBe(1);
+    expect(maximumCheckpointCount(10, 10)).toBe(0);
+  });
+
   it("exposes only the required preset values", () => {
     expect(DEFAULT_HARVEST_PRESETS).toEqual([25, 50, 75, 100, 125, 150, 200, 400]);
   });
@@ -217,12 +226,32 @@ describe("Harvester schedule optimizers", () => {
 
   it("Equal Cash keeps X fixed, maximizes an identical withdrawal, and derives differing rates", () => {
     const snap = snapshot();
-    const plan = generateEqualCashHarvestPlan(snap, inputs());
+    const stateInputs = inputs();
+    const plan = generateEqualCashHarvestPlan(snap, stateInputs);
     const result = evaluateHarvestPlan(snap, "spot", 500, plan.points);
+    const candidate = evaluateEqualCashCandidate(snap, stateInputs, plan.commonWithdrawal!);
     expect(plan.points.map((point) => point.movePercent)).toEqual([100, 200, 300, 400]);
-    result.points.forEach((point) => expect(point.harvested).toBeCloseTo(plan.commonWithdrawal!, 5));
+    candidate.participatingIndices.forEach((index) => expect(result.points[index].harvested).toBeCloseTo(plan.commonWithdrawal!, 5));
     expect(new Set(result.points.map((point) => Math.round(point.harvestPercent))).size).toBeGreaterThan(1);
     expect(result.final.paritySatisfied).toBe(true);
+  });
+
+  it("Equal Cash excludes early baseline-zero checkpoints without collapsing later participants", () => {
+    const snap = snapshot({ longMode: "2.5x-cashback" });
+    const stateInputs = inputs({ intervalPercent: 50, pointCount: 4 });
+    const baseline = evaluateEqualCashCandidate(snap, stateInputs, 0);
+    const plan = generateEqualCashHarvestPlan(snap, stateInputs);
+    const result = evaluateHarvestPlan(snap, "spot", 500, plan.points);
+
+    expect(baseline.participatingIndices).not.toContain(0);
+    expect(baseline.participatingIndices.length).toBeGreaterThan(0);
+    expect(plan.commonWithdrawal).toBeGreaterThan(0);
+    result.points.forEach((point, index) => {
+      if (baseline.participatingIndices.includes(index)) expect(point.harvested).toBeCloseTo(plan.commonWithdrawal!, 5);
+      else expect(point.harvested).toBeCloseTo(0, 8);
+    });
+    expect(result.final.paritySatisfied).toBe(true);
+    expect(evaluateEqualCashCandidate(snap, stateInputs, plan.commonWithdrawal! + .01).exact).toBe(false);
   });
 
   it("optimizer zero-surplus cases remain finite and all-zero", () => {

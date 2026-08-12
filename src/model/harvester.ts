@@ -21,7 +21,6 @@ import {
 } from "./v4Math";
 
 const EPSILON = 1e-8;
-export const HARVESTER_MAX_POINTS = 10;
 export const HARVESTER_MOVE_STEP = 5;
 
 export type HarvesterBenchmark = "spot" | "lending" | "perp";
@@ -384,7 +383,7 @@ export const generateHarvestPoints = (
   intervalPercent: number,
   pointCount: number,
 ) => {
-  const count = Math.min(HARVESTER_MAX_POINTS, Math.max(0, Math.floor(pointCount)));
+  const count = Math.min(maximumCheckpointCount(finalTargetPercent, intervalPercent), Math.max(0, Math.floor(pointCount)));
   const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
   const generated: HarvestPoint[] = [];
   for (let index = 1; index <= count; index += 1) {
@@ -440,7 +439,6 @@ export const insertHarvestPoint = (
   points: HarvestPoint[],
   clickedMovePercent: number,
 ) => {
-  if (points.length >= HARVESTER_MAX_POINTS) return clonePoints(points);
   const occupied = new Set(points.map((point) => point.movePercent));
   let movePercent = Math.min(finalTargetPercent - HARVESTER_MOVE_STEP, Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(clickedMovePercent)));
   if (occupied.has(movePercent)) return clonePoints(points);
@@ -503,7 +501,7 @@ export const generateCheckpointMoves = (
   intervalPercent: number,
   pointCount: number,
 ) => {
-  const count = Math.min(HARVESTER_MAX_POINTS, Math.max(0, Math.floor(pointCount)));
+  const count = Math.min(maximumCheckpointCount(finalTargetPercent, intervalPercent), Math.max(0, Math.floor(pointCount)));
   const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
   const moves: number[] = [];
   for (let index = 1; index <= count; index += 1) {
@@ -512,6 +510,15 @@ export const generateCheckpointMoves = (
     moves.push(move);
   }
   return moves;
+};
+
+export const maximumCheckpointCount = (
+  finalTargetPercent: number,
+  intervalPercent: number,
+) => {
+  const target = Math.max(0, finalTargetPercent);
+  const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
+  return Math.max(0, Math.floor((target - HARVESTER_MOVE_STEP) / interval));
 };
 
 interface ScheduleAttempt {
@@ -669,15 +676,20 @@ export const generateEqualCashHarvestPlan = (
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
+  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
+  const participatingIndices = new Set(baselineResult.points
+    .map((point, index) => point.surplusBefore > EPSILON ? index : -1)
+    .filter((index) => index >= 0));
   const attemptAt = (withdrawal: number) => buildSchedule(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     moves,
-    () => withdrawal,
-    true,
+    ({ index }) => participatingIndices.has(index) ? withdrawal : 0,
   );
   if (moves.length === 0) return { kind: "equalCash", points: [], summary: "$0 each checkpoint", commonHarvestPercent: null, commonWithdrawal: 0 };
+  if (participatingIndices.size === 0) return { kind: "equalCash", points: baseline.points, summary: "$0 each checkpoint", commonHarvestPercent: null, commonWithdrawal: 0 };
   let low = 0;
   let high = Math.max(snapshot.config.deposit, ...moves.map((move) => originalActiveV4Value(snapshot, ratioAt(move))));
   for (let iteration = 0; iteration < 70; iteration += 1) {
@@ -693,6 +705,30 @@ export const generateEqualCashHarvestPlan = (
     summary: `${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(low)} each checkpoint`,
     commonHarvestPercent: null,
     commonWithdrawal: low,
+  };
+};
+
+export const evaluateEqualCashCandidate = (
+  snapshot: HarvesterSnapshot,
+  inputs: HarvesterGenerationInputs,
+  withdrawal: number,
+) => {
+  const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount);
+  const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
+  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
+  const participatingIndices = baselineResult.points
+    .map((point, index) => point.surplusBefore > EPSILON ? index : -1)
+    .filter((index) => index >= 0);
+  const participating = new Set(participatingIndices);
+  return {
+    ...buildSchedule(
+      snapshot,
+      inputs.benchmark,
+      inputs.finalTargetPercent,
+      moves,
+      ({ index }) => participating.has(index) ? Math.max(0, withdrawal) : 0,
+    ),
+    participatingIndices,
   };
 };
 

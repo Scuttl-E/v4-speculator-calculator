@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Config } from "./types";
 import {
-  HARVESTER_MAX_POINTS,
   availableHarvesterBenchmarks,
   buildHarvesterChartSeries,
   createHarvesterExportPayload,
@@ -189,12 +188,12 @@ describe("Harvester constraints and editing", () => {
     expect(resetHarvestPoints(generated)).not.toBe(generated);
   });
 
-  it("enforces the ten-point cap", () => {
+  it("uses the target and interval as the only generated-checkpoint limit", () => {
     const snap = snapshot();
-    const ten = generateHarvestPoints(snap, "spot", 1000, 50, HARVESTER_MAX_POINTS);
-    const added = insertHarvestPoint(snap, "spot", 1000, ten, 25);
-    expect(ten).toHaveLength(10);
-    expect(added).toEqual(ten);
+    const generated = generateHarvestPoints(snap, "spot", 1000, 50, 99);
+    const added = insertHarvestPoint(snap, "spot", 1000, generated, 25);
+    expect(generated).toHaveLength(19);
+    expect(added).toHaveLength(20);
   });
 });
 
