@@ -82,6 +82,8 @@ import {
   loadCalculatorInputs,
   saveCalculatorInputs,
 } from "./persistence";
+import { HarvesterOverlay } from "./components/HarvesterOverlay";
+import { createHarvesterSnapshot, type HarvesterSnapshot } from "./model/harvester";
 
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", {
@@ -954,6 +956,7 @@ export default function App() {
       createDefaultDisplayedResultsByMode(optimisationCache),
     ),
     [runState, setRunState] = useState<OptimiserRunState>({ kind: "idle" });
+  const [harvesterSnapshot, setHarvesterSnapshot] = useState<HarvesterSnapshot | null>(null);
   const {
     mode,
     leverageLimitsExpanded,
@@ -2966,6 +2969,20 @@ export default function App() {
                     <span aria-hidden="true">↺</span>
                   </button>
                 </div>
+                <button
+                  type="button"
+                  className="open-harvester"
+                  disabled={!displayComparisonIsValid}
+                  onClick={() => setHarvesterSnapshot(createHarvesterSnapshot({
+                    config,
+                    comparisonMode: displayComparisonMode,
+                    debtPosition: displayDebtPosition,
+                    perpPosition: displayPerpState,
+                    assetName: assetLabel,
+                  }))}
+                >
+                  Open Harvester
+                </button>
                 <div className="chart-series-controls">
                   <label>
                     <input
@@ -3415,6 +3432,12 @@ export default function App() {
           </>}
         </section>
       </div>
+      {harvesterSnapshot && (
+        <HarvesterOverlay
+          snapshot={harvesterSnapshot}
+          onClose={() => setHarvesterSnapshot(null)}
+        />
+      )}
     </main>
   );
 }

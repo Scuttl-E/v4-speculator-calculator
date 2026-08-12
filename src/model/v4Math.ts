@@ -25,7 +25,7 @@ export const longValue = (p: number, mode: LongV4Mode | number, routing: Cashbac
   if (mode === "2.5x-cashback") return 0.5 * p ** 2 + 0.5 * (routing === "spot" ? p : 1);
   return p ** 2;
 };
-const normaliseLongMode = (c: Config): LongV4Mode => c.longMode ?? (c.longLtv && c.longLtv >= .625 ? (c.cashOutEnabled === false || c.degenEnabled ? "2.5x-looped" : "2.5x-cashback") : "2x");
+export const normaliseLongMode = (c: Config): LongV4Mode => c.longMode ?? (c.longLtv && c.longLtv >= .625 ? (c.cashOutEnabled === false || c.degenEnabled ? "2.5x-looped" : "2.5x-cashback") : "2x");
 export const normaliseShortMode = (c: Config): ShortV4Mode => c.shortMode ?? (clampV4Ltv(c.shortLtv) === .75 ? "2.5x-looped" : "2x");
 export const productCashOutRate = (mode: V4ProductMode) => mode === "2.5x-cashback" ? 0.5 : 0;
 export const longCashOutRate = productCashOutRate;
