@@ -1885,6 +1885,15 @@ body {
 .scenario-row > .comparison-edge.unavailable { color: var(--muted); }
 .scenario-row:not(.headings) .spot-start { color: #e5d9cb; font-weight: 600; }
 .scenario-row:not(.headings) .spot-end { color: #a99e93; }
+.scenario-row:not(.headings) > .scenario-asset-move > strong,
+.scenario-row:not(.headings) > .v4-start,
+.scenario-row:not(.headings) > .v4-end,
+.scenario-row:not(.headings) > .spot-start,
+.scenario-row:not(.headings) > .edge-cell,
+.scenario-row:not(.headings) > .comparison-edge {
+  font-family: Atelier;
+  font-size: 15px;
+}
 
 @media (max-width: 1350px) {
   .scenario-row {

@@ -426,7 +426,7 @@ const DEFAULT_CHART_SERIES_VISIBILITY: ChartSeriesVisibilityByMode = {
   perp: { long: false, short: false, spot: false },
 };
 const DEFAULT_CHART_MIN_MOVE = -80;
-const DEFAULT_CHART_MAX_MOVE = 150;
+const DEFAULT_CHART_MAX_MOVE = 200;
 const DEGEN_PRESET_OPTIONS: Array<{ mode: Exclude<DegenMode, "custom">; label: string }> = [
   { mode: "x1", label: "×1" },
   { mode: "x2", label: "×2" },
@@ -1843,7 +1843,11 @@ export default function App() {
     setMinMove(DEFAULT_CHART_MIN_MOVE);
     setMaxMove(DEFAULT_CHART_MAX_MOVE);
   };
-  const scenarios = [0.25, 0.5, 0.75, 0.9, 1.25, 1.5, 2, 3];
+  const scenarios = useMemo(() => {
+    const negativeMoves = Array.from({ length: 4 }, (_, index) => minMove + ((-minMove) * index) / 4);
+    const positiveMoves = Array.from({ length: 4 }, (_, index) => (maxMove * (index + 1)) / 4);
+    return [...negativeMoves, ...positiveMoves].map((move) => 1 + move / 100);
+  }, [minMove, maxMove]);
   const assetLabel = assetName.trim() || DEFAULT_ASSET_NAME;
   const assetLabelLower = assetLabel.toLowerCase();
   const assetLabelUpper = assetLabel.toUpperCase();
