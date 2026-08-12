@@ -514,10 +514,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
             </div>
           </section>
           <section className="harvester-plan-actions" aria-label="Harvest plan actions">
-            <button type="button" className="placeholder" disabled aria-label="Reserved harvest plan action" title="Reserved action">↑</button>
+            <button type="button" disabled aria-label="Undo last action" title="Undo last action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 14-5-5 5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H13" /></svg></button>
             <button type="button" className={addPointArmed ? "armed" : ""} disabled={activeKind !== "user" || !activePlan} aria-label="Add point" title="Add point" onClick={() => setAddPointArmed((armed) => !armed)}>+</button>
             <button type="button" className="danger" disabled={activeKind !== "user" || !selectedPoint || !activePlan} aria-label="Delete selected point" title="Delete selected point" onClick={() => selectedPoint && updateActivePoints(deleteHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, selectedPoint.id), null)}>−</button>
-            <button type="button" disabled={!activePlan?.modified} aria-label="Reset harvest plan" title="Reset harvest plan" onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: resetHarvesterPlanState(activePlan) }))}>↺</button>
+            <button type="button" className="reset" disabled={!activePlan?.modified} aria-label="Reset harvest plan" title="Reset harvest plan" onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: resetHarvesterPlanState(activePlan) }))}>↺</button>
           </section>
           <section className="harvester-ledger harvester-plan-table">
             <div className="harvester-ledger-title"><small>CHECKPOINT DATA</small><span>View and fine-tune each checkpoint.</span></div>

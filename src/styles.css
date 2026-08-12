@@ -3389,6 +3389,8 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-final-metrics { grid-column: 2; grid-row: 1; }
 .harvester-plan-actions { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 9px !important; }
 .harvester-plan-actions button { width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff12; border-radius: 7px; background: #ffffff08; color: #cdbda9; font: 600 20px Atelier; line-height: 1; cursor: pointer; }
+.harvester-plan-actions button.reset { margin-top: auto; }
+.harvester-plan-actions button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .harvester-plan-actions button:hover:not(:disabled) { color: var(--cream); background: #d4874c1c; }
 .harvester-plan-actions button.armed { border-color: #e39a62; background: #d4874c32; color: #ffe3ca; box-shadow: 0 0 0 2px #d4874c17; }
 .harvester-plan-actions button.danger { color: #d98b79; }
