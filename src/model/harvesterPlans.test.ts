@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Config } from "./types";
 import {
   DEFAULT_HARVEST_PRESETS,
+  applyLiveHarvestRate,
   createHarvesterPlanState,
   createHarvesterSnapshot,
   editHarvestPoint,
@@ -108,6 +109,38 @@ describe("Harvester four-plan state", () => {
     plans.equalCash = { ...plans.equalCash!, modified: true };
     expect(otherPlansContainCustomEdits(plans, "user")).toBe(true);
     expect(otherPlansContainCustomEdits(plans, "equalCash")).toBe(false);
+  });
+
+  it("applies Harvest Rate live only to User while preserving topology and its reset baseline", () => {
+    const snap = snapshot();
+    const plans = generateAllHarvesterPlans(snap, inputs());
+    const otherPlans = structuredClone({ equalRate: plans.equalRate, equalCash: plans.equalCash, earliestRecovery: plans.earliestRecovery });
+    const beforeMoves = plans.user!.points.map((point) => point.movePercent);
+    const updated = applyLiveHarvestRate(plans.user!, snap, 50);
+
+    expect(updated.points.map((point) => point.movePercent)).toEqual(beforeMoves);
+    expect(updated.points.map((point) => point.activeAfter)).not.toEqual(plans.user!.points.map((point) => point.activeAfter));
+    expect(updated.harvestRatePercent).toBe(50);
+    expect(updated.modified).toBe(true);
+    expect({ equalRate: plans.equalRate, equalCash: plans.equalCash, earliestRecovery: plans.earliestRecovery }).toEqual(otherPlans);
+    expect(resetHarvesterPlanState(updated).points).toEqual(plans.user!.baseline);
+    expect(resetHarvesterPlanState(updated).harvestRatePercent).toBe(plans.user!.baselineHarvestRatePercent);
+  });
+
+  it("reapplies Earliest Recovery policy live and ignores Harvest Rate on equal optimizers", () => {
+    const snap = snapshot({ longMode: "2.5x-cashback", cashbackMode: "cash" });
+    const plans = generateAllHarvesterPlans(snap, inputs({ defaultHarvestPercent: 100 }));
+    const beforeMoves = plans.earliestRecovery!.points.map((point) => point.movePercent);
+    const updated = applyLiveHarvestRate(plans.earliestRecovery!, snap, 50);
+    const resolved = resolveEarliestRecoveryPoints(snap, updated.generationInputs, updated.points, false);
+    const result = evaluateHarvestPlan(snap, "spot", 500, resolved, false);
+
+    expect(updated.points.map((point) => point.movePercent)).toEqual(beforeMoves);
+    expect(updated.points).not.toEqual(plans.earliestRecovery!.points);
+    expect(updated.modified).toBe(true);
+    expect(result.points.slice((result.recovery.recoveredAtMovePercent === null ? result.points.length : result.points.findIndex((point) => point.movePercent === result.recovery.recoveredAtMovePercent)) + 1).every((point) => point.harvested < 1e-7)).toBe(true);
+    expect(applyLiveHarvestRate(plans.equalRate!, snap, 50)).toBe(plans.equalRate);
+    expect(applyLiveHarvestRate(plans.equalCash!, snap, 50)).toBe(plans.equalCash);
   });
 });
 

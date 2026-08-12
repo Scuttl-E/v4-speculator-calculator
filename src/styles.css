@@ -3138,10 +3138,10 @@ main.web-app .chart-panel .chart-series-legend {
   color: var(--cream);
 }
 .harvester-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(760px, 880px) minmax(160px, 1fr);
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
   padding: 15px 19px 13px;
   border-bottom: 1px solid #ffffff0c;
 }
@@ -3152,9 +3152,9 @@ main.web-app .chart-panel .chart-series-legend {
   font: 700 9px Atelier;
   letter-spacing: .12em;
 }
-.harvester-head h2 { display: inline; margin: 0 9px 0 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
-.harvester-head p { display: inline; margin: 0; color: #9e9388; font-size: 12px; }
-.harvester-head-actions { display: flex; align-items: center; gap: 8px; }
+.harvester-head h2 { display: block; margin: 1px 0 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
+.harvester-title-area { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.harvester-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .harvester-head-actions button,
 .harvester-control-row button,
 .harvester-drag-mode button {
@@ -3173,19 +3173,35 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-drag-mode button:hover { color: var(--cream); background: #d4874c1c; }
 .harvester-head-actions .harvester-export { color: #d8b38e; }
 .harvester-head-actions .harvester-close { border-color: #d4874c35; color: #fae8d4; background: #d4874c1c; }
+.harvester-chart-card-toggles { display: flex; align-items: center; gap: 4px; }
+.harvester-chart-card-toggles button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #ffffff12;
+  border-radius: 7px;
+  background: #ffffff08;
+  color: #8f857c;
+  cursor: pointer;
+}
+.harvester-chart-card-toggles button:hover { color: #d8b38e; background: #d4874c1c; }
+.harvester-chart-card-toggles button.on { border-color: #d4874c45; background: #d4874c18; color: #f1ddc9; }
+.harvester-chart-card-toggles svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.35; }
 .harvester-chart-shell { min-height: 0; display: flex; flex-direction: column; padding: 6px 14px 0 7px; }
 .harvester-plan-tabs {
-  flex: 0 0 42px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  padding: 0 12px 5px 70px;
+  gap: 8px;
 }
 .harvester-plan-tabs button {
   min-width: 0;
   display: grid;
   place-content: center;
-  gap: 1px;
+  gap: 2px;
+  height: 48px;
+  padding: 0 13px;
   border: 1px solid #ffffff0e;
   border-radius: 7px;
   background: #11121299;
@@ -3195,17 +3211,16 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-plan-tabs button:disabled { color: #5f5a55; cursor: default; opacity: .55; }
 .harvester-plan-tabs button.on { border-color: #d4874c45; background: #d4874c18; color: #f1ddc9; }
 .harvester-plan-tabs button.on:disabled { border-color: #36322f; background: #1b1a19; color: #6f6862; }
-.harvester-plan-tabs span { overflow: hidden; font: 600 10px Atelier; text-overflow: ellipsis; white-space: nowrap; }
+.harvester-plan-tabs span { overflow: hidden; font: 600 13px Atelier; text-overflow: ellipsis; white-space: nowrap; }
 .harvester-plan-tabs span i { display: inline-block; width: 5px; height: 5px; margin: 0 0 1px 5px; border-radius: 50%; background: #e19a62; box-shadow: 0 0 6px #d4874c99; }
-.harvester-plan-tabs small { overflow: hidden; color: #817970; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.harvester-plan-tabs small { overflow: hidden; color: #817970; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .harvester-plan-tabs button.on small { color: #aa9584; }
 .harvester-chart { position: relative; flex: 1; min-height: 0; cursor: default; }
 .harvester-chart.is-placing { cursor: crosshair; }
 .harvester-chart > .recharts-responsive-container { width: 100% !important; height: 100% !important; }
 .harvester-chart .recharts-reference-dot circle { cursor: grab; }
 .harvester-chart .recharts-reference-dot circle:active { cursor: grabbing; }
-.harvester-chart-tooltip,
-.harvest-point-tooltip {
+.harvester-chart-tooltip {
   display: grid;
   gap: 3px;
   min-width: 190px;
@@ -3217,13 +3232,13 @@ main.web-app .chart-panel .chart-series-legend {
   color: #a99e93;
   font-size: 10px;
 }
-.harvester-chart-tooltip b,
-.harvest-point-tooltip b { color: #e6d8ca; font-size: 13px; }
-.harvester-chart-tooltip span,
-.harvest-point-tooltip span { display: flex; justify-content: space-between; gap: 14px; }
-.harvester-chart-tooltip strong,
-.harvest-point-tooltip strong { color: #d7c9bb; font: 600 11px var(--mono); }
-.harvest-point-tooltip { position: absolute; top: 16px; left: 78px; z-index: 4; pointer-events: none; }
+.harvester-chart-tooltip b { color: #e6d8ca; font-size: 13px; }
+.harvester-chart-tooltip span { display: flex; justify-content: space-between; gap: 14px; }
+.harvester-chart-tooltip strong { color: #d7c9bb; font: 600 11px var(--mono); }
+.harvester-chart-tooltip .original { color: #8b8178; }
+.harvester-chart-tooltip .active { color: #e18a4a; }
+.harvester-chart-tooltip .wealth { color: #78b8aa; }
+.harvester-chart-tooltip .benchmark { color: #c4b17d; }
 .harvester-placement-hint {
   position: absolute;
   left: 50%;
@@ -3240,8 +3255,9 @@ main.web-app .chart-panel .chart-series-legend {
 }
 .harvester-target-card {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 16px;
+  left: 78px;
+  right: auto;
   z-index: 3;
   width: 205px;
   display: grid;
@@ -3256,11 +3272,32 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-target-card small { margin-bottom: 3px; color: #d7a276; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
 .harvester-target-card span { display: flex; justify-content: space-between; gap: 8px; color: #9f958b; font-size: 9px; }
 .harvester-target-card b { color: #d8cbbd; font: 600 10px var(--mono); }
+.harvester-target-card .benchmark { margin-bottom: 4px; padding-bottom: 5px; border-bottom: 1px solid #ffffff0d; color: #c4b17d; }
+.harvester-target-card .active,
+.harvester-target-card .harvested { color: #e18a4a; }
+.harvester-target-card .cashback { color: #d7a276; }
 .harvester-target-card > strong { margin-top: 4px; padding-top: 5px; border-top: 1px solid #ffffff0d; font: 600 11px var(--mono); }
 .positive { color: #83b7a8 !important; }
 .negative { color: #d97861 !important; }
-.harvester-legend { flex: 0 0 23px; display: flex; align-items: center; justify-content: center; gap: 18px; color: #948a81; font-size: 9px; }
+.harvester-legend {
+  position: absolute;
+  top: 16px;
+  left: calc(78px + 217px);
+  z-index: 3;
+  width: 205px;
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid #d7a2762c;
+  border-radius: 9px;
+  background: #111212e8;
+  box-shadow: 0 12px 32px #0009;
+  font-size: 9px;
+  pointer-events: none;
+}
+.harvester-legend small { margin-bottom: 1px; color: #d7a276; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
 .harvester-legend span::before { content: ""; display: inline-block; width: 18px; height: 2px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+.harvester-chart.has-legend-card:not(.has-target-card) .harvester-legend { left: 78px; }
 .harvester-legend .original { color: #8b8178; }
 .harvester-legend .original::before,
 .harvester-legend .benchmark::before { background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); }
@@ -3269,25 +3306,25 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-legend .benchmark { color: #c4b17d; }
 .harvester-bottom { border-top: 1px solid #ffffff0d; background: #101111a8; }
 .harvester-control-row {
-  min-height: 72px;
+  min-height: 95px;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 10px 13px;
+  padding: 14px 13px;
   border-bottom: 1px solid #ffffff0b;
   overflow-x: auto;
 }
 .harvester-control-row > label,
-.harvester-exact-controls label { min-width: 84px; display: grid; gap: 4px; }
+.harvester-exact-controls label { min-width: 90px; display: grid; gap: 6px; }
 .harvester-control-row label > span,
 .harvester-exact-controls label > span,
 .harvester-drag-mode legend,
 .harvester-cashback-toggle legend,
-.harvester-generate-control > span { color: #a99e93; font: 600 8px Atelier; letter-spacing: .075em; }
+.harvester-generate-control > span { color: #a99e93; font: 600 11px Atelier; letter-spacing: .055em; }
 .harvester-control-row label.is-disabled { opacity: .42; }
 .harvester-control-row input,
 .harvester-control-row select {
-  height: 32px;
+  height: 40px;
   min-width: 0;
   padding: 0 8px;
   border: 1px solid #ffffff12;
@@ -3295,42 +3332,43 @@ main.web-app .chart-panel .chart-series-legend {
   outline: 0;
   background: #111212;
   color: #e7dbce;
-  font: 600 11px var(--mono);
+  font: 600 13px var(--mono);
 }
-.harvester-control-row select { min-width: 90px; font-family: Atelier; }
+.harvester-control-row select { min-width: 100px; font: 600 12px Atelier; }
 .harvester-control-row input:focus,
 .harvester-control-row select:focus { border-color: #d4874c70; box-shadow: 0 0 0 2px #d4874c14; }
 .harvester-unit-input { position: relative; display: flex; align-items: center; }
 .harvester-unit-input input { width: 100%; padding-right: 22px; }
-.harvester-unit-input em { position: absolute; right: 8px; color: #90867d; font: normal 10px Atelier; pointer-events: none; }
+.harvester-unit-input em { position: absolute; right: 9px; color: #90867d; font: normal 11px Atelier; pointer-events: none; }
 .harvester-unit-input.money em { left: 8px; right: auto; }
 .harvester-unit-input.money input { padding-right: 8px; padding-left: 18px; }
 .harvester-action-group { min-width: 112px; display: grid; gap: 3px; }
 .harvester-action-group button { width: 100%; }
 .harvester-action-group small { max-width: 160px; color: #a99e93; font-size: 8px; line-height: 1.1; }
 .harvester-action-group small.warning { color: #d98262; }
-.harvester-generate-control { position: relative; min-width: 170px; display: grid; gap: 4px; }
+.harvester-generate-control { position: relative; min-width: 180px; display: grid; gap: 6px; }
 .harvester-generate-control > div { display: grid; grid-template-columns: 70px 1fr; gap: 3px; }
 .harvester-generate-control > div select { min-width: 0; border-radius: 7px 0 0 7px; }
 .harvester-generate-control > div button { border-radius: 0 7px 7px 0; }
-.harvester-generate-control > small { position: absolute; top: 54px; left: 0; max-width: 190px; color: #a99e93; font-size: 8px; line-height: 1.1; }
+.harvester-generate-control > small { position: absolute; top: 66px; left: 0; max-width: 190px; color: #a99e93; font-size: 9px; line-height: 1.1; }
 .harvester-generate-control > small.warning { color: #d98262; }
 .harvester-generate-warning { min-width: 255px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
 .harvester-generate-warning > small { grid-column: 1 / -1; max-width: 255px; color: #d6b596; font-size: 8px; line-height: 1.15; }
 .harvester-regenerate-confirm { min-width: 210px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
 .harvester-regenerate-confirm > small { grid-column: 1 / -1; color: #d6b596; }
+.harvester-control-row button { height: 40px; padding: 0 13px; font-size: 12px; }
 .harvester-control-row button.primary { border-color: #d4874c45; background: linear-gradient(145deg, #6a452e, #3a281f); color: #fae8d4; }
 .harvester-control-row button.armed { border-color: #e39a62; background: #d4874c32; color: #ffe3ca; box-shadow: 0 0 0 2px #d4874c17; }
 .harvester-control-row button:disabled { opacity: .4; cursor: default; }
-.harvester-drag-mode { min-width: 205px; height: 50px; display: flex; align-items: flex-end; gap: 2px; margin: 0; padding: 0; border: 0; }
-.harvester-drag-mode legend { position: absolute; }
-.harvester-drag-mode button { height: 32px; padding: 0 8px; border-radius: 0; }
+.harvester-drag-mode { position: relative; min-width: 222px; height: 63px; display: flex; align-items: flex-end; gap: 2px; margin: 0; padding: 0; border: 0; }
+.harvester-drag-mode legend,
+.harvester-cashback-toggle legend { position: absolute; top: 0; left: 0; padding: 0; }
+.harvester-drag-mode button { height: 40px; padding: 0 10px; border-radius: 0; }
 .harvester-drag-mode button:first-of-type { border-radius: 7px 0 0 7px; }
 .harvester-drag-mode button:last-of-type { border-radius: 0 7px 7px 0; }
 .harvester-drag-mode button.on { color: #fae8d4; background: #6a452e; }
-.harvester-cashback-toggle { min-width: 142px; height: 50px; display: flex; align-items: flex-end; gap: 2px; margin: 0; padding: 0; border: 0; }
-.harvester-cashback-toggle legend { position: absolute; }
-.harvester-cashback-toggle button { min-width: 46px; height: 32px; padding: 0 9px; border-radius: 0; }
+.harvester-cashback-toggle { position: relative; min-width: 158px; height: 63px; display: flex; align-items: flex-end; gap: 2px; margin: 0; padding: 0; border: 0; }
+.harvester-cashback-toggle button { min-width: 52px; height: 40px; padding: 0 10px; border-radius: 0; }
 .harvester-cashback-toggle button:first-of-type { border-radius: 7px 0 0 7px; }
 .harvester-cashback-toggle button:last-of-type { border-radius: 0 7px 7px 0; }
 .harvester-cashback-toggle button.on { color: #fae8d4; background: #6a452e; }
@@ -3339,34 +3377,37 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-exact-controls label:nth-child(2) { min-width: 135px; }
 .harvester-exact-controls .danger { color: #d98b79; }
 .harvester-output-row {
-  min-height: 125px;
-  max-height: 170px;
+  height: 212px;
+  min-height: 167px;
+  max-height: 212px;
   display: grid;
   grid-template-columns: minmax(250px, .8fr) minmax(410px, 1.25fr) minmax(520px, 1.7fr);
   gap: 0;
   overflow: hidden;
 }
-.harvester-output-row > section { min-width: 0; padding: 10px 13px; }
+.harvester-output-row > section { min-width: 0; min-height: 0; padding: 14px 16px; }
 .harvester-output-row > section + section { border-left: 1px solid #ffffff0c; }
-.secured-capital > strong { display: block; margin: 2px 0 4px; color: #80b8a8; font: 600 23px var(--mono); }
-.secured-capital > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.secured-capital span { color: #968c83; font-size: 9px; }
-.secured-capital span b { display: block; color: #ded1c4; font: 600 11px var(--mono); }
-.secured-capital p { margin: 5px 0 2px; color: #a99e93; font-size: 9px; }
+.harvester-output-row > section > small { color: var(--bright); font: 600 11px Atelier; letter-spacing: .075em; }
+.secured-capital > strong { display: block; margin: 4px 0 7px; color: #80b8a8; font: 600 29px var(--mono); letter-spacing: -.02em; }
+.secured-capital > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.secured-capital span { color: #a99e93; font-size: 11px; }
+.secured-capital span b { display: block; margin-top: 1px; color: #ded1c4; font: 600 13px var(--mono); }
+.secured-capital p { margin: 7px 0 2px; color: #a99e93; font-size: 11px; line-height: 1.25; }
 .secured-capital p b { color: #e0d2c3; }
-.secured-capital progress { width: 150px; height: 4px; border: 0; accent-color: #78b8aa; vertical-align: middle; }
-.secured-capital > em { margin-left: 7px; color: #92877d; font: normal 9px var(--mono); }
-.secured-capital > em.cashback-excluded { display: block; margin: 4px 0 0; color: #bd9b7f; font-family: Atelier; }
-.harvester-final-metrics > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 12px; margin-top: 7px; }
-.harvester-final-metrics span { min-width: 0; color: #968c83; font-size: 9px; }
-.harvester-final-metrics b { display: block; overflow: hidden; color: #e0d3c6; font: 600 12px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.secured-capital progress { width: 170px; height: 5px; border: 0; accent-color: #78b8aa; vertical-align: middle; }
+.secured-capital > em { margin-left: 8px; color: #92877d; font: normal 10px var(--mono); }
+.secured-capital > em.cashback-excluded { display: block; margin: 6px 0 0; color: #bd9b7f; font-family: Atelier; }
+.harvester-final-metrics > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px 15px; margin-top: 11px; }
+.harvester-final-metrics span { min-width: 0; color: #a99e93; font-size: 11px; line-height: 1.2; }
+.harvester-final-metrics b { display: block; margin-top: 2px; overflow: hidden; color: #e0d3c6; font: 600 14px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .harvester-ledger { display: flex; min-height: 0; flex-direction: column; }
-.harvester-ledger-scroll { min-height: 0; margin-top: 5px; overflow: auto; }
-.harvester-ledger table { width: 100%; border-collapse: collapse; font: 9px var(--mono); }
-.harvester-ledger th { position: sticky; top: 0; padding: 3px 5px; background: #101111; color: #8f857c; font: 600 8px Atelier; text-align: right; white-space: nowrap; }
+.harvester-ledger-scroll { min-height: 0; flex: 1 1 auto; margin-top: 9px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; touch-action: pan-y; }
+.harvester-ledger-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.harvester-ledger table { width: 100%; border-collapse: collapse; font: 11px var(--mono); }
+.harvester-ledger th { position: sticky; top: 0; z-index: 1; padding: 5px 7px; background: #101111; color: #a99e93; font: 600 10px Atelier; text-align: right; white-space: nowrap; }
 .harvester-ledger th:first-child,
 .harvester-ledger td:first-child { text-align: left; }
-.harvester-ledger td { padding: 4px 5px; border-top: 1px solid #ffffff09; color: #c9bdb1; text-align: right; white-space: nowrap; cursor: pointer; }
+.harvester-ledger td { padding: 6px 7px; border-top: 1px solid #ffffff09; color: #c9bdb1; text-align: right; white-space: nowrap; cursor: pointer; }
 .harvester-ledger tr.selected td { color: #f2c49f; background: #d4874c0d; }
 .harvester-plan-table table { table-layout: fixed; }
 .harvester-plan-table th { width: 25%; }
@@ -3376,20 +3417,20 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-table-input { position: relative; display: flex; align-items: center; }
 .harvester-table-input input {
   width: 100%;
-  height: 24px;
-  padding: 2px 17px 2px 5px;
+  height: 30px;
+  padding: 3px 19px 3px 7px;
   border: 1px solid #ffffff0e;
   border-radius: 5px;
   outline: 0;
   background: #0d0e0e;
   color: #d9cbbd;
-  font: 600 9px var(--mono);
+  font: 600 11px var(--mono);
   appearance: textfield;
 }
 .harvester-table-input input::-webkit-inner-spin-button,
 .harvester-table-input input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .harvester-table-input input:focus { border-color: #d4874c65; box-shadow: 0 0 0 2px #d4874c12; }
-.harvester-table-input em { position: absolute; right: 5px; color: #817870; font: normal 8px Atelier; pointer-events: none; }
+.harvester-table-input em { position: absolute; right: 7px; color: #817870; font: normal 10px Atelier; pointer-events: none; }
 
 @media (max-width: 1200px), (max-height: 760px) {
   .harvester-workspace { width: calc(100vw - 18px); height: calc(100vh - 18px); min-width: 760px; min-height: 590px; border-radius: 12px; }
@@ -3400,7 +3441,8 @@ main.web-app .chart-panel .chart-series-legend {
 
 @media (max-width: 900px) {
   .harvester-workspace { inset: 0; width: 100vw; height: 100vh; min-width: 0; min-height: 0; border: 0; border-radius: 0; grid-template-rows: auto minmax(300px, 55vh) minmax(0, 1fr); }
-  .harvester-head p { display: none; }
+  .harvester-head { grid-template-columns: minmax(0, 1fr) auto; }
+  .harvester-head .harvester-plan-tabs { display: none; }
   .harvester-bottom { overflow-y: auto; }
   .harvester-control-row { align-items: flex-end; flex-wrap: wrap; overflow: visible; }
   .harvester-output-row { max-height: none; grid-template-columns: 1fr; overflow: visible; }

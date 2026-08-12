@@ -78,6 +78,8 @@ export interface HarvesterGeneratedPlan {
 export interface HarvesterPlanState extends HarvesterGeneratedPlan {
   generationInputs: HarvesterGenerationInputs;
   baseline: HarvestPoint[];
+  harvestRatePercent: number;
+  baselineHarvestRatePercent: number;
   selectedPointId: string | null;
   modified: boolean;
 }
@@ -239,6 +241,8 @@ export const requiredFinalActiveFraction = (
 const pointId = () => `harvest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const ratioAt = (movePercent: number) => 1 + movePercent / 100;
 const clonePoints = (points: HarvestPoint[]) => points.map((point) => ({ ...point }));
+const preservePointIds = (points: HarvestPoint[], existingPoints: HarvestPoint[]) =>
+  points.map((point, index) => ({ ...point, id: existingPoints[index]?.id ?? point.id }));
 
 export const snapHarvestMove = (movePercent: number) => Math.round(movePercent / HARVESTER_MOVE_STEP) * HARVESTER_MOVE_STEP;
 
@@ -576,6 +580,22 @@ export const generateUserHarvestPlan = (
   return { kind: "user", points: attempt.points, summary: "Custom plan", commonHarvestPercent: null, commonWithdrawal: null };
 };
 
+export const reapplyUserHarvestRate = (
+  snapshot: HarvesterSnapshot,
+  inputs: HarvesterGenerationInputs,
+  existingPoints: HarvestPoint[],
+  harvestRatePercent: number,
+) => {
+  const attempt = buildSchedule(
+    snapshot,
+    inputs.benchmark,
+    inputs.finalTargetPercent,
+    existingPoints.map((point) => point.movePercent),
+    ({ surplus }) => surplus > EPSILON ? surplus * Math.max(0, harvestRatePercent) / 100 : 0,
+  );
+  return preservePointIds(attempt.points, existingPoints);
+};
+
 export const generateEqualRateHarvestPlan = (
   snapshot: HarvesterSnapshot,
   inputs: HarvesterGenerationInputs,
@@ -697,6 +717,22 @@ export const generateEarliestRecoveryHarvestPlan = (
   };
 };
 
+export const reapplyEarliestRecoveryHarvestRate = (
+  snapshot: HarvesterSnapshot,
+  inputs: HarvesterGenerationInputs,
+  existingPoints: HarvestPoint[],
+  harvestRatePercent: number,
+) => {
+  const policy = buildSchedule(
+    snapshot,
+    inputs.benchmark,
+    inputs.finalTargetPercent,
+    existingPoints.map((point) => point.movePercent),
+    ({ surplus }) => surplus > EPSILON ? surplus * Math.max(0, harvestRatePercent) / 100 : 0,
+  );
+  return preservePointIds(policy.points, existingPoints);
+};
+
 /** Applies the live recovery-accounting rule to a stored Earliest Recovery
  * policy schedule. The policy points remain unchanged, so toggling cashback
  * accounting never regenerates or mutates a plan or its reset baseline. */
@@ -745,6 +781,8 @@ export const createHarvesterPlanState = (generated: HarvesterGeneratedPlan, gene
   generationInputs: { ...generationInputs },
   points: clonePoints(generated.points),
   baseline: clonePoints(generated.points),
+  harvestRatePercent: generationInputs.defaultHarvestPercent,
+  baselineHarvestRatePercent: generationInputs.defaultHarvestPercent,
   selectedPointId: generated.points[0]?.id ?? null,
   modified: false,
 });
@@ -778,12 +816,30 @@ export const updateHarvesterPlanPoints = (
   ...state,
   points: clonePoints(points),
   selectedPointId,
-  modified: !harvestPointsEqual(points, state.baseline),
+  modified: !harvestPointsEqual(points, state.baseline) || Math.abs(state.harvestRatePercent - state.baselineHarvestRatePercent) > EPSILON,
 });
+
+export const applyLiveHarvestRate = (
+  state: HarvesterPlanState,
+  snapshot: HarvesterSnapshot,
+  harvestRatePercent: number,
+): HarvesterPlanState => {
+  if (state.kind !== "user" && state.kind !== "earliestRecovery") return state;
+  const points = state.kind === "user"
+    ? reapplyUserHarvestRate(snapshot, state.generationInputs, state.points, harvestRatePercent)
+    : reapplyEarliestRecoveryHarvestRate(snapshot, state.generationInputs, state.points, harvestRatePercent);
+  return {
+    ...state,
+    points,
+    harvestRatePercent,
+    modified: !harvestPointsEqual(points, state.baseline) || Math.abs(harvestRatePercent - state.baselineHarvestRatePercent) > EPSILON,
+  };
+};
 
 export const resetHarvesterPlanState = (state: HarvesterPlanState): HarvesterPlanState => ({
   ...state,
   points: clonePoints(state.baseline),
+  harvestRatePercent: state.baselineHarvestRatePercent,
   selectedPointId: state.baseline.some((point) => point.id === state.selectedPointId) ? state.selectedPointId : state.baseline[0]?.id ?? null,
   modified: false,
 });
