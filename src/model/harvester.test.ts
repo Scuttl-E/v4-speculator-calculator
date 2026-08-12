@@ -39,6 +39,7 @@ const config = (patch: Partial<Config> = {}): Config => ({
 const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
   config: config(patch),
   comparisonMode: "base",
+  spotAssetPrice: null,
   debtPosition: { assetPrice: 2_000, assetAmount: 20, usdDebt: 15_000, liquidationLtv: .85 },
   perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" },
   assetName: "ETH",
@@ -214,12 +215,21 @@ describe("Harvester recovery and benchmarks", () => {
     expect(noPoints.final.originalExternalCapital).toBe(75_000);
   });
 
-  it("uses canonical Spot, lending and perp values", () => {
-    const snap = snapshot();
-    expect(availableHarvesterBenchmarks(snap)).toEqual(["spot", "lending", "perp"]);
-    expect(evaluateHarvesterBenchmark(snap, "spot", 2).value).toBe(50_000);
-    expect(evaluateHarvesterBenchmark(snap, "lending", 2).value).toBe(65_000);
-    expect(evaluateHarvesterBenchmark(snap, "perp", 2).value).toBe(33_000);
+  it("scopes benchmark availability and imported positions to the source chart", () => {
+    const base = snapshot();
+    const lending = createHarvesterSnapshot({ ...snapshot(), comparisonMode: "lending", debtPosition: { assetPrice: 2_000, assetAmount: 20, usdDebt: 15_000, liquidationLtv: .85 }, spotAssetPrice: 2_000 });
+    const perp = createHarvesterSnapshot({ ...snapshot(), comparisonMode: "perp", perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" }, spotAssetPrice: 2_000 });
+
+    expect(availableHarvesterBenchmarks(base)).toEqual(["spot"]);
+    expect(base.debtPosition).toBeUndefined();
+    expect(base.perpPosition).toBeUndefined();
+    expect(availableHarvesterBenchmarks(lending)).toEqual(["spot", "lending"]);
+    expect(lending.perpPosition).toBeUndefined();
+    expect(availableHarvesterBenchmarks(perp)).toEqual(["spot", "perp"]);
+    expect(perp.debtPosition).toBeUndefined();
+    expect(evaluateHarvesterBenchmark(lending, "lending", 2).value).toBe(65_000);
+    expect(evaluateHarvesterBenchmark(perp, "perp", 2).value).toBe(33_000);
+    expect(evaluateHarvesterBenchmark(base, "lending", 2).status).toBe("unavailable");
   });
 
   it("reports invalid/liquidated final benchmarks defensively", () => {

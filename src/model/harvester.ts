@@ -1,12 +1,10 @@
 import {
-  debtPositionSummary,
   debtPositionValue,
   isDebtPositionLiquidated,
   type DebtPositionInput,
 } from "./debtPosition";
 import {
   isPerpPositionLiquidated,
-  perpPositionSummary,
   perpPositionValue,
   type PerpPositionInput,
 } from "./perpPosition";
@@ -32,8 +30,10 @@ export const DEFAULT_HARVEST_PRESETS = [25, 50, 75, 100, 125, 150, 200, 400] as 
 export interface HarvesterSnapshot {
   config: Config;
   comparisonMode: ComparisonMode;
-  debtPosition: DebtPositionInput;
-  perpPosition: PerpPositionInput;
+  debtPosition?: DebtPositionInput;
+  perpPosition?: PerpPositionInput;
+  /** Price of the selected source asset at import time, if known. */
+  spotAssetPrice: number | null;
   assetName: string;
   importedAt: number;
 }
@@ -157,36 +157,22 @@ export interface HarvesterExportPayload {
 }
 
 export const createHarvesterSnapshot = (input: Omit<HarvesterSnapshot, "importedAt">): HarvesterSnapshot => ({
-  ...input,
   config: { ...input.config },
-  debtPosition: { ...input.debtPosition },
-  perpPosition: { ...input.perpPosition },
+  comparisonMode: input.comparisonMode,
+  assetName: input.assetName,
+  spotAssetPrice: Number.isFinite(input.spotAssetPrice) && (input.spotAssetPrice ?? 0) > 0 ? input.spotAssetPrice : null,
+  ...(input.comparisonMode === "lending" && input.debtPosition ? { debtPosition: { ...input.debtPosition } } : {}),
+  ...(input.comparisonMode === "perp" && input.perpPosition ? { perpPosition: { ...input.perpPosition } } : {}),
   importedAt: Date.now(),
 });
 
 export const benchmarkForComparisonMode = (mode: ComparisonMode): HarvesterBenchmark =>
   mode === "lending" ? "lending" : mode === "perp" ? "perp" : "spot";
 
-export const availableHarvesterBenchmarks = (snapshot: HarvesterSnapshot): HarvesterBenchmark[] => {
-  const available: HarvesterBenchmark[] = ["spot"];
-  const debt = debtPositionSummary(snapshot.debtPosition);
-  if (
-    Number.isFinite(snapshot.debtPosition.assetPrice) && snapshot.debtPosition.assetPrice > 0 &&
-    Number.isFinite(snapshot.debtPosition.assetAmount) && snapshot.debtPosition.assetAmount > 0 &&
-    Number.isFinite(snapshot.debtPosition.usdDebt) && snapshot.debtPosition.usdDebt >= 0 &&
-    debt.netEquity > 0
-  ) available.push("lending");
-  const perp = perpPositionSummary(snapshot.perpPosition);
-  if (
-    Number.isFinite(snapshot.perpPosition.assetPrice) && snapshot.perpPosition.assetPrice > 0 &&
-    Number.isFinite(snapshot.perpPosition.averageEntryPrice) && snapshot.perpPosition.averageEntryPrice > 0 &&
-    Number.isFinite(snapshot.perpPosition.positionSize) && snapshot.perpPosition.positionSize > 0 &&
-    Number.isFinite(snapshot.perpPosition.margin) && snapshot.perpPosition.margin >= 0 &&
-    Number.isFinite(snapshot.perpPosition.liquidationPrice) && snapshot.perpPosition.liquidationPrice > 0 &&
-    perp.currentEquity > 0
-  ) available.push("perp");
-  return available;
-};
+export const availableHarvesterBenchmarks = (snapshot: HarvesterSnapshot): HarvesterBenchmark[] =>
+  snapshot.comparisonMode === "lending" ? ["spot", "lending"]
+    : snapshot.comparisonMode === "perp" ? ["spot", "perp"]
+      : ["spot"];
 
 export const originalActiveV4LegValues = (snapshot: HarvesterSnapshot, priceRatio: number) => {
   const config = snapshot.config;
@@ -216,10 +202,12 @@ export const evaluateHarvesterBenchmark = (
   if (benchmark === "spot") return { value: snapshot.config.deposit * priceRatio, status: "valid" };
   if (!availableHarvesterBenchmarks(snapshot).includes(benchmark)) return { value: null, status: "unavailable" };
   if (benchmark === "lending") {
+    if (!snapshot.debtPosition) return { value: null, status: "unavailable" };
     return isDebtPositionLiquidated(priceRatio, snapshot.debtPosition)
       ? { value: null, status: "liquidated" }
       : { value: debtPositionValue(priceRatio, snapshot.debtPosition), status: "valid" };
   }
+  if (!snapshot.perpPosition) return { value: null, status: "unavailable" };
   return isPerpPositionLiquidated(priceRatio, snapshot.perpPosition)
     ? { value: null, status: "liquidated" }
     : { value: perpPositionValue(priceRatio, snapshot.perpPosition), status: "valid" };

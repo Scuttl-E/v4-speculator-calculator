@@ -2980,8 +2980,13 @@ export default function App() {
                   onClick={() => setHarvesterSnapshot(createHarvesterSnapshot({
                     config,
                     comparisonMode: displayComparisonMode,
-                    debtPosition: displayDebtPosition,
-                    perpPosition: displayPerpState,
+                    spotAssetPrice: displayComparisonMode === "base"
+                      ? displayBaseAssetValue
+                      : displayComparisonMode === "lending"
+                        ? displayDebtPosition.assetPrice
+                        : displayPerpState.assetPrice,
+                    ...(displayComparisonMode === "lending" ? { debtPosition: displayDebtPosition } : {}),
+                    ...(displayComparisonMode === "perp" ? { perpPosition: displayPerpState } : {}),
                     assetName: assetLabel,
                   }))}
                 >

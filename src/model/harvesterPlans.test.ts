@@ -46,6 +46,7 @@ const config = (patch: Partial<Config> = {}): Config => ({
 const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
   config: config(patch),
   comparisonMode: "base",
+  spotAssetPrice: null,
   debtPosition: { assetPrice: 2_000, assetAmount: 20, usdDebt: 15_000, liquidationLtv: .85 },
   perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" },
   assetName: "ETH",
