@@ -163,6 +163,19 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       : assetName ? `Spot - ${assetName}` : "Spot";
     return `Initial cashback value (${spotDescription})`;
   }, [snapshot]);
+  const analysisCashbackLabel = useMemo(() => {
+    if (snapshot.config.cashbackMode !== "spot") return "Initial Cashback (Cash)";
+    const assetName = snapshot.assetName.trim();
+    const assetPrice = snapshot.debtPosition.assetPrice;
+    const initialCashbackValue = originalExternalValue(snapshot, 1);
+    const spotAmount = Number.isFinite(assetPrice) && assetPrice > 0
+      ? initialCashbackValue / assetPrice
+      : null;
+    const spotDescription = spotAmount !== null && assetName
+      ? `Spot - ${spotAmount.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${assetName}`
+      : assetName ? `Spot - ${assetName}` : "Spot";
+    return `Initial Cashback (${spotDescription})`;
+  }, [snapshot]);
   const earliestRecoverySummary = useMemo(() => {
     const plan = plans.earliestRecovery;
     if (!plan) return "Generate a plan";
@@ -538,14 +551,18 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
           <section className="harvester-final-metrics">
             <small>HARVESTING ANALYSIS — {signedMove(evaluationInputs.finalTargetPercent)}</small>
             <div className="harvester-final-summary-card">
-              <span className="benchmark">Benchmark ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
-              <span className="harvested">Harvested <b>{money(result.final.totalHarvested)}</b></span>
-              <span className="active">Active V4 Position <b>{money(result.final.remainingActiveV4)}</b></span>
-              <span className={`v4-delta ${result.final.finalSurplus === null ? "" : result.final.finalSurplus >= 0 ? "positive" : "negative"}`}>V4 delta versus benchmark <b>{result.final.finalSurplus === null ? "Unavailable" : money(result.final.finalSurplus)}</b></span>
-              <span className="cashback">{initialCashbackLabel} <b>{money(result.final.originalExternalCapital)}</b></span>
-              <strong className="positive">Total Wealth <b>{money(result.final.totalWealth)}</b></strong>
-              <p className="initial-capital">Initial capital <b>{money(result.recovery.initialInvestment)}</b></p>
-              <p className="recovery-status">Initial capital recovered: <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recoveredAtMovePercent !== null && <> · at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</p>
+              <section className="harvester-analysis-section harvester-analysis-wealth">
+                <span className="harvested">Harvested <b>{money(result.final.totalHarvested)}</b></span>
+                <span className="active">Remaining Active V4 <b>{money(result.final.remainingActiveV4)}</b></span>
+                <span className="cashback">{analysisCashbackLabel} <b>{money(result.final.originalExternalCapital)}</b></span>
+                <strong className="positive">Total Wealth <b>{money(result.final.totalWealth)}</b></strong>
+              </section>
+              <section className="harvester-analysis-section harvester-analysis-reference">
+                <small>REFERENCE &amp; RECOVERY</small>
+                <span className="benchmark">Benchmark ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
+                <span className={`v4-delta ${result.final.finalSurplus === null ? "" : result.final.finalSurplus >= 0 ? "positive" : "negative"}`}>V4 vs Benchmark <b>{result.final.finalSurplus === null ? "Unavailable" : money(result.final.finalSurplus)}</b></span>
+                <span className="recovery-summary"><span>Initial Capital <b>{money(result.recovery.initialInvestment)}</b></span><span>Recovered <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recovered && result.recovery.recoveredAtMovePercent !== null && <> — at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</span></span>
+              </section>
             </div>
           </section>
           <section className="harvester-plan-actions" aria-label="Harvest plan actions">

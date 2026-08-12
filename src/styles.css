@@ -3420,22 +3420,28 @@ main.web-app .chart-panel .chart-series-legend {
 .secured-capital > em { margin-left: 8px; color: #92877d; font: normal 10px var(--mono); }
 .secured-capital > em.cashback-excluded { display: block; margin: 6px 0 0; color: #bd9b7f; font-family: Atelier; }
 .harvester-final-metrics { display: flex; min-height: 0; flex-direction: column; }
-.harvester-final-summary-card { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
-.harvester-final-summary-card span { display: flex; justify-content: space-between; gap: 10px; color: #a99e93; font-size: 13px; }
-.harvester-final-summary-card b { overflow: hidden; color: #e0d3c6; font: 600 15px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-.harvester-final-summary-card .benchmark { margin-bottom: 2px; padding-bottom: 7px; border-bottom: 1px solid #ffffff0d; color: #c4b17d; }
-.harvester-final-summary-card .active,
-.harvester-final-summary-card .harvested { color: #e18a4a; }
-.harvester-final-summary-card .v4-delta { font-size: 12px; font-style: italic; font-weight: 400; }
-.harvester-final-summary-card .v4-delta b { color: inherit; font-size: 14px; font-style: italic; font-weight: 500; }
-.harvester-final-summary-card .cashback { color: #d7a276; }
-.harvester-final-summary-card > strong { display: flex; justify-content: space-between; gap: 10px; margin-top: 2px; padding-top: 7px; border-top: 1px solid #ffffff0d; font: 600 16px var(--mono); }
-.harvester-final-summary-card > strong b { color: inherit; font: inherit; }
-.harvester-final-summary-card .initial-capital,
-.harvester-final-summary-card .recovery-status { margin: 0; color: #a99e93; font-size: 11px; line-height: 1.25; }
-.harvester-final-summary-card .initial-capital { margin-top: auto; }
-.harvester-final-summary-card .initial-capital b,
-.harvester-final-summary-card .recovery-status b { color: #e0d3c6; font: 600 11px var(--mono); }
+.harvester-final-summary-card { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 11px; margin-top: 14px; }
+.harvester-analysis-section { display: flex; flex-direction: column; gap: 6px; }
+.harvester-analysis-section > small { color: #a99e93; font: 600 10px Atelier; letter-spacing: .075em; }
+.harvester-analysis-section span { display: flex; justify-content: space-between; gap: 10px; color: #a99e93; font-size: 13px; }
+.harvester-analysis-section b { overflow: hidden; color: #e0d3c6; font: 600 15px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.harvester-analysis-wealth .harvested { color: #e18a4a; font-size: 14px; }
+.harvester-analysis-wealth .harvested b { color: #f0a05e; font-size: 17px; }
+.harvester-analysis-wealth .active { color: #e18a4a; }
+.harvester-analysis-wealth .cashback { color: #d7a276; }
+.harvester-analysis-wealth > strong { display: flex; justify-content: space-between; gap: 10px; margin-top: 2px; padding-top: 7px; border-top: 1px solid #ffffff0d; font: 600 16px var(--mono); }
+.harvester-analysis-wealth > strong b { color: inherit; font: inherit; }
+.harvester-analysis-wealth { padding-bottom: 10px; border-bottom: 1px solid #ffffff0d; }
+.harvester-analysis-reference { margin-top: auto; padding-top: 14px; }
+.harvester-analysis-reference > small { margin-bottom: 8px; color: var(--bright); font: 600 12px Atelier !important; letter-spacing: .075em; }
+.harvester-analysis-reference span { color: #92877d; font-size: 12px; }
+.harvester-analysis-reference b { font-size: 13px; }
+.harvester-analysis-reference .benchmark { color: #c4b17d; }
+.harvester-analysis-reference .v4-delta { font-weight: 400; }
+.harvester-analysis-reference .v4-delta b { color: inherit; font-weight: 500; }
+.harvester-analysis-reference .recovery-summary { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 5px; color: #a99e93; white-space: nowrap; }
+.harvester-analysis-reference .recovery-summary > span { display: inline-flex; gap: 5px; }
+.harvester-analysis-reference .recovery-summary b { color: #e0d3c6; }
 .harvester-ledger { display: flex; min-height: 0; flex-direction: column; }
 .harvester-ledger-scroll { min-height: 0; flex: 1 1 auto; margin-top: 9px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; touch-action: pan-y; }
 .harvester-ledger-scroll::-webkit-scrollbar { width: 0; height: 0; }
