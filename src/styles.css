@@ -3218,8 +3218,11 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-chart { position: relative; flex: 1; min-height: 0; cursor: default; }
 .harvester-chart.is-placing { cursor: crosshair; }
 .harvester-chart > .recharts-responsive-container { width: 100% !important; height: 100% !important; }
-.harvester-chart .recharts-reference-dot circle { cursor: grab; }
-.harvester-chart .recharts-reference-dot circle:active { cursor: grabbing; }
+.harvester-chart .harvester-checkpoint-dot circle:last-child { cursor: grab; }
+.harvester-chart .harvester-checkpoint-dot circle:last-child:active { cursor: grabbing; }
+.harvester-chart .recharts-active-dot { pointer-events: none; }
+.harvester-chart .recharts-surface:focus,
+.harvester-chart .recharts-surface:focus-visible { outline: none; }
 .harvester-chart-tooltip {
   display: grid;
   gap: 3px;

@@ -96,6 +96,26 @@ function HarvestedTooltipAnchor({
   return <circle cx={cx} cy={cy} r={0} fill="transparent" />;
 }
 
+function CheckpointDot({
+  cx,
+  cy,
+  selected,
+  onMouseDown,
+  onClick,
+}: {
+  cx?: number;
+  cy?: number;
+  selected: boolean;
+  onMouseDown: (event: ReactMouseEvent<SVGCircleElement>) => void;
+  onClick: (event: ReactMouseEvent<SVGCircleElement>) => void;
+}) {
+  if (typeof cx !== "number" || typeof cy !== "number") return null;
+  return <g className="harvester-checkpoint-dot">
+    <circle cx={cx} cy={cy} r={selected ? 7 : 5.5} fill={selected ? "#f5b57f" : "#e18a4a"} stroke="#151616" strokeWidth={2} pointerEvents="none" />
+    <circle cx={cx} cy={cy} r={11} fill="transparent" stroke="transparent" onMouseDown={onMouseDown} onClick={onClick} />
+  </g>;
+}
+
 export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverlayProps) {
   const availableBenchmarks = useMemo(() => availableHarvesterBenchmarks(snapshot), [snapshot]);
   const launchedBenchmark = benchmarkForComparisonMode(snapshot.comparisonMode);
@@ -464,7 +484,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       <div className="harvester-chart-shell">
         <div ref={chartRef} className={`harvester-chart${addPointArmed ? " is-placing" : ""}${showLegendCard ? " has-legend-card" : ""}`}>
           <ResponsiveContainer>
-            <ComposedChart data={chartSeries} margin={{ top: 20, right: 32, bottom: 12, left: 10 }} onClick={handleChartClick}>
+            <ComposedChart data={chartSeries} margin={{ top: 20, right: 32, bottom: 12, left: 10 }} onClick={addPointArmed ? handleChartClick : undefined}>
               <CartesianGrid stroke="#312f2c" strokeOpacity={0.72} vertical={false} />
               <XAxis dataKey="move" type="number" domain={[0, evaluationInputs.finalTargetPercent]} tickFormatter={signedMove} stroke="#4f4a45" tick={{ fontSize: 11, fill: "#9b9187" }} label={{ value: `${snapshot.assetName} price change`, position: "insideBottom", offset: -7, fill: "#9b9187", fontSize: 11 }} />
               <YAxis type="number" domain={[yMin, yMax]} tickFormatter={(value) => money(value)} width={70} stroke="#4f4a45" tick={{ fontSize: 10, fill: "#9b9187" }} />
@@ -478,15 +498,16 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
                 key={point.id}
                 x={point.movePercent}
                 y={point.activeAfter}
-                r={point.id === activePlan?.selectedPointId ? 7 : 5.5}
-                fill={point.id === activePlan?.selectedPointId ? "#f5b57f" : "#e18a4a"}
-                stroke="#151616"
-                strokeWidth={2}
-                onMouseDown={(_dotProps, event) => dragPoint(point, event)}
-                onClick={(_dotProps, event) => {
+                shape={({ cx, cy }) => <CheckpointDot
+                  cx={cx}
+                  cy={cy}
+                  selected={point.id === activePlan?.selectedPointId}
+                  onMouseDown={(event) => dragPoint(point, event)}
+                  onClick={(event) => {
                   event.stopPropagation();
                   if (activePlan) setPlans((current) => ({ ...current, [activeKind]: { ...activePlan, selectedPointId: point.id } }));
                 }}
+                />}
               />)}
             </ComposedChart>
           </ResponsiveContainer>
