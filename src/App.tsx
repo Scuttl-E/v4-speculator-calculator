@@ -1087,7 +1087,11 @@ export default function App() {
   useEffect(() => {
     if (isDesktopApp) return;
     const isAndroid = /Android/i.test(navigator.userAgent);
-    const isPhone = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent);
+    const shortestScreenSide = Math.min(window.screen.width, window.screen.height);
+    const isPhysicalPhone = navigator.maxTouchPoints > 0 && (
+      shortestScreenSide <= 600 || shortestScreenSide / window.devicePixelRatio <= 600
+    );
+    const isPhone = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) || isPhysicalPhone;
     document.documentElement.classList.add("web-build");
     document.body.classList.add("web-build");
     if (isPhone) {
