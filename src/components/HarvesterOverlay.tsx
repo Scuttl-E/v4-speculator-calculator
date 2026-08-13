@@ -106,7 +106,7 @@ function HarvesterTooltip({ active, payload, label }: { active?: boolean; payloa
     <span className="original">Original V4 <strong>{money(row.originalActiveV4)}</strong></span>
     <span className="active">Active V4 <strong>{money(row.harvestedActiveV4)}</strong></span>
     <span className="harvested">Harvested Cash <strong>{money(row.cumulativeHarvested)}</strong></span>
-    <span className="cashback">Initial Cashback <strong>{money(row.initialCashback)}</strong></span>
+    {row.initialCashback !== 0 && <span className="cashback">Initial Cashback <strong>{money(row.initialCashback)}</strong></span>}
     <span className="wealth">Total wealth <strong>{money(row.totalWealth)}</strong></span>
   </div>;
 }
