@@ -1498,7 +1498,7 @@ body {
 .scenario-table { padding: 0 10px 10px; }
 .scenario-row {
   grid-template-columns: 94px .95fr .95fr 1fr .9fr 2.5fr;
-  min-height: 47px;
+  min-height: 40px;
   padding: 0 10px;
   border: 0;
   border-radius: 7px;
@@ -1829,7 +1829,9 @@ body {
   grid-template-columns: 86px .9fr .9fr 1fr .85fr minmax(180px, 1.5fr) .9fr;
 }
 .scenarios.comparison-base .scenario-row {
-  grid-template-columns: 86px .9fr .9fr 1fr .85fr;
+  grid-template-columns: 86px max-content max-content max-content max-content;
+  justify-content: start;
+  column-gap: 18px;
 }
 .scenario-row > .v4-start,
 .scenario-row > .spot-start,
@@ -1884,6 +1886,166 @@ body {
 }
 .scenario-row > .comparison-edge.unavailable { color: var(--muted); }
 .scenario-row:not(.headings) .spot-start { color: #e5d9cb; font-weight: 600; }
+.scenario-row.zero:not(.headings),
+.scenario-row.zero:not(.headings) * { color: #c5b9ad !important; }
+
+.scenario-row:not(.zero):not(.headings) .debt-scenario > b.position-value { color: #dfd1a0 !important; }
+.scenario-row:not(.zero):not(.headings) .debt-scenario,
+.scenario-row:not(.zero):not(.headings) .debt-scenario * { color: #dfd1a0 !important; }
+.scenarios.comparison-lending .scenario-row.headings > .debt-cell,
+.scenarios.comparison-perp .scenario-row.headings > .debt-cell { color: #dfd1a0 !important; }
+
+.desktop-app .scenarios.comparison-base .scenario-row {
+  grid-template-columns: 86px repeat(4, 104px);
+  justify-content: start;
+  column-gap: 0;
+}
+.desktop-app .scenarios.comparison-base .scenario-row > .v4-start,
+.desktop-app .scenarios.comparison-base .scenario-row > .spot-start,
+.desktop-app .scenarios.comparison-base .scenario-row > .edge-cell,
+.desktop-app .scenarios.comparison-base .scenario-row > .v4-end {
+  box-sizing: border-box;
+}
+.desktop-app .scenarios.comparison-base .scenario-row > .edge-cell { padding-left: 16px; }
+.desktop-app .scenarios.comparison-base .scenario-table { position: relative; }
+.desktop-app .scenarios.comparison-base .scenario-table::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  left: 96px;
+  width: 1px;
+  background: #ffffff12;
+  pointer-events: none;
+}
+.desktop-app .scenarios.comparison-base .scenario-row > .v4-start::before { display: none; }
+.desktop-app .scenarios.comparison-base .scenario-row > .spot-start::before { display: none; }
+.desktop-app .scenarios.comparison-base .scenario-row.headings .v4-start { white-space: nowrap; }
+.desktop-app .scenarios.comparison-lending .scenario-row {
+  grid-template-columns: 86px repeat(6, 104px);
+  column-gap: 0;
+  justify-content: start;
+}
+.desktop-app .scenarios.comparison-lending .scenario-row > .v4-start,
+.desktop-app .scenarios.comparison-lending .scenario-row > .debt-cell,
+.desktop-app .scenarios.comparison-lending .scenario-row > .comparison-edge,
+.desktop-app .scenarios.comparison-lending .scenario-row > .v4-end {
+  box-sizing: border-box;
+}
+.desktop-app .scenarios.comparison-lending .scenario-row > .comparison-edge { padding-left: 16px; }
+.desktop-app .scenarios.comparison-lending .scenario-row + .scenario-row { margin-top: 0; }
+.desktop-app .scenarios.comparison-lending .scenario-row.headings { margin-bottom: 0; }
+.desktop-app .scenarios.comparison-lending .scenario-table { position: relative; }
+.desktop-app .scenarios.comparison-lending .scenario-table::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  left: 96px;
+  width: 1px;
+  background: #ffffff12;
+  pointer-events: none;
+}
+.desktop-app .scenarios.comparison-lending .scenario-table::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  left: 512px;
+  width: 1px;
+  background: #ffffff12;
+  pointer-events: none;
+}
+.desktop-app .scenarios.comparison-lending .scenario-row > .v4-start::before,
+.desktop-app .scenarios.comparison-lending .scenario-row > .debt-cell::before,
+.desktop-app .scenarios.comparison-lending .scenario-row > .spot-start::before { display: none; }
+.desktop-app .scenarios.comparison-lending .scenario-row > .v4-end {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+}
+.desktop-app .scenarios.comparison-lending .scenario-row > .v4-end::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: #ffffff12;
+}
+.desktop-app .scenarios.comparison-perp .scenario-row {
+  grid-template-columns: 86px repeat(6, 104px);
+  column-gap: 0;
+  justify-content: start;
+}
+.desktop-app .scenarios.comparison-perp .scenario-row + .scenario-row { margin-top: 0; }
+.desktop-app .scenarios.comparison-perp .scenario-row.headings { margin-bottom: 0; }
+.desktop-app .scenarios.comparison-perp .scenario-table { position: relative; }
+.desktop-app .scenarios.comparison-perp .scenario-table::before,
+.desktop-app .scenarios.comparison-perp .scenario-table::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  width: 1px;
+  background: #ffffff12;
+  pointer-events: none;
+}
+.desktop-app .scenarios.comparison-perp .scenario-table::before { left: 96px; }
+.desktop-app .scenarios.comparison-perp .scenario-table::after { left: 512px; }
+.desktop-app .scenarios.comparison-perp .scenario-row > .v4-start::before,
+.desktop-app .scenarios.comparison-perp .scenario-row > .debt-cell::before,
+.desktop-app .scenarios.comparison-perp .scenario-row > .spot-start::before { display: none; }
+.desktop-app .scenarios.comparison-perp .scenario-row > .v4-end {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+}
+.desktop-app .scenarios.comparison-perp .scenario-row > .v4-end::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: #ffffff12;
+}
+.desktop-app .scenarios.comparison-perp .scenario-row > .comparison-edge { padding-left: 16px; }
+.desktop-app .scenarios.comparison-lending .scenario-row:not(.headings) > .spot-start,
+.desktop-app .scenarios.comparison-perp .scenario-row:not(.headings) > .spot-start,
+.desktop-app .scenarios.comparison-base .scenario-row:not(.headings) > .spot-start {
+  color: #c5b9ad;
+  font-weight: 400;
+}
+.desktop-app .scenarios.comparison-base .scenario-row + .scenario-row { margin-top: 0; }
+.desktop-app .scenarios.comparison-base .scenario-row.headings { margin-bottom: 0; }
+
+.desktop-app .scenarios.comparison-base .scenario-row > .v4-end {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+}
+.desktop-app .scenarios.comparison-base .scenario-row > .v4-end::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: #ffffff12;
+}
+
+.scenarios > .panel-head > div:first-child {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 12px;
+}
 .scenario-row:not(.headings) .spot-end { color: #a99e93; }
 .scenario-row:not(.headings) > .scenario-asset-move > strong,
 .scenario-row:not(.headings) > .v4-start,
@@ -1919,7 +2081,7 @@ body {
   .panel-head b { font-size: 20px; }
   .panel-head span { font-size: 14px; }
   .scenario-table { padding: 0 14px 14px; }
-  .scenario-row { min-height: 47px; padding: 0 13px; font-size: 16px; }
+  .scenario-row { min-height: 40px; padding: 0 13px; font-size: 16px; }
   .scenario-row strong { font-size: 21px; }
   .scenario-row b { font-size: 19px; }
   .position-visual small { font-size: 13px; }
@@ -2186,12 +2348,14 @@ body {
 .scenario-series-key > span > i.long { color: #e18a4a; }
 .scenario-series-key > span > i.short { color: #e0c45d; }
 .scenario-series-key > span > i.debt { color: #c4b17d; }
-.scenario-series-key > span > i.perp { color: #cf7961; }
+.scenario-series-key > span > i.perp { color: #c4b17d; }
 
 .debt-scenario { display: flex; flex-direction: column; gap: 2px; }
 .debt-scenario > b { color: #dfd1a0; font-size: 14px; }
 .debt-scenario > small { color: #a99e93; font-size: 11px; }
 .debt-scenario > b:first-child:last-child { color: #d98262; }
+.debt-scenario > b.position-value { color: #dfd1a0; }
+.debt-scenario > b.position-liquidated { color: #d98262; }
 .debt-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 10px; margin-top: 8px; }
 .debt-summary-grid span { display: flex; flex-direction: column; gap: 2px; color: #a99e93; font-size: 9px; letter-spacing: .04em; }
 .debt-summary-grid b { color: var(--cream); font: 600 12px var(--mono); letter-spacing: 0; }
@@ -2205,7 +2369,7 @@ body {
 .invalid-comparison b { color: #dc785c; font-size: 16px; letter-spacing: .06em; }
 .invalid-comparison span { color: #b9ada1; font-size: 13px; }
 .chart-tooltip i.debt { background: #c4b17d; }
-.chart-tooltip i.perp { background: #cf7961; }
+.chart-tooltip i.perp { background: #c4b17d; }
 .chart-tooltip { min-width: 250px; font-size: 13px; }
 .chart-tooltip .tooltip-asset {
   display: grid;
@@ -2775,7 +2939,7 @@ body {
 .scenario-header-legend > span > i.long { color: #e18a4a; }
 .scenario-header-legend > span > i.short { color: #e0c45d; }
 .scenario-header-legend > span > i.debt { color: #c4b17d; }
-.scenario-header-legend > span > i.perp { color: #cf7961; }
+.scenario-header-legend > span > i.perp { color: #c4b17d; }
 
 /* Keep the chart key with its axes: one compact row directly below the X axis. */
 .chart { display: flex; flex-direction: column; }
@@ -3046,6 +3210,15 @@ main.web-app .scenarios .scenario-row b {
 main.web-app .scenarios.comparison-base .scenario-row {
   grid-template-columns: 86px minmax(82px, 1fr) 86px minmax(82px, 1.08fr) 92px;
 }
+
+.scenario-row:not(.headings) > .v4-end.positive { color: var(--bright) !important; }
+.scenario-row:not(.headings) > .comparison-edge.positive { color: var(--bright) !important; }
+.scenario-row:not(.headings) > .edge-cell.positive { color: var(--bright) !important; }
+
+/* The neutral 0% reference row keeps one consistent secondary tone across
+   its move label, values, and both edge columns. */
+.scenario-row.zero:not(.headings),
+.scenario-row.zero:not(.headings) * { color: #c5b9ad !important; }
 main.web-app .scenarios .scenario-row > .v4-start,
 main.web-app .scenarios .scenario-row > .spot-start,
 main.web-app .scenarios .scenario-row > .debt-cell {
@@ -3496,3 +3669,7 @@ main.web-app .chart-panel .chart-series-legend {
   .harvester-output-row { max-height: none; grid-template-columns: 1fr; overflow: visible; }
   .harvester-output-row > section + section { border-left: 0; border-top: 1px solid #ffffff0c; }
 }
+
+/* Neutral scenario reference: this must follow all positive/negative color rules. */
+.scenario-row.zero:not(.headings),
+.scenario-row.zero:not(.headings) * { color: #c5b9ad !important; }

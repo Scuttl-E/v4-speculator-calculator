@@ -1846,7 +1846,7 @@ export default function App() {
   const scenarios = useMemo(() => {
     const negativeMoves = Array.from({ length: 4 }, (_, index) => minMove + ((-minMove) * index) / 4);
     const positiveMoves = Array.from({ length: 4 }, (_, index) => (maxMove * (index + 1)) / 4);
-    return [...negativeMoves, ...positiveMoves].map((move) => 1 + move / 100);
+    return [...negativeMoves, 0, ...positiveMoves].map((move) => 1 + move / 100);
   }, [minMove, maxMove]);
   const assetLabel = assetName.trim() || DEFAULT_ASSET_NAME;
   const assetLabelLower = assetLabel.toLowerCase();
@@ -3143,7 +3143,7 @@ export default function App() {
                       <>
                         <ReferenceLine
                           x={displayDebtSummary.liquidationAssetMove}
-                          stroke="#c4b17d"
+                          stroke="#c96d58"
                           strokeDasharray="4 4"
                           label={{
                             value: `LENDING LIQUIDATION · ${money(displayDebtSummary.liquidationPrice ?? 0)} · ${pct(displayDebtSummary.liquidationAssetMove / 100)}`,
@@ -3155,7 +3155,7 @@ export default function App() {
                           x={displayDebtSummary.liquidationAssetMove}
                           y={(debtPositionReturn(displayDebtSummary.liquidationPriceRatio ?? 1, displayDebtPosition) ?? 0) * 100}
                           r={isPeaNileEnhanced ? 7 : 5}
-                          fill="#c4b17d"
+                          fill="#cf7961"
                           stroke="#151616"
                         />
                       </>
@@ -3266,7 +3266,7 @@ export default function App() {
                     <Line
                       dataKey="perp"
                       name="Perp position"
-                      stroke="#cf7961"
+                      stroke="#c4b17d"
                       strokeWidth={isPeaNileEnhanced ? 3 : 2.25}
                       filter={isPeaNileEnhanced ? "url(#secondarySeriesGlow)" : undefined}
                       dot={false}
@@ -3324,13 +3324,19 @@ export default function App() {
               <div className="scenario-row headings">
                 <span>{assetLabel} MOVE</span>
                 <span className="v4-start">V4 VALUE</span>
-                <span className="v4-end">V4 RETURN</span>
-                <span className="spot-start">{assetLabel} VALUE - SPOT</span>
-                <span className="edge-cell">V4 EDGE</span>
-                {displayComparisonMode === "lending" && <span className="debt-cell">LENDING POSITION</span>}
-                {displayComparisonMode === "perp" && <span className="debt-cell">PERP POSITION</span>}
-                {displayComparisonMode === "lending" && <span className="comparison-edge">V4 EDGE</span>}
-                {displayComparisonMode === "perp" && <span className="comparison-edge">V4 EDGE</span>}
+                {displayComparisonMode === "base" ? <>
+                  <span className="spot-start">{assetLabel} VALUE<br />- SPOT</span>
+                  <span className="edge-cell">V4 EDGE</span>
+                  <span className="v4-end">V4 RETURN<br />FROM ENTRY</span>
+                </> : displayComparisonMode !== "base" ? <>
+                  <span className="debt-cell">{displayComparisonMode === "lending" ? "LENDING POSITION" : "PERP POSITION"}</span>
+                  <span className="comparison-edge">V4 EDGE</span>
+                  <span className="v4-end">V4 RETURN<br />FROM ENTRY</span>
+                </> : null}
+                {displayComparisonMode !== "base" && showSpot && <>
+                  <span className="spot-start">{displayComparisonMode !== "base" ? <>{assetLabel} VALUE<br />- SPOT</> : `${assetLabel} VALUE - SPOT`}</span>
+                  <span className="edge-cell">V4 EDGE</span>
+                </>}
               </div>
               {scenarios.map((p) => {
                 const v4Return = portfolioReturn(p, config),
@@ -3361,7 +3367,7 @@ export default function App() {
                   shortWidth = (Math.abs(short) / compositionTotal) * 100;
                 return (
                   <div
-                    className={`scenario-row ${p < 1 ? "down" : "up"}`}
+                    className={`scenario-row ${p < 1 ? "down" : "up"}${p === 1 ? " zero" : ""}`}
                     key={p}
                   >
                     <span className="scenario-asset-move">
@@ -3369,34 +3375,53 @@ export default function App() {
                       {displayComparisonMode === "base" && displayBaseAssetValue > 0 && <small>{money(displayBaseAssetValue * p)}</small>}
                     </span>
                     <b className="v4-start">{money(v)}</b>
-                    <span className="v4-end">
+                    {displayComparisonMode === "base" ? <>
+                      <span className="spot-start">{money(spot)}</span>
+                      <span className={`edge-cell ${p === 1 ? "" : spotEdge >= 0 ? "positive" : "negative"}`}>
+                        {pct(spotEdge).replace("%", " pts")}
+                      </span>
+                      <span className={`v4-end ${p !== 1 ? (v4Return >= 0 ? "positive" : "negative") : ""}`}>
+                        {pct(v4Return)}
+                      </span>
+                    </> : displayComparisonMode !== "base" ? <>
+                      <span className="debt-cell debt-scenario">
+                        {displayComparisonMode === "lending" ? (isDebtPositionLiquidated(p, displayDebtPosition) ? (
+                          <b className="position-liquidated">RIP</b>
+                        ) : (
+                          <b className="position-value">{money(debtPositionValue(p, displayDebtPosition))}</b>
+                        )) : (isPerpPositionLiquidated(p, displayPerpState) ? (
+                          <b className="position-liquidated">RIP</b>
+                        ) : (
+                          <b className="position-value">{money(perpPositionValue(p, displayPerpState))}</b>
+                        ))}
+                      </span>
+                      <span className={`comparison-edge ${comparisonEdge === null ? "unavailable" : p === 1 ? "" : comparisonEdge >= 0 ? "positive" : "negative"}`}>
+                        {comparisonEdge === null ? "—" : pct(comparisonEdge).replace("%", " pts")}
+                      </span>
+                      <span className={`v4-end ${p !== 1 ? (v4Return >= 0 ? "positive" : "negative") : ""}`}>
+                        {pct(v4Return)}
+                      </span>
+                    </> : <span className={`v4-end ${p !== 1 ? (v4Return >= 0 ? "positive" : "negative") : ""}`}>
                       {pct(v4Return)}
-                    </span>
-                    <span className="spot-start">{money(spot)}</span>
-                    <span
-                      className={`edge-cell ${spotEdge >= 0 ? "positive" : "negative"}`}
-                    >
-                      {pct(spotEdge).replace("%", " pts")}
-                    </span>
-                    {displayComparisonMode === "lending" && <span className="debt-cell debt-scenario">
-                      {isDebtPositionLiquidated(p, displayDebtPosition) ? (
-                        <><b>RIP</b><small>{((displayDebtPosition.liquidationLtv ?? 0.9) * 100).toFixed(0)}% LTV reached</small></>
-                      ) : (
-                        <><b>{money(debtPositionValue(p, displayDebtPosition))}</b><small>{pct(debtPositionReturn(p, displayDebtPosition) ?? 0)}</small></>
-                      )}
                     </span>}
-                    {displayComparisonMode === "perp" && <span className="debt-cell debt-scenario">
+                    {false && <span className="debt-cell debt-scenario">
                       {isPerpPositionLiquidated(p, displayPerpState) ? (
                         <><b>RIP</b><small>Liquidation at {displayPerpSummary.liquidationAssetMove === null ? "—" : pct(displayPerpSummary.liquidationAssetMove / 100)}</small></>
                       ) : (
                         <><b>{money(perpPositionValue(p, displayPerpState))}</b><small>{pct(perpPositionReturn(p, displayPerpState) ?? 0)}</small></>
                       )}
                     </span>}
-                    {displayComparisonMode !== "base" && <span
-                      className={`comparison-edge ${comparisonEdge === null ? "unavailable" : comparisonEdge >= 0 ? "positive" : "negative"}`}
+                    {false && <span
+                      className={`comparison-edge ${comparisonEdge === null ? "unavailable" : p === 1 ? "" : comparisonEdge >= 0 ? "positive" : "negative"}`}
                     >
                       {comparisonEdge === null ? "—" : pct(comparisonEdge).replace("%", " pts")}
                     </span>}
+                    {displayComparisonMode !== "base" && showSpot && <>
+                      <span className="spot-start">{money(spot)}</span>
+                      <span className={`edge-cell ${p === 1 ? "" : spotEdge >= 0 ? "positive" : "negative"}`}>
+                        {pct(spotEdge).replace("%", " pts")}
+                      </span>
+                    </>}
                   </div>
                 );
               })}
