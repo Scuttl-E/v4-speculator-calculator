@@ -1084,11 +1084,25 @@ export default function App() {
   const isDesktopApp = isDesktopShell();
   useEffect(() => {
     if (isDesktopApp) return;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isPhone = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent);
     document.documentElement.classList.add("web-build");
     document.body.classList.add("web-build");
+    if (isPhone) {
+      document.documentElement.classList.add("phone-web");
+      document.body.classList.add("phone-web");
+    }
+    if (isAndroid) {
+      document.documentElement.classList.add("android-web");
+      document.body.classList.add("android-web");
+    }
     return () => {
       document.documentElement.classList.remove("web-build");
       document.body.classList.remove("web-build");
+      document.documentElement.classList.remove("phone-web");
+      document.body.classList.remove("phone-web");
+      document.documentElement.classList.remove("android-web");
+      document.body.classList.remove("android-web");
     };
   }, [isDesktopApp]);
   useEffect(() => {
@@ -3136,7 +3150,7 @@ export default function App() {
               </div>
             </div>
             <div className="chart">
-              <div className="chart-plot" onWheel={handleChartWheel}>
+              <div className="chart-plot" onWheel={isDesktopApp ? handleChartWheel : undefined}>
               {stalePanelActive && (
                 <OptimisationRequiredBadge
                   className="chart-optimisation-required"
