@@ -19,7 +19,7 @@ import {
 } from "./v4Math";
 
 const EPSILON = 1e-8;
-export const HARVESTER_MOVE_STEP = 5;
+export const HARVESTER_MOVE_STEP = 1;
 
 export type HarvesterBenchmark = "spot" | "lending" | "perp";
 export type HarvesterDragMode = "vertical" | "horizontal" | "both";

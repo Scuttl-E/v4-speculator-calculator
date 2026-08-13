@@ -3415,6 +3415,14 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-chart { position: relative; flex: 1; min-height: 0; cursor: default; }
 .harvester-chart.is-placing { cursor: crosshair; }
 .harvester-chart > .recharts-responsive-container { width: 100% !important; height: 100% !important; }
+.harvester-touch-number-editor { position: absolute; z-index: 12; bottom: 12px; left: 50%; display: grid; grid-template-columns: repeat(3, minmax(58px, 1fr)) minmax(178px, 1.7fr) repeat(3, minmax(58px, 1fr)); width: min(680px, calc(100% - 38px)); min-height: 58px; overflow: hidden; border: 1px solid #d4874c80; border-radius: 10px; background: linear-gradient(145deg, #2d211a, #171514); box-shadow: 0 14px 34px #000b, inset 0 1px #ffd6b029; transform: translateX(-50%); }
+.harvester-touch-number-steps { display: contents; }
+.harvester-touch-number-editor button { min-width: 0; border: 0; border-right: 1px solid #ffffff10; background: linear-gradient(145deg, #7b4d30, #4a2f24); color: #fae8d4; font: 700 15px var(--mono); cursor: pointer; }
+.harvester-touch-number-editor button:hover { background: linear-gradient(145deg, #945b36, #59352a); }
+.harvester-touch-number-value { display: grid; align-content: center; justify-items: center; gap: 1px; border-inline: 1px solid #ffffff1a !important; background: #161717 !important; }
+.harvester-touch-number-value small { color: #c69a73; font: 700 9px Atelier; letter-spacing: .1em; text-transform: uppercase; }
+.harvester-touch-number-value b { color: #f5e8da; font: 700 22px var(--mono); line-height: 1; }
+.harvester-touch-number-value span { color: #a99e93; font: 600 9px Atelier; letter-spacing: .08em; text-transform: uppercase; }
 .harvester-chart .harvester-checkpoint-dot circle:last-child { cursor: grab; }
 .harvester-chart .harvester-checkpoint-dot circle:last-child:active { cursor: grabbing; }
 .harvester-chart .recharts-active-dot { pointer-events: none; }
@@ -3536,10 +3544,10 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-combo .harvester-unit-input { flex: 1; min-width: 0; }
 .harvester-combo .harvester-unit-input input { min-width: 0; border-radius: 4px 0 0 4px; }
 .harvester-combo .harvester-selector-button { position: relative; display: grid; place-items: center; width: 28px; min-width: 28px; padding: 0; border-left: 0; border-radius: 0 4px 4px 0; }
-.harvester-combo .harvester-selector-button::before { content: ""; width: 8px; height: 8px; border-right: 2px solid #d8b38e; border-bottom: 2px solid #d8b38e; transform: rotate(45deg) translate(-2px, -2px); }
-.harvester-selector-menu { position: absolute; z-index: 5; top: calc(100% + 4px); right: 0; display: grid; width: 100%; max-height: 180px; overflow-y: auto; padding: 3px; border: 1px solid #d4874c4d; border-radius: 4px; background: #171514; box-shadow: 0 8px 18px #0008; }
+.harvester-combo .harvester-selector-button::before { content: ""; width: 9px; height: 9px; border-right: 2px solid #d8b38e; border-bottom: 2px solid #d8b38e; transform: rotate(225deg) translate(-1px, -1px); }
+.harvester-selector-menu { position: absolute; z-index: 5; top: calc(100% + 4px); right: 0; display: grid; width: 100%; max-height: none; overflow: visible; padding: 4px; border: 1px solid #d4874c4d; border-radius: 5px; background: #171514; box-shadow: 0 8px 18px #0008; }
 .harvester-combo.opens-up .harvester-selector-menu { top: auto; bottom: calc(100% + 4px); }
-.harvester-selector-menu button { height: 27px !important; padding: 0 8px !important; border: 0; border-radius: 2px; text-align: left; }
+.harvester-selector-menu button { height: 36px !important; padding: 0 10px !important; border: 0; border-radius: 3px; text-align: left; font-size: 13px !important; }
 .harvester-action-group { min-width: 112px; display: grid; gap: 3px; }
 .harvester-action-group button { width: 100%; }
 .harvester-action-group small { max-width: 160px; color: #a99e93; font-size: 8px; line-height: 1.1; }

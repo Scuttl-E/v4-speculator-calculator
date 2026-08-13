@@ -3328,11 +3328,11 @@ export default function App() {
                   <span className="spot-start">SPOT {assetLabel}<br />VALUE</span>
                   <span className="edge-cell">V4 EDGE</span>
                   <span className="v4-end">V4 RETURN<br />FROM ENTRY</span>
-                </> : displayComparisonMode !== "base" ? <>
+                </> : <>
                   <span className="debt-cell">{displayComparisonMode === "lending" ? "LENDING POSITION" : "PERP POSITION"}</span>
                   <span className="comparison-edge">V4 EDGE</span>
                   <span className="v4-end">V4 RETURN<br />FROM ENTRY</span>
-                </> : null}
+                </>}
                 {displayComparisonMode !== "base" && showSpot && <>
                   <span className="spot-start">SPOT {assetLabel}<br />VALUE</span>
                   <span className="edge-cell">V4 EDGE</span>
@@ -3383,7 +3383,7 @@ export default function App() {
                       <span className={`v4-end ${p !== 1 ? (v4Return >= 0 ? "positive" : "negative") : ""}`}>
                         {pct(v4Return)}
                       </span>
-                    </> : displayComparisonMode !== "base" ? <>
+                    </> : <>
                       <span className="debt-cell debt-scenario">
                         {displayComparisonMode === "lending" ? (isDebtPositionLiquidated(p, displayDebtPosition) ? (
                           <b className="position-liquidated">RIP</b>
@@ -3401,21 +3401,7 @@ export default function App() {
                       <span className={`v4-end ${p !== 1 ? (v4Return >= 0 ? "positive" : "negative") : ""}`}>
                         {pct(v4Return)}
                       </span>
-                    </> : <span className={`v4-end ${p !== 1 ? (v4Return >= 0 ? "positive" : "negative") : ""}`}>
-                      {pct(v4Return)}
-                    </span>}
-                    {false && <span className="debt-cell debt-scenario">
-                      {isPerpPositionLiquidated(p, displayPerpState) ? (
-                        <><b>RIP</b><small>Liquidation at {displayPerpSummary.liquidationAssetMove === null ? "—" : pct(displayPerpSummary.liquidationAssetMove / 100)}</small></>
-                      ) : (
-                        <><b>{money(perpPositionValue(p, displayPerpState))}</b><small>{pct(perpPositionReturn(p, displayPerpState) ?? 0)}</small></>
-                      )}
-                    </span>}
-                    {false && <span
-                      className={`comparison-edge ${comparisonEdge === null ? "unavailable" : p === 1 ? "" : comparisonEdge >= 0 ? "positive" : "negative"}`}
-                    >
-                      {comparisonEdge === null ? "—" : pct(comparisonEdge).replace("%", " pts")}
-                    </span>}
+                    </>}
                     {displayComparisonMode !== "base" && showSpot && <>
                       <span className="spot-start">{money(spot)}</span>
                       <span className={`edge-cell ${p === 1 ? "" : spotEdge >= 0 ? "positive" : "negative"}`}>

@@ -349,7 +349,7 @@ describe("Earliest Recovery", () => {
     const state = createHarvesterPlanState(generateUserHarvestPlan(snap, stateInputs), stateInputs);
     const moved = editHarvestPoint(snap, "spot", 500, state.points, state.points[1].id, { movePercent: 227 }, "horizontal");
     const movedResult = evaluateHarvestPlan(snap, "spot", 500, moved);
-    expect(movedResult.points[1].movePercent).toBe(225);
+    expect(movedResult.points[1].movePercent).toBe(227);
     const vertical = editHarvestPointPercent(snap, "spot", 500, moved, moved[1].id, 75);
     const verticalResult = evaluateHarvestPlan(snap, "spot", 500, vertical);
     expect(verticalResult.points[1].harvestPercent).toBeCloseTo(75, 5);

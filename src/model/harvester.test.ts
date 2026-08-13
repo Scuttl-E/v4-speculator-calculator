@@ -154,9 +154,9 @@ describe("Harvester constraints and editing", () => {
   it("snaps horizontal edits, preserves ordering and cannot reach the target", () => {
     const snap = snapshot();
     const generated = generateHarvestPoints(snap, "spot", 500, 100, 3);
-    expect(snapHarvestMove(127)).toBe(125);
+    expect(snapHarvestMove(127)).toBe(127);
     const moved = editHarvestPoint(snap, "spot", 500, generated, generated[1].id, { movePercent: 499 }, "horizontal");
-    expect(moved[1].movePercent).toBe(295);
+    expect(moved[1].movePercent).toBe(299);
     expect(moved[0].movePercent).toBeLessThan(moved[1].movePercent);
     expect(moved[1].movePercent).toBeLessThan(moved[2].movePercent);
     expect(moved[2].movePercent).toBeLessThan(500);
@@ -166,7 +166,7 @@ describe("Harvester constraints and editing", () => {
     const snap = snapshot();
     const inserted = insertHarvestPoint(snap, "spot", 500, [], 123);
     const evaluated = evaluateHarvestPlan(snap, "spot", 500, inserted);
-    expect(inserted[0].movePercent).toBe(125);
+    expect(inserted[0].movePercent).toBe(123);
     expect(inserted[0].activeAfter).toBeCloseTo((evaluated.points[0].feasibleMin + evaluated.points[0].feasibleMax) / 2, 8);
   });
 
