@@ -38,6 +38,24 @@ The app is a price-response modeller, not a price predictor. It asks:
 
 ---
 
+## Harvester
+
+Harvester is an interactive, chart-led workspace for planning V4 cash withdrawals while preserving final benchmark parity.
+
+Set a final target, then fine-tune checkpoints or choose an automated plan to see the cash you can extract while retaining equivalent benchmark exposure at that target.
+
+Use it to:
+
+- build a custom withdrawal schedule by adding, moving, and editing checkpoints directly on the chart;
+- compare it with **Max Harvest Rate**, **Max Equal Harvest**, and **Fastest Capital Recovery** plans;
+- adjust the target, benchmark, interval, checkpoint count, and first checkpoint;
+- inspect each checkpoint's withdrawal and remaining V4 value; and
+- review total harvested cash, remaining active V4, initial Cashback, total wealth, benchmark parity, and capital recovery.
+
+Harvester is a separate planning workspace: opening, editing, or closing it does not alter the calculator's underlying V4 configuration.
+
+---
+
 ## V4 products
 
 Long and Short each have the same three user-facing product choices.
