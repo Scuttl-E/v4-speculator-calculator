@@ -242,6 +242,7 @@ function CheckpointDot({
 
 export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
   const isBrowserHarvester = !isDesktopShell();
+  const isPhoneBrowser = isBrowserHarvester && document.body.classList.contains("phone-web");
   const isAndroidBrowser = /Android/i.test(navigator.userAgent);
   const androidBackdropStyle = isAndroidBrowser ? {
     position: "fixed" as const, top: 0, right: 0, bottom: 0, left: 0,
@@ -470,6 +471,9 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
       ? chartView === "complete" ? 176 : 154
       : chartView === "complete" ? 142 : 118;
     const chartWidth = chartRef.current?.clientWidth ?? 0;
+    if (isPhoneBrowser && chartWidth) {
+      return { x: Math.max(0, (chartWidth - tooltipWidth) / 2), y: 12 };
+    }
     const rightX = harvestedTooltipAnchor.x + 18;
     const x = chartWidth && rightX + tooltipWidth > chartWidth
       ? Math.max(0, harvestedTooltipAnchor.x - tooltipWidth - 18)
@@ -477,7 +481,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     const aboveY = harvestedTooltipAnchor.y - 150 - tooltipHeight;
     const preferredY = aboveY >= 58 ? aboveY : harvestedTooltipAnchor.y + 150;
     return { x, y: Math.max(58, preferredY) };
-  }, [harvestedTooltipAnchor, showDetailedTooltip, chartView]);
+  }, [harvestedTooltipAnchor, isPhoneBrowser, showDetailedTooltip, chartView]);
   const activeHarvestRate = activePlan?.harvestRatePercent ?? sharedInputs.defaultHarvestPercent;
 
   useEffect(() => {
