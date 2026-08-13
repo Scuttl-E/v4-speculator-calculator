@@ -736,6 +736,16 @@ select {
 .settings-panel header small { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .085em; }
 .settings-panel h2 { margin: 3px 0 0; color: var(--cream); font: 600 20px Atelier; }
 .settings-panel header button { width: 27px; height: 27px; border: 0; border-radius: 6px; background: #ffffff0a; color: #cdbda9; font-size: 20px; line-height: 1; cursor: pointer; }
+.settings-wheel-zoom-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid #ffffff10; cursor: pointer; }
+.settings-wheel-zoom-toggle > span { display: grid; gap: 3px; }
+.settings-wheel-zoom-toggle b { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .075em; }
+.settings-wheel-zoom-toggle small { color: #a99e93; font-size: 10px; }
+.settings-wheel-zoom-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.settings-wheel-zoom-toggle i { position: relative; flex: 0 0 36px; width: 36px; height: 20px; border: 1px solid #ffffff18; border-radius: 999px; background: #ffffff12; transition: background .15s ease, border-color .15s ease; }
+.settings-wheel-zoom-toggle i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #a99e93; transition: transform .15s ease, background .15s ease; }
+.settings-wheel-zoom-toggle input:checked + i { border-color: #d88a4b99; background: #8b4f2c; }
+.settings-wheel-zoom-toggle input:checked + i::after { transform: translateX(16px); background: var(--cream); }
+.settings-wheel-zoom-toggle:focus-within i { outline: 2px solid #e7a96888; outline-offset: 2px; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px 0 10px; }
 .settings-grid label { position: relative; display: grid; gap: 3px; min-width: 0; }
 .settings-grid label > span { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .075em; }
@@ -3322,6 +3332,33 @@ main.web-app .scenarios .scenario-row b {
 }
 main.web-app .scenarios.comparison-base .scenario-row {
   grid-template-columns: 86px minmax(82px, 1fr) 86px minmax(82px, 1.08fr) 92px;
+}
+
+/* When Spot ETH Value is visible beside Lending or Perp data, preserve the
+   measured table tracks and let the table—not the fixed position summary—own
+   horizontal overflow. The hidden-spot layout remains compact. */
+body.web-build main.web-app .scenarios.comparison-lending:not(.spot-hidden) > .scenario-table,
+body.web-build main.web-app .scenarios.comparison-perp:not(.spot-hidden) > .scenario-table {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+body.web-build main.web-app .scenarios.comparison-lending:not(.spot-hidden) > .scenario-table::-webkit-scrollbar,
+body.web-build main.web-app .scenarios.comparison-perp:not(.spot-hidden) > .scenario-table::-webkit-scrollbar { height: 0; }
+body.web-build main.web-app .scenarios.comparison-lending:not(.spot-hidden) .scenario-row,
+body.web-build main.web-app .scenarios.comparison-perp:not(.spot-hidden) .scenario-row {
+  grid-template-columns: 86px repeat(6, 104px);
+  min-width: 710px;
+  column-gap: 0;
+  justify-content: start;
+}
+body.web-build main.web-app .scenarios.comparison-lending.spot-hidden .scenario-row,
+body.web-build main.web-app .scenarios.comparison-perp.spot-hidden .scenario-row {
+  grid-template-columns: 86px repeat(4, 104px);
+  min-width: 502px;
+  column-gap: 0;
+  justify-content: start;
 }
 
 .scenario-row:not(.headings) > .v4-end.positive { color: var(--bright) !important; }
