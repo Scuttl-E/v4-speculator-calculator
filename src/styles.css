@@ -3444,7 +3444,11 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-chart-tooltip span { display: flex; justify-content: space-between; gap: 14px; }
 .harvester-chart-tooltip strong { color: #d7c9bb; font: 600 11px var(--mono); }
 .harvester-chart-tooltip .original { color: #8b8178; }
+.harvester-chart-tooltip .original { margin-bottom: 2px; padding-bottom: 4px; border-bottom: 1px solid #ffffff14; }
 .harvester-chart-tooltip .active { color: #e18a4a; }
+.harvester-chart-tooltip .harvested { color: #e18a4a; }
+.harvester-chart-tooltip .harvested strong { color: #f0a05e; }
+.harvester-chart-tooltip .cashback { color: #d7a276; }
 .harvester-chart-tooltip .wealth { color: #78b8aa; }
 .harvester-chart-tooltip .benchmark { color: #c4b17d; }
 .harvester-placement-hint {

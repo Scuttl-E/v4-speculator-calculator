@@ -129,6 +129,7 @@ export interface HarvesterChartPoint {
   move: number;
   originalActiveV4: number;
   harvestedActiveV4: number;
+  initialCashback: number;
   totalWealth: number;
   benchmark: number | null;
   cumulativeHarvested: number;
@@ -964,6 +965,7 @@ export const buildHarvesterChartSeries = (
         move,
         originalActiveV4: originalActiveV4Value(snapshot, p),
         harvestedActiveV4: state.activeV4,
+        initialCashback: state.external,
         totalWealth: state.totalWealth,
         benchmark: evaluateHarvesterBenchmark(snapshot, benchmark, p).value,
         cumulativeHarvested: state.cumulativeHarvested,

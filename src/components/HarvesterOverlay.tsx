@@ -102,10 +102,12 @@ function HarvesterTooltip({ active, payload, label }: { active?: boolean; payloa
   if (!row) return null;
   return <div className="harvester-chart-tooltip">
     <b>{signedMove(label ?? row.move)}</b>
-    <span className="original">Original active V4 <strong>{money(row.originalActiveV4)}</strong></span>
-    <span className="active">Harvested active V4 <strong>{money(row.harvestedActiveV4)}</strong></span>
-    <span className="wealth">Total wealth <strong>{money(row.totalWealth)}</strong></span>
     <span className="benchmark">Benchmark <strong>{row.benchmark === null ? "Unavailable" : money(row.benchmark)}</strong></span>
+    <span className="original">Original V4 <strong>{money(row.originalActiveV4)}</strong></span>
+    <span className="active">Active V4 <strong>{money(row.harvestedActiveV4)}</strong></span>
+    <span className="harvested">Harvested Cash <strong>{money(row.cumulativeHarvested)}</strong></span>
+    <span className="cashback">Initial Cashback <strong>{money(row.initialCashback)}</strong></span>
+    <span className="wealth">Total wealth <strong>{money(row.totalWealth)}</strong></span>
   </div>;
 }
 
@@ -601,10 +603,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               <YAxis type="number" domain={[yMin, yMax]} tickFormatter={(value) => money(value)} width={70} stroke="#4f4a45" tick={{ fontSize: 10, fill: "#9b9187" }} />
               <Tooltip content={<HarvesterTooltip />} position={harvestedTooltipPosition} />
               <ReferenceLine x={evaluationInputs.finalTargetPercent} stroke="#d7a276" strokeWidth={1.5} strokeDasharray="5 4" />
-              <Line dataKey="originalActiveV4" name="Original Active V4" stroke="#8b8178" strokeOpacity={points.length ? .42 : .7} strokeDasharray="5 5" strokeWidth={1.4} dot={false} isAnimationActive={false} />
+              <Line dataKey="originalActiveV4" name="Original V4" stroke="#8b8178" strokeOpacity={points.length ? .42 : .7} strokeDasharray="5 5" strokeWidth={1.4} dot={false} isAnimationActive={false} />
               <Line dataKey="benchmark" name={benchmarkLabels[evaluationInputs.benchmark]} stroke="#c4b17d" strokeOpacity={.72} strokeDasharray="3 4" strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />
               <Line dataKey="totalWealth" name="Total Wealth" stroke="#78b8aa" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              <Line dataKey="harvestedActiveV4" name="Harvested Active V4" stroke="#e18a4a" strokeWidth={3.4} dot={false} activeDot={(props: { cx?: number; cy?: number }) => <HarvestedTooltipAnchor {...props} onPosition={setHarvestedTooltipAnchor} />} isAnimationActive={false} />
+              <Line dataKey="harvestedActiveV4" name="Active V4" stroke="#e18a4a" strokeWidth={3.4} dot={false} activeDot={(props: { cx?: number; cy?: number }) => <HarvestedTooltipAnchor {...props} onPosition={setHarvestedTooltipAnchor} />} isAnimationActive={false} />
               {result.points.map((point) => <ReferenceDot
                 key={point.id}
                 x={point.movePercent}
@@ -636,8 +638,8 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
           </div>}
           {showLegendCard && <aside className="harvester-legend" aria-label="Chart legend">
             <small>CHART LEGEND</small>
-            <span className="original">Original Active V4</span>
-            <span className="active">Harvested Active V4</span>
+            <span className="original">Original V4</span>
+            <span className="active">Active V4</span>
             <span className="wealth">Total Wealth</span>
             <span className="benchmark">Benchmark - {benchmarkLabels[evaluationInputs.benchmark]}</span>
           </aside>}
