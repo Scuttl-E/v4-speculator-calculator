@@ -3301,7 +3301,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div className={`panel scenarios comparison-${displayComparisonMode}${stalePanelActive ? " is-stale" : ""}`}>
+          <div className={`panel scenarios comparison-${displayComparisonMode}${stalePanelActive ? " is-stale" : ""}${displayComparisonMode !== "base" && !showSpot ? " spot-hidden" : ""}`}>
             <div className="panel-head">
               <div>
                 <b>SCENARIO ANALYSIS</b>
@@ -3325,7 +3325,7 @@ export default function App() {
                 <span>{assetLabel} MOVE</span>
                 <span className="v4-start">V4 VALUE</span>
                 {displayComparisonMode === "base" ? <>
-                  <span className="spot-start">{assetLabel} VALUE<br />- SPOT</span>
+                  <span className="spot-start">SPOT {assetLabel}<br />VALUE</span>
                   <span className="edge-cell">V4 EDGE</span>
                   <span className="v4-end">V4 RETURN<br />FROM ENTRY</span>
                 </> : displayComparisonMode !== "base" ? <>
@@ -3334,7 +3334,7 @@ export default function App() {
                   <span className="v4-end">V4 RETURN<br />FROM ENTRY</span>
                 </> : null}
                 {displayComparisonMode !== "base" && showSpot && <>
-                  <span className="spot-start">{displayComparisonMode !== "base" ? <>{assetLabel} VALUE<br />- SPOT</> : `${assetLabel} VALUE - SPOT`}</span>
+                  <span className="spot-start">SPOT {assetLabel}<br />VALUE</span>
                   <span className="edge-cell">V4 EDGE</span>
                 </>}
               </div>

@@ -1896,8 +1896,8 @@ body {
 .scenarios.comparison-perp .scenario-row.headings > .debt-cell { color: #dfd1a0 !important; }
 
 .desktop-app .scenarios.comparison-base .scenario-row {
-  grid-template-columns: 86px repeat(4, 104px);
-  justify-content: start;
+  grid-template-columns: 86px repeat(4, minmax(104px, 1fr));
+  justify-content: stretch;
   column-gap: 0;
 }
 .desktop-app .scenarios.comparison-base .scenario-row > .v4-start,
@@ -2015,6 +2015,13 @@ body {
   background: #ffffff12;
 }
 .desktop-app .scenarios.comparison-perp .scenario-row > .comparison-edge { padding-left: 16px; }
+.desktop-app .scenarios.comparison-lending.spot-hidden .scenario-row,
+.desktop-app .scenarios.comparison-perp.spot-hidden .scenario-row {
+  grid-template-columns: 86px repeat(4, minmax(104px, 1fr));
+  justify-content: stretch;
+}
+.desktop-app .scenarios.comparison-lending.spot-hidden .scenario-table::after,
+.desktop-app .scenarios.comparison-perp.spot-hidden .scenario-table::after { display: none; }
 .desktop-app .scenarios.comparison-lending .scenario-row:not(.headings) > .spot-start,
 .desktop-app .scenarios.comparison-perp .scenario-row:not(.headings) > .spot-start,
 .desktop-app .scenarios.comparison-base .scenario-row:not(.headings) > .spot-start {
