@@ -3610,7 +3610,6 @@ body.web-build.phone-web .harvester-ledger-scroll { flex: 0 0 auto; overflow: vi
 .harvester-touch-number-value small { color: #c69a73; font: 700 9px Atelier; letter-spacing: .1em; text-transform: uppercase; }
 .harvester-touch-number-value b { color: #f5e8da; font: 700 22px var(--mono); line-height: 1; }
 .harvester-touch-number-value span { color: #a99e93; font: 600 9px Atelier; letter-spacing: .08em; text-transform: uppercase; }
-body.web-build.phone-web .harvester-touch-number-editor { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom)); width: min(680px, calc(100vw - 26px)); }
 .harvester-chart .harvester-checkpoint-dot circle:last-child { cursor: grab; }
 .harvester-chart .harvester-checkpoint-dot circle:last-child:active { cursor: grabbing; }
 .harvester-chart .harvester-checkpoint-dot.muted { opacity: .32; }
