@@ -9,8 +9,8 @@ const config = (longMode: Config["longMode"], longAllocation = 1): Config => ({
 });
 
 describe("V4 product labels", () => {
-  it("uses the user-facing LTV terminology for Long and Short", () => {
-    const expected = ["50% LTV", "75% LTV Cashback", "75% LTV"];
+  it("uses the user-facing leverage terminology for Long and Short", () => {
+    const expected = ["2x", "2x Cashback", "2.5x"];
     const modes = ["2x", "2.5x-cashback", "2.5x-looped"] as const;
     expect(modes.map(longModeLabel)).toEqual(expected);
     expect(modes.map(shortModeLabel)).toEqual(expected);

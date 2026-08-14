@@ -8,7 +8,7 @@ export const clampV4Ltv = (ltv:number) => ltv >= .625 ? .75 : .5;
 export const payoffExponent = (ltv:number) => .5 / (1-ltv);
 export const MAX_V4_PAYOFF_EXPONENT = payoffExponent(MAX_V4_LTV);
 export const MAX_V4_LEVERAGE_FACTOR = peapodsLeverageFactor(MAX_V4_LTV);
-export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "50% LTV" : mode === "2.5x-cashback" ? "75% LTV Cashback" : "75% LTV";
+export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "2x" : mode === "2.5x-cashback" ? "2x Cashback" : "2.5x";
 export const shortModeLabel = (mode: ShortV4Mode) => longModeLabel(mode);
 export const validP = (p: number) => Math.max(0.000001, p);
 

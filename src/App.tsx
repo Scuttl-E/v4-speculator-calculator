@@ -848,7 +848,7 @@ function ChartTooltip({
     metrics.push({ key: "perp", label: "PERP POSITION", edgeLabel: "PERP", icon: "perp", returnValue: perpLiquidated ? null : perpReturn, dollarValue: perpLiquidated ? null : perpPositionValue(p, perpPosition), liquidated: perpLiquidated });
   }
   if (showSpot) {
-    metrics.push({ key: "spot", label: `HELD ${assetLabel}`, edgeLabel: assetLabel, icon: "slate", returnValue: p - 1, dollarValue: config.deposit * p });
+    metrics.push({ key: "spot", label: `SPOT ${assetLabel}`, edgeLabel: assetLabel, icon: "slate", returnValue: p - 1, dollarValue: config.deposit * p });
   }
   if (showLong) {
     const value = portfolioReturn(p, { ...config, longAllocation: 1 }) + 1;
@@ -1268,8 +1268,10 @@ export default function App() {
         ? displayDebtPosition.assetPrice
         : displayPerpState.assetPrice;
     return {
-      longCapital: config.deposit * config.longAllocation * (config.longMode === "2.5x-looped" ? 1.5 : 1),
-      shortCapital: config.deposit * (1 - config.longAllocation) * (config.shortMode === "2.5x-looped" ? 1.5 : 1),
+      // Keep the user's own capital distinct from the additional capital retained
+      // inside the 2.5x product, which is shown on its own line below.
+      longCapital: config.deposit * config.longAllocation,
+      shortCapital: config.deposit * (1 - config.longAllocation),
       loopedLongCapital: config.deposit * longLooped,
       loopedShortCapital: config.deposit * shortLooped,
       recycledLongCapital: 0,
@@ -2018,7 +2020,7 @@ export default function App() {
                 <em>%</em>
               </label>
             </div>
-            <p>V4 products remain capped at 75% LTV.</p>
+            <p>V4 products remain capped at 2.5x.</p>
           </section>
         </div>
       )}
@@ -2116,10 +2118,10 @@ export default function App() {
                     </div>
                   </div>
                   <div className="equation-stack">
-                    <code>L<sub>50% LTV</sub>(p) = p</code>
+                    <code>L<sub>2x</sub>(p) = p</code>
                     <code>L<sub>cashback,cash</sub>(p) = 0.5 + 0.5p<sup>2</sup></code>
                     <code>L<sub>cashback,spot</sub>(p) = 0.5p + 0.5p<sup>2</sup></code>
-                    <code>L<sub>75% LTV</sub>(p) = p<sup>2</sup></code>
+                    <code>L<sub>2.5x</sub>(p) = p<sup>2</sup></code>
                   </div>
                 </section>
 
@@ -2132,10 +2134,10 @@ export default function App() {
                     </div>
                   </div>
                   <div className="equation-stack">
-                    <code>S<sub>50% LTV</sub>(p) = S<sub>m=1</sub>(p)</code>
+                    <code>S<sub>2x</sub>(p) = S<sub>m=1</sub>(p)</code>
                     <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5S<sub>m=2</sub>(p)</code>
                     <code>S<sub>cashback,spot</sub>(p) = 0.5p + 0.5S<sub>m=2</sub>(p)</code>
-                    <code>S<sub>75% LTV</sub>(p) = S<sub>m=2</sub>(p)</code>
+                    <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
                   </div>
                 </section>
               </div>
@@ -2143,12 +2145,12 @@ export default function App() {
               <section className="maths-assumptions">
                 <div>
                   <small>USER-FACING PRODUCTS</small>
-                  <strong>50% LTV</strong>
-                  <strong>75% LTV Cashback</strong>
-                  <strong>75% LTV</strong>
+                  <strong>2x</strong>
+                  <strong>2x Cashback</strong>
+                  <strong>2.5x</strong>
                   <small>MODEL PAYOFF EXPONENT</small>
-                  <strong>50% LTV → m = 1.00</strong>
-                  <strong>75% LTV → m = 2.00</strong>
+                  <strong>2x → m = 1.00</strong>
+                  <strong>2.5x → m = 2.00</strong>
                 </div>
                 <div>
                   <small>MODEL ASSUMPTIONS</small>
@@ -2160,7 +2162,7 @@ export default function App() {
                     </li>
                     <li>
                       On either side, Cashback partitions the eligible curve once;
-                      the 75% LTV product keeps the complete eligible curve in V4. Nothing is recursively layered.
+                      the 2.5x product keeps the complete eligible curve in V4. Nothing is recursively layered.
                     </li>
                     <li>Price-only, static and path-independent.</li>
                     <li>
@@ -2202,6 +2204,11 @@ export default function App() {
               </button>
             </div>
           </div>
+          {comparisonMode !== "base" && (
+            <p className="comparison-mode-explainer">
+              Assess whether moving your position's current equity into V4 could improve performance.
+            </p>
+          )}
           <div
             className="rail-scroll"
             ref={railScrollRef}
@@ -2255,7 +2262,7 @@ export default function App() {
               </label>
             </section>
             <section className="compact-control derived-deposit">
-              <label className="field-label">V4 DEPOSIT <small>Derived from net equity</small></label>
+              <label className="field-label">V4 DEPOSIT <small>— Derived from net equity</small></label>
               <div className="deposit-input"><span>$</span><NumericInput value={Math.max(0, pendingConfig.deposit)} onValueChange={() => undefined} readOnly aria-label="Derived V4 deposit" /></div>
             </section>
             </>}
@@ -2289,7 +2296,7 @@ export default function App() {
                 </label>
               </section>
               <section className="compact-control derived-deposit">
-                <label className="field-label">V4 DEPOSIT <small>Derived from current equity</small></label>
+                <label className="field-label">V4 DEPOSIT <small>— Derived from net equity</small></label>
                 <div className="deposit-input"><span>$</span><NumericInput value={Math.max(0, pendingConfig.deposit)} onValueChange={() => undefined} readOnly aria-label="Derived V4 deposit" /></div>
               </section>
             </>}
@@ -2505,7 +2512,7 @@ export default function App() {
               <section>
                 <div className="section-label">
                   <b>LEVERAGE</b>
-                  <span>Up to 75% LTV</span>
+                  <span>Up to 2.5x</span>
                 </div>
                 <label className="field-label">LONG PRODUCT</label>
                 <div className="segments wide cashback-segments product-mode-segments">
@@ -2533,13 +2540,13 @@ export default function App() {
                     {leverageLimitsExpanded && <div className="leverage-limit-editor">
                       <label className="field-label">LONG</label>
                       <div className="segments wide cashback-segments">
-                        <button className={longLtvLimit < maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(50)}>50% LTV</button>
-                        <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>75% LTV</button>
+                        <button className={longLtvLimit < maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(50)}>2x</button>
+                        <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>2.5x</button>
                       </div>
                       <label className="field-label">SHORT</label>
                       <div className="segments wide cashback-segments">
-                        <button className={shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(50)}>50% LTV</button>
-                        <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>75% LTV</button>
+                        <button className={shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(50)}>2x</button>
+                        <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>2.5x</button>
                       </div>
                       <button type="button" className="reset-leverage-limits" onClick={() => { setLongLtvLimit(maxLtv); setShortLtvLimit(maxLtv); setLeverageLimitsExpanded(false); }}>RESET TO AUTO</button>
                     </div>}
@@ -2826,10 +2833,12 @@ export default function App() {
                     </div>
                     <small>
                       <span>
-                        LONG <b>{(lastRun.result.longAllocation * 100).toFixed(0)}%</b>
+                        <em>LONG <b>{(lastRun.result.longAllocation * 100).toFixed(0)}%</b></em>
+                        <i>({money(lastRun.result.deposit * lastRun.result.longAllocation)})</i>
                       </span>
                       <span>
-                        SHORT <b>{((1 - lastRun.result.longAllocation) * 100).toFixed(0)}%</b>
+                        <em>SHORT <b>{((1 - lastRun.result.longAllocation) * 100).toFixed(0)}%</b></em>
+                        <i>({money(lastRun.result.deposit * (1 - lastRun.result.longAllocation))})</i>
                       </span>
                     </small>
                   </div>
@@ -2907,7 +2916,7 @@ export default function App() {
                   <b className="degen-recycled-value">+{money(positionBreakdown.recycledIntoV4)}</b>
                 </>}
                 {positionBreakdown.cashOutAmount > 0 && <>
-                  <span>{config.cashbackMode === "spot" ? "CASHBACK IN SPOT" : "CASHBACK"}</span>
+                  <span>{config.cashbackMode === "spot" ? <>CASHBACK CONVERTED<br />TO {assetLabelUpper}</> : "CASHBACK"}</span>
                   {config.cashbackMode === "cash" ? (
                     <b className="cashback-cash-value">{money(positionBreakdown.cashOutAmount)}</b>
                   ) : (
@@ -2939,7 +2948,7 @@ export default function App() {
               <div>
                 <b>STRATEGY RESPONSE</b>
                 <span>
-                  V4 return vs {assetLabelUpper} move · Yield &amp; LP fees excluded
+                  V4 return vs {comparisonMode === "lending" ? "Lending Position" : comparisonMode === "perp" ? "Perp Position" : `${assetLabelUpper} move`} · Yield &amp; LP fees excluded
                 </span>
               </div>
               <div className="chart-controls">

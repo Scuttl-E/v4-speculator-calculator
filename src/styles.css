@@ -2271,6 +2271,11 @@ body {
   color: var(--cream);
   font-size: 15px;
 }
+.optimisation-result .optimised-allocation small > span { display: flex; flex-direction: column; }
+.optimisation-result .optimised-allocation small > span:last-child { align-items: flex-end; text-align: right; }
+.optimisation-result .optimised-allocation small em { display: flex; align-items: baseline; gap: 4px; font-style: normal; }
+.optimisation-result .optimised-allocation small i { color: #a99d91; font-size: 10px; font-style: normal; letter-spacing: 0; }
+.optimisation-result .optimised-values > span:last-child { text-align: right; align-items: flex-end; }
 .optimisation-result .optimised-values {
   margin-top: 11px;
   padding-top: 10px;
@@ -2299,6 +2304,8 @@ body {
   grid-template-columns: minmax(0, 1fr) 350px;
   grid-template-rows: minmax(360px, 1fr) auto;
 }
+/* Reserve one complete default Position Breakdown on the Electron desktop. */
+main.desktop-app .workspace { grid-template-rows: minmax(360px, 1fr) minmax(480px, auto); }
 .workspace > .chart-panel { grid-column: 1 / -1; grid-row: 1; }
 .workspace > .scenarios { grid-column: 1; grid-row: 2; }
 .workspace > .readouts {
@@ -2366,7 +2373,9 @@ body {
 .debt-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 10px; margin-top: 8px; }
 .debt-summary-grid span { display: flex; flex-direction: column; gap: 2px; color: #a99e93; font-size: 9px; letter-spacing: .04em; }
 .debt-summary-grid b { color: var(--cream); font: 600 12px var(--mono); letter-spacing: 0; }
-.derived-deposit .field-label { display: flex; justify-content: space-between; }
+.comparison-mode-explainer { align-self: stretch; margin: 5px 0 0; padding: 0; color: #a99e93; font-size: 11px; line-height: 1.35; text-align: left; }
+.comparison-mode-explainer + .rail-scroll .capital-settlement { padding-top: 8px; }
+.derived-deposit .field-label { display: flex; align-items: baseline; justify-content: flex-start; gap: 4px; }
 .derived-deposit .field-label small { color: #a99e93; font-size: 9px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .base-asset-value .field-label { display: flex; justify-content: space-between; }
 .base-asset-value .field-label small { color: #a99e93; font-size: 9px; font-weight: 400; letter-spacing: 0; text-transform: none; }
@@ -2807,6 +2816,10 @@ body {
 .workspace > .readouts.analytical-panel .summary-risk .analytical-primary {
   color: #dd7559;
 }
+.workspace > .readouts.analytical-panel > .analytical-panel-scroll > .summary-risk {
+  padding-block: 9px;
+}
+.workspace > .readouts.analytical-panel .summary-risk h3 { margin-bottom: 5px; }
 .drawdown-summary-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
