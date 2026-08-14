@@ -24,6 +24,7 @@ import {
   editHarvestPoint,
   editHarvestPointPercent,
   evaluateHarvestPlan,
+  horizontalBoundsForPoint,
   insertHarvestPoint,
   maximumCheckpointCount,
   originalExternalValue,
@@ -46,6 +47,12 @@ const money = (value: number) => new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
+}).format(value);
+const assetPriceMoney = (value: number) => new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
 }).format(value);
 const signedMove = (value: number) => `${value >= 0 ? "+" : ""}${Math.round(value)}%`;
 const benchmarkLabels: Record<HarvesterBenchmark, string> = { spot: "Spot", lending: "Lending", perp: "Perp" };
@@ -87,6 +94,18 @@ interface HarvesterOverlayProps {
 }
 
 const HARVESTER_UNDO_LIMIT = 50;
+
+const parseNumericDraft = (
+  draft: string,
+  { min, max, integer = false }: { min: number; max?: number; integer?: boolean },
+) => {
+  const trimmed = draft.trim();
+  if (!/^-?(?:\d+|\d*\.\d+)$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < min || (max !== undefined && value > max)) return null;
+  if (integer && !Number.isInteger(value)) return null;
+  return value;
+};
 
 interface HarvesterUndoState {
   plans: HarvesterPlans;
@@ -180,10 +199,13 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   const [exportReady, setExportReady] = useState(false);
   const [harvestedTooltipAnchor, setHarvestedTooltipAnchor] = useState<{ x: number; y: number } | null>(null);
   const [showLegendCard, setShowLegendCard] = useState(true);
+  const [finalTargetDraft, setFinalTargetDraft] = useState("500");
   const [intervalDraft, setIntervalDraft] = useState("100");
+  const [checkpointCountDraft, setCheckpointCountDraft] = useState("4");
   const [firstCheckpointDraft, setFirstCheckpointDraft] = useState("");
   const [harvestRateDraft, setHarvestRateDraft] = useState("100");
-  const [openSelector, setOpenSelector] = useState<"interval" | "firstCheckpoint" | "harvestRate" | null>(null);
+  const [pointFieldDrafts, setPointFieldDrafts] = useState<Record<string, string>>({});
+  const [openSelector, setOpenSelector] = useState<"interval" | "checkpoints" | "firstCheckpoint" | "harvestRate" | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const undoHistoryRef = useRef<HarvesterUndoState[]>([]);
@@ -216,6 +238,9 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     [snapshot, evaluationInputs, points, accountInitialCashback],
   );
   const recoveryTargetLabel = snapshot.comparisonMode === "perp" ? "Initial Margin" : "Initial Capital";
+  const hasKnownAssetPrice = snapshot.spotAssetPrice !== null
+    && Number.isFinite(snapshot.spotAssetPrice)
+    && snapshot.spotAssetPrice > 0;
   const analysisCashbackLabel = useMemo(() => {
     if (snapshot.config.cashbackMode !== "spot") return "Initial Cashback (Cash)";
     const assetName = snapshot.assetName.trim();
@@ -273,8 +298,16 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   const activeHarvestRate = activePlan?.harvestRatePercent ?? sharedInputs.defaultHarvestPercent;
 
   useEffect(() => {
+    setFinalTargetDraft(String(sharedInputs.finalTargetPercent));
+  }, [sharedInputs.finalTargetPercent]);
+
+  useEffect(() => {
     setIntervalDraft(String(sharedInputs.intervalPercent));
   }, [sharedInputs.intervalPercent]);
+
+  useEffect(() => {
+    setCheckpointCountDraft(String(sharedInputs.pointCount));
+  }, [sharedInputs.pointCount]);
 
   useEffect(() => {
     setFirstCheckpointDraft(sharedInputs.firstCheckpointPercent?.toString() ?? "");
@@ -416,38 +449,79 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     setAddPointArmed(false);
   };
 
-  const commitInterval = () => {
-    const entered = Number(intervalDraft);
-    if (!Number.isFinite(entered)) {
-      setIntervalDraft(String(sharedInputs.intervalPercent));
-      return;
+  const updateFinalTargetDraft = (draft: string) => {
+    setFinalTargetDraft(draft);
+    const entered = parseNumericDraft(draft, { min: 10, max: 2000 });
+    if (entered !== null) setShared("finalTargetPercent", entered);
+  };
+
+  const updateIntervalDraft = (draft: string) => {
+    setIntervalDraft(draft);
+    const entered = parseNumericDraft(draft, { min: 10, max: 100, integer: true });
+    if (entered !== null) setShared("intervalPercent", entered);
+  };
+
+  const updateCheckpointCountDraft = (draft: string) => {
+    setCheckpointCountDraft(draft);
+    const entered = parseNumericDraft(draft, { min: 1, integer: true });
+    if (entered !== null && availableCheckpointCounts.includes(entered)) setShared("pointCount", entered);
+  };
+
+  const updateHarvestRateDraft = (draft: string) => {
+    setHarvestRateDraft(draft);
+    const entered = parseNumericDraft(draft, { min: 0 });
+    if (entered !== null) setLiveHarvestRate(entered);
+  };
+
+  const updateFirstCheckpointDraft = (draft: string) => {
+    setFirstCheckpointDraft(draft);
+    const entered = parseNumericDraft(draft, { min: 1, integer: true });
+    if (entered !== null && availableFirstCheckpoints.includes(entered)) setLiveFirstCheckpoint(entered);
+  };
+
+  const commitFinalTarget = () => {
+    if (parseNumericDraft(finalTargetDraft, { min: 10, max: 2000 }) === null) {
+      setFinalTargetDraft(String(sharedInputs.finalTargetPercent));
     }
-    setShared("intervalPercent", Math.max(10, Math.min(100, Math.round(entered))));
+  };
+
+  const commitInterval = () => {
+    if (parseNumericDraft(intervalDraft, { min: 10, max: 100, integer: true }) === null) {
+      setIntervalDraft(String(sharedInputs.intervalPercent));
+    }
+  };
+
+  const commitCheckpointCount = () => {
+    const entered = parseNumericDraft(checkpointCountDraft, { min: 1, integer: true });
+    if (entered === null || !availableCheckpointCounts.includes(entered)) {
+      setCheckpointCountDraft(String(sharedInputs.pointCount));
+    }
   };
 
   const commitHarvestRate = () => {
-    const entered = Number(harvestRateDraft);
-    if (!Number.isFinite(entered)) {
+    if (parseNumericDraft(harvestRateDraft, { min: 0 }) === null) {
       setHarvestRateDraft(String(activeHarvestRate));
-      return;
     }
-    setLiveHarvestRate(Math.max(0, Math.round(entered * 100) / 100));
   };
 
   const commitFirstCheckpoint = () => {
-    if (firstCheckpointDraft.trim() === "") {
-      setLiveFirstCheckpoint(null);
-      return;
-    }
-    const entered = Number(firstCheckpointDraft);
-    if (!Number.isFinite(entered) || availableFirstCheckpoints.length === 0) {
+    const entered = parseNumericDraft(firstCheckpointDraft, { min: 1, integer: true });
+    if (entered === null || !availableFirstCheckpoints.includes(entered)) {
       setFirstCheckpointDraft(sharedInputs.firstCheckpointPercent?.toString() ?? "");
-      return;
     }
-    const nearest = availableFirstCheckpoints.reduce((best, move) =>
-      Math.abs(move - entered) < Math.abs(best - entered) ? move : best,
-    );
-    setLiveFirstCheckpoint(nearest);
+  };
+
+  const beginPointFieldDraft = (id: string, value: number) => {
+    setPointFieldDrafts((current) => ({ ...current, [id]: String(value) }));
+  };
+
+  const finishPointFieldDraft = (id: string) => {
+    setPointFieldDrafts((current) => {
+      if (!(id in current)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   };
 
   const updateActivePoints = (
@@ -463,14 +537,17 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     }));
   };
 
-  const numericAdjustmentTrigger = (id: string, onBlur?: () => void) => ({
+  const numericAdjustmentTrigger = (id: string, onBlur?: () => void, onFocus?: () => void) => ({
     onPointerDown: (event: ReactPointerEvent<HTMLInputElement>) => {
       if (event.pointerType !== "touch") return;
       event.preventDefault();
       event.stopPropagation();
       setActiveNumericAdjustmentId(id);
     },
-    onFocus: () => setActiveNumericAdjustmentId(id),
+    onFocus: () => {
+      setActiveNumericAdjustmentId(id);
+      onFocus?.();
+    },
     onBlur: (_event: ReactFocusEvent<HTMLInputElement>) => {
       onBlur?.();
       window.setTimeout(() => {
@@ -487,6 +564,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     if (id === "interval") return {
       id, label: "Interval", value: sharedInputs.intervalPercent, min: 10, max: 100, steps: [1, 5, 10],
       onChange: (value) => setShared("intervalPercent", value),
+    };
+    if (id === "checkpoints" && availableCheckpointCounts.length > 0) return {
+      id, label: "Checkpoints", value: sharedInputs.pointCount, min: 1, max: availableCheckpointCounts[availableCheckpointCounts.length - 1] ?? 1, steps: [1, 5, 10],
+      onChange: (value) => setShared("pointCount", Math.round(value)),
     };
     if (id === "harvest-rate") return {
       id, label: "Harvest rate", value: Math.round(activeHarvestRate), min: 0, max: 1000, steps: [1, 5, 10],
@@ -682,13 +763,13 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               ? "Recover initial margin as early as possible while preserving final benchmark parity."
               : planDescriptions[activeKind]}</span>
           </div>
-          <label><span>FINAL TARGET</span><div className="harvester-unit-input"><input type="number" min={10} max={2000} step={5} value={sharedInputs.finalTargetPercent} onChange={(event) => setShared("finalTargetPercent", Math.min(2000, Math.max(10, Number(event.target.value))))} {...numericAdjustmentTrigger("final-target")} /><em>%</em></div></label>
+          <label className="harvester-compact-control"><span>FINAL TARGET</span><div className="harvester-unit-input"><input aria-label="Final target" inputMode="decimal" value={finalTargetDraft} onChange={(event) => updateFinalTargetDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("final-target", commitFinalTarget)} /><em>%</em></div></label>
           <label><span>BENCHMARK</span><select value={sharedInputs.benchmark} onChange={(event) => setShared("benchmark", event.target.value as HarvesterBenchmark)}>{availableBenchmarks.map((value) => <option key={value} value={value}>{benchmarkLabels[value]}</option>)}</select></label>
-          <label><span>INTERVAL</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Interval" inputMode="numeric" value={intervalDraft} onChange={(event) => setIntervalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("interval", commitInterval)} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose interval" aria-expanded={openSelector === "interval"} onClick={() => setOpenSelector((current) => current === "interval" ? null : "interval")} />{openSelector === "interval" && <div className="harvester-selector-menu">{intervalOptions.map((value) => <button key={value} type="button" onClick={() => { setShared("intervalPercent", value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-          <label><span>CHECKPOINTS</span><select value={sharedInputs.pointCount} disabled={availableCheckpointCounts.length === 0} onChange={(event) => setShared("pointCount", Number(event.target.value))}>{availableCheckpointCounts.length > 0 ? availableCheckpointCounts.map((value) => <option key={value} value={value}>{value}</option>) : <option value={0}>0</option>}</select></label>
+          <label><span>INTERVAL</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Interval" inputMode="numeric" value={intervalDraft} onChange={(event) => updateIntervalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("interval", commitInterval)} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose interval" aria-expanded={openSelector === "interval"} onClick={() => setOpenSelector((current) => current === "interval" ? null : "interval")} />{openSelector === "interval" && <div className="harvester-selector-menu">{intervalOptions.map((value) => <button key={value} type="button" onClick={() => { setShared("intervalPercent", value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+          <label><span>CHECKPOINTS</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Checkpoints" inputMode="numeric" value={checkpointCountDraft} disabled={availableCheckpointCounts.length === 0} onChange={(event) => updateCheckpointCountDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("checkpoints", commitCheckpointCount)} /></div><button type="button" className="harvester-selector-button" disabled={availableCheckpointCounts.length === 0} aria-label="Choose checkpoints" aria-expanded={openSelector === "checkpoints"} onClick={() => setOpenSelector((current) => current === "checkpoints" ? null : "checkpoints")} />{openSelector === "checkpoints" && <div className="harvester-selector-menu">{availableCheckpointCounts.map((value) => <button key={value} type="button" onClick={() => { setShared("pointCount", value); setOpenSelector(null); }}>{value}</button>)}</div>}</div></label>
           <i className="harvester-control-row-break" aria-hidden="true" />
-          <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Harvest rate" inputMode="decimal" value={harvestRateDraft} disabled={activeKind === "equalRate" || activeKind === "equalCash"} onChange={(event) => setHarvestRateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("harvest-rate", commitHarvestRate)} /><em>%</em></div><button type="button" className="harvester-selector-button" disabled={activeKind === "equalRate" || activeKind === "equalCash"} aria-label="Choose harvest rate" aria-expanded={openSelector === "harvestRate"} onClick={() => setOpenSelector((current) => current === "harvestRate" ? null : "harvestRate")} />{openSelector === "harvestRate" && <div className="harvester-selector-menu">{DEFAULT_HARVEST_PRESETS.map((value) => <button key={value} type="button" onClick={() => { setLiveHarvestRate(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-          <label><span>FIRST CHECKPOINT</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="First checkpoint" inputMode="numeric" placeholder="Auto" value={firstCheckpointDraft} onChange={(event) => setFirstCheckpointDraft(event.target.value)} onBlur={commitFirstCheckpoint} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose first checkpoint" aria-expanded={openSelector === "firstCheckpoint"} onClick={() => setOpenSelector((current) => current === "firstCheckpoint" ? null : "firstCheckpoint")} />{openSelector === "firstCheckpoint" && <div className="harvester-selector-menu"><button type="button" onClick={() => { setLiveFirstCheckpoint(null); setOpenSelector(null); }}>Auto</button>{availableFirstCheckpoints.map((value) => <button key={value} type="button" onClick={() => { setLiveFirstCheckpoint(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+          <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Harvest rate" inputMode="decimal" value={harvestRateDraft} disabled={activeKind === "equalRate" || activeKind === "equalCash"} onChange={(event) => updateHarvestRateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("harvest-rate", commitHarvestRate)} /><em>%</em></div><button type="button" className="harvester-selector-button" disabled={activeKind === "equalRate" || activeKind === "equalCash"} aria-label="Choose harvest rate" aria-expanded={openSelector === "harvestRate"} onClick={() => setOpenSelector((current) => current === "harvestRate" ? null : "harvestRate")} />{openSelector === "harvestRate" && <div className="harvester-selector-menu">{DEFAULT_HARVEST_PRESETS.map((value) => <button key={value} type="button" onClick={() => { setLiveHarvestRate(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+          <label><span>FIRST CHECKPOINT</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="First checkpoint" inputMode="numeric" placeholder="Auto" value={firstCheckpointDraft} onChange={(event) => updateFirstCheckpointDraft(event.target.value)} onBlur={commitFirstCheckpoint} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose first checkpoint" aria-expanded={openSelector === "firstCheckpoint"} onClick={() => setOpenSelector((current) => current === "firstCheckpoint" ? null : "firstCheckpoint")} />{openSelector === "firstCheckpoint" && <div className="harvester-selector-menu"><button type="button" onClick={() => { setLiveFirstCheckpoint(null); setOpenSelector(null); }}>Auto</button>{availableFirstCheckpoints.map((value) => <button key={value} type="button" onClick={() => { setLiveFirstCheckpoint(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
           <fieldset className="harvester-cashback-toggle" aria-label="Include initial cashback in capital recovery"><div className="harvester-cashback-title"><span>INCLUDE INITIAL CASHBACK</span><span>IN CAPITAL RECOVERY</span></div><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => { if (!accountInitialCashback) { recordUndoState(); setAccountInitialCashback(true); } }}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => { if (accountInitialCashback) { recordUndoState(); setAccountInitialCashback(false); } }}>Off</button></fieldset>
           <i className="harvester-control-row-break" aria-hidden="true" />
           <fieldset className="harvester-drag-mode"><legend>CHECKPOINT DRAG MODE</legend>{(["vertical", "horizontal", "both"] as const).map((mode) => <button key={mode} type="button" className={dragMode === mode ? "on" : ""} onClick={() => setDragMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</fieldset>
@@ -707,8 +788,8 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               </section>
               <section className="harvester-analysis-section harvester-analysis-reference">
                 <small>REFERENCE &amp; RECOVERY</small>
-                <span className="benchmark">Benchmark ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
-                <span className="v4-delta">V4 vs Benchmark <b className={result.final.finalSurplus === null || result.final.finalSurplus === 0 ? "" : result.final.finalSurplus > 0 ? "positive" : "negative"}>{finalSurplusLabel(result.final.finalSurplus)}</b></span>
+                <span className="benchmark">Benchmark at target ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
+                <span className="v4-delta">V4 versus benchmark at target <b className={result.final.finalSurplus === null || result.final.finalSurplus === 0 ? "" : result.final.finalSurplus > 0 ? "positive" : "negative"}>{finalSurplusLabel(result.final.finalSurplus)}</b></span>
                 <span className="recovery-summary"><span>{recoveryTargetLabel} <b>{money(result.recovery.initialRecoveryTarget)}</b></span><span>Recovered <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recovered && result.recovery.recoveredAtMovePercent !== null && <> — at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</span></span>
               </section>
             </div>
@@ -724,14 +805,34 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
             <div className="harvester-ledger-title"><small>CHECKPOINT DATA</small><span>View and fine-tune each checkpoint.</span></div>
             <div className="harvester-ledger-scroll">
               <table>
-                <colgroup><col className="checkpoint" /><col className="harvest-rate" /><col className="withdrawn" /><col className="v4-after" /></colgroup>
-                <thead><tr><th>Checkpoint</th><th>Harvest %</th><th>Withdrawn</th><th>V4 After</th></tr></thead>
-                <tbody>{result.points.length === 0 ? <tr><td colSpan={4}>Generate a harvest plan</td></tr> : result.points.map((entry, index) => <tr key={entry.id} className={entry.id === activePlan?.selectedPointId ? "selected" : ""} onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: { ...activePlan, selectedPointId: entry.id } }))}>
-                  <td><div className="harvester-table-input"><input aria-label={`${planLabels[activeKind]} checkpoint ${index + 1}`} type="number" step={1} value={entry.movePercent} onChange={(event) => updateActivePoints(editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, { movePercent: Number(event.target.value) }, "horizontal"), entry.id, `checkpoint:${activeKind}:${entry.id}`)} {...numericAdjustmentTrigger(`checkpoint:${entry.id}`)} /><em>%</em></div></td>
-                  <td><div className="harvester-table-input"><input aria-label={`${planLabels[activeKind]} harvest percent ${index + 1}`} type="number" min={0} step={1} value={activeKind === "equalRate" && !activePlan?.modified && activePlan?.commonHarvestPercent != null ? activePlan.commonHarvestPercent : Number(entry.harvestPercent.toFixed(2))} onChange={(event) => updateActivePoints(editHarvestPointPercent(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, Number(event.target.value)), entry.id, `harvest:${activeKind}:${entry.id}`)} {...numericAdjustmentTrigger(`harvest:${entry.id}`)} /><em>%</em></div></td>
-                  <td><b>{money(entry.harvested)}</b>{index > 0 && <small> ({money(entry.cumulativeHarvested)})</small>}</td>
-                  <td>{money(entry.activeAfter)}</td>
-                </tr>)}</tbody>
+                <colgroup><col className="checkpoint" />{hasKnownAssetPrice && <col className="asset-price" />}<col className="harvest-rate" /><col className="withdrawn" /><col className="running-total" /><col className="v4-after" /></colgroup>
+                <thead><tr><th className="checkpoint-heading">Checkpoint</th>{hasKnownAssetPrice && <th className="asset-price-heading">{snapshot.assetName.trim() || "Asset"} Price</th>}<th className="harvest-heading">Harvest %</th><th className="money-heading">Withdrawn</th><th className="money-heading">Running Total</th><th className="money-heading">V4 After</th></tr></thead>
+                <tbody>{result.points.length === 0 ? <tr><td colSpan={hasKnownAssetPrice ? 6 : 5}>Select how many checkpoints you would like to regenerate the plan.</td></tr> : result.points.map((entry, index) => {
+                  const checkpointFieldId = `checkpoint:${entry.id}`;
+                  const harvestFieldId = `harvest:${entry.id}`;
+                  const checkpointBounds = horizontalBoundsForPoint(result.points, index, evaluationInputs.finalTargetPercent);
+                  const displayedHarvestRate = activeKind === "equalRate" && !activePlan?.modified && activePlan?.commonHarvestPercent != null
+                    ? activePlan.commonHarvestPercent
+                    : Number(entry.harvestPercent.toFixed(2));
+                  return <tr key={entry.id} className={entry.id === activePlan?.selectedPointId ? "selected" : ""} onClick={() => activePlan && setPlans((current) => ({ ...current, [activeKind]: { ...activePlan, selectedPointId: entry.id } }))}>
+                    <td className="checkpoint-input-cell"><div className="harvester-table-input"><input aria-label={`${planLabels[activeKind]} checkpoint ${index + 1}`} inputMode="numeric" value={pointFieldDrafts[checkpointFieldId] ?? (entry.movePercent === 0 ? "—" : entry.movePercent)} onChange={(event) => {
+                      const draft = event.target.value;
+                      setPointFieldDrafts((current) => ({ ...current, [checkpointFieldId]: draft }));
+                      const entered = parseNumericDraft(draft, { min: checkpointBounds.min, max: checkpointBounds.max, integer: true });
+                      if (entered !== null) updateActivePoints(editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, { movePercent: entered }, "horizontal"), entry.id, `checkpoint:${activeKind}:${entry.id}`);
+                    }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger(checkpointFieldId, () => finishPointFieldDraft(checkpointFieldId), () => beginPointFieldDraft(checkpointFieldId, entry.movePercent))} />{(pointFieldDrafts[checkpointFieldId] !== undefined || entry.movePercent !== 0) && <em>%</em>}</div></td>
+                    {hasKnownAssetPrice && <td className="asset-price-value">{assetPriceMoney((snapshot.spotAssetPrice ?? 0) * (1 + entry.movePercent / 100))}</td>}
+                    <td className="harvest-input-cell"><div className="harvester-table-input"><input aria-label={`${planLabels[activeKind]} harvest percent ${index + 1}`} inputMode="decimal" value={pointFieldDrafts[harvestFieldId] ?? (displayedHarvestRate === 0 ? "—" : displayedHarvestRate)} onChange={(event) => {
+                      const draft = event.target.value;
+                      setPointFieldDrafts((current) => ({ ...current, [harvestFieldId]: draft }));
+                      const entered = parseNumericDraft(draft, { min: 0, max: 1000 });
+                      if (entered !== null) updateActivePoints(editHarvestPointPercent(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, entered), entry.id, `harvest:${activeKind}:${entry.id}`);
+                    }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger(harvestFieldId, () => finishPointFieldDraft(harvestFieldId), () => beginPointFieldDraft(harvestFieldId, displayedHarvestRate))} />{(pointFieldDrafts[harvestFieldId] !== undefined || displayedHarvestRate !== 0) && <em>%</em>}</div></td>
+                    <td className="withdrawn-value"><b>{money(entry.harvested)}</b></td>
+                    <td className="running-total-value">{money(entry.cumulativeHarvested)}</td>
+                    <td className="v4-after-value">{money(entry.activeAfter)}</td>
+                  </tr>;
+                })}</tbody>
               </table>
             </div>
           </section>
