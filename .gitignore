@@ -28,6 +28,16 @@ artifacts/
 electron-app-screenshot.png
 visual-check-*.png
 
+# Local scenario-site iterations (candidate for an independent repository)
+public/scenarios*/
+
+# Local AtelierRelay repo-link context
+/AGENTS.md
+/docs/atelierrelay/
+
+# Root-level production bundles copied during local web iteration
+/index-*.js
+
 # Editor and operating-system state
 .vscode/
 .idea/
