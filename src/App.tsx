@@ -859,7 +859,10 @@ function ChartTooltip({
     metrics.push({ key: "short", label: "SHORT COMPONENT", edgeLabel: "SHORT", icon: "short", returnValue: (1 - config.longAllocation) * (value - 1), dollarValue: config.deposit * (1 - config.longAllocation) * value });
   }
 
-  const primaryMetric = metrics.find((metric) => metric.returnValue !== null) ?? metrics[0] ?? null;
+  const primaryMetric = metrics.find((metric) => metric.key === "lending" || metric.key === "perp")
+    ?? metrics.find((metric) => metric.returnValue !== null)
+    ?? metrics[0]
+    ?? null;
   const secondaryMetrics = primaryMetric ? metrics.filter((metric) => metric.key !== primaryMetric.key) : [];
   const renderMetric = (metric: TooltipMetric) => (
     <div className="tooltip-value" key={metric.key}>
@@ -1228,8 +1231,10 @@ export default function App() {
     : pendingConfig;
   const hasLong = config.longAllocation > 1e-12;
   const hasShort = config.longAllocation < 1 - 1e-12;
-  const showLong = hasLong && showLongSeries;
-  const showShort = hasShort && showShortSeries;
+  const isLongOnly = hasLong && !hasShort;
+  const isShortOnly = hasShort && !hasLong;
+  const showLong = hasLong && (showLongSeries || isLongOnly);
+  const showShort = hasShort && (showShortSeries || isShortOnly);
   const displayObjective = mode === "optimise" && displayedResult
     ? displayedResult.options.objective
     : objective;
@@ -3005,8 +3010,8 @@ export default function App() {
                   <label>
                     <input
                       type="checkbox"
-                      checked={showLongSeries}
-                      disabled={!hasLong}
+                      checked={showLong}
+                      disabled={!hasLong || isLongOnly}
                       onChange={(e) => setChartSeriesVisible("long", e.target.checked)}
                     />{" "}
                     Long component
@@ -3014,8 +3019,8 @@ export default function App() {
                   <label>
                     <input
                       type="checkbox"
-                      checked={showShortSeries}
-                      disabled={!hasShort}
+                      checked={showShort}
+                      disabled={!hasShort || isShortOnly}
                       onChange={(e) => setChartSeriesVisible("short", e.target.checked)}
                     />{" "}
                     Short component

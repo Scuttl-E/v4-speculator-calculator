@@ -96,13 +96,26 @@ interface HarvesterUndoState {
 
 const cloneUndoState = (state: HarvesterUndoState): HarvesterUndoState => structuredClone(state);
 
-function HarvesterTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: number }) {
+function HarvesterTooltip({
+  active,
+  payload,
+  label,
+  benchmarkLabel,
+  comparisonReferenceLabel,
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: number;
+  benchmarkLabel: string;
+  comparisonReferenceLabel: string | null;
+}) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
   return <div className="harvester-chart-tooltip">
     <b>{signedMove(label ?? row.move)}</b>
-    <span className="benchmark">Benchmark <strong>{row.benchmark === null ? "Unavailable" : money(row.benchmark)}</strong></span>
+    <span className="benchmark">Benchmark · {benchmarkLabel} <strong>{row.benchmark === null ? "Unavailable" : money(row.benchmark)}</strong></span>
+    {comparisonReferenceLabel && <span className="comparison-reference">Reference · {comparisonReferenceLabel} <strong>{row.comparisonReference === null ? "Liquidated" : money(row.comparisonReference)}</strong></span>}
     <span className="original">Original V4 <strong>{money(row.originalActiveV4)}</strong></span>
     <span className="active">Active V4 <strong>{money(row.harvestedActiveV4)}</strong></span>
     <span className="harvested">Harvested Cash <strong>{money(row.cumulativeHarvested)}</strong></span>
@@ -202,6 +215,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     () => evaluateHarvestPlan(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, accountInitialCashback),
     [snapshot, evaluationInputs, points, accountInitialCashback],
   );
+  const recoveryTargetLabel = snapshot.comparisonMode === "perp" ? "Initial Margin" : "Initial Capital";
   const analysisCashbackLabel = useMemo(() => {
     if (snapshot.config.cashbackMode !== "spot") return "Initial Cashback (Cash)";
     const assetName = snapshot.assetName.trim();
@@ -223,11 +237,23 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     return recoverySummary(recovery.recovered, recovery.recoveredAtMovePercent);
   }, [snapshot, plans.earliestRecovery, accountInitialCashback]);
   const chartSeries = useMemo(
-    () => buildHarvesterChartSeries(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points),
+    () => buildHarvesterChartSeries(
+      snapshot,
+      evaluationInputs.benchmark,
+      evaluationInputs.finalTargetPercent,
+      points,
+      180,
+      evaluationInputs.benchmark === "spot" && snapshot.comparisonMode !== "base"
+        ? benchmarkForComparisonMode(snapshot.comparisonMode)
+        : null,
+    ),
     [snapshot, evaluationInputs, points],
   );
+  const chartComparisonReference = evaluationInputs.benchmark === "spot" && snapshot.comparisonMode !== "base"
+    ? benchmarkForComparisonMode(snapshot.comparisonMode)
+    : null;
   const selectedPoint = result.points.find((point) => point.id === activePlan?.selectedPointId) ?? null;
-  const yValues = chartSeries.flatMap((entry) => [entry.originalActiveV4, entry.harvestedActiveV4, entry.totalWealth, entry.benchmark ?? 0]);
+  const yValues = chartSeries.flatMap((entry) => [entry.originalActiveV4, entry.harvestedActiveV4, entry.totalWealth, entry.benchmark ?? 0, entry.comparisonReference ?? 0]);
   const rawYMax = Math.max(snapshot.config.deposit, ...yValues);
   const yStep = rawYMax <= 100_000 ? 25_000 : rawYMax <= 500_000 ? 100_000 : 250_000;
   const yMax = Math.max(yStep, Math.ceil(rawYMax / yStep) * yStep);
@@ -601,10 +627,11 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               <CartesianGrid stroke="#312f2c" strokeOpacity={0.72} vertical={false} />
               <XAxis dataKey="move" type="number" domain={[0, evaluationInputs.finalTargetPercent]} tickFormatter={signedMove} stroke="#4f4a45" tick={{ fontSize: 11, fill: "#9b9187" }} label={{ value: `${snapshot.assetName} price change`, position: "insideBottom", offset: -7, fill: "#9b9187", fontSize: 11 }} />
               <YAxis type="number" domain={[yMin, yMax]} tickFormatter={(value) => money(value)} width={70} stroke="#4f4a45" tick={{ fontSize: 10, fill: "#9b9187" }} />
-              <Tooltip content={<HarvesterTooltip />} position={harvestedTooltipPosition} />
+              <Tooltip content={<HarvesterTooltip benchmarkLabel={benchmarkLabels[evaluationInputs.benchmark]} comparisonReferenceLabel={chartComparisonReference === null ? null : benchmarkLabels[chartComparisonReference]} />} position={harvestedTooltipPosition} />
               <ReferenceLine x={evaluationInputs.finalTargetPercent} stroke="#d7a276" strokeWidth={1.5} strokeDasharray="5 4" />
               <Line dataKey="originalActiveV4" name="Original V4" stroke="#8b8178" strokeOpacity={points.length ? .42 : .7} strokeDasharray="5 5" strokeWidth={1.4} dot={false} isAnimationActive={false} />
               <Line dataKey="benchmark" name={benchmarkLabels[evaluationInputs.benchmark]} stroke="#c4b17d" strokeOpacity={.72} strokeDasharray="3 4" strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />
+              {chartComparisonReference !== null && <Line dataKey="comparisonReference" name={`${benchmarkLabels[chartComparisonReference]} Reference`} stroke="#a687d0" strokeOpacity={.82} strokeDasharray="7 3" strokeWidth={1.8} dot={false} connectNulls={false} isAnimationActive={false} />}
               <Line dataKey="totalWealth" name="Total Wealth" stroke="#78b8aa" strokeWidth={2.5} dot={false} isAnimationActive={false} />
               <Line dataKey="harvestedActiveV4" name="Active V4" stroke="#e18a4a" strokeWidth={3.4} dot={false} activeDot={(props: { cx?: number; cy?: number }) => <HarvestedTooltipAnchor {...props} onPosition={setHarvestedTooltipAnchor} />} isAnimationActive={false} />
               {result.points.map((point) => <ReferenceDot
@@ -642,6 +669,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
             <span className="active">Active V4</span>
             <span className="wealth">Total Wealth</span>
             <span className="benchmark">Benchmark - {benchmarkLabels[evaluationInputs.benchmark]}</span>
+            {chartComparisonReference !== null && <span className="comparison-reference">Reference - {benchmarkLabels[chartComparisonReference]}</span>}
           </aside>}
         </div>
       </div>
@@ -650,7 +678,9 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
         <div className="harvester-control-row">
           <div className="harvester-control-plan-title">
             <div><small>HARVEST PLAN</small><strong>{planLabels[activeKind]}</strong></div>
-            <span>{planDescriptions[activeKind]}</span>
+            <span>{activeKind === "earliestRecovery" && snapshot.comparisonMode === "perp"
+              ? "Recover initial margin as early as possible while preserving final benchmark parity."
+              : planDescriptions[activeKind]}</span>
           </div>
           <label><span>FINAL TARGET</span><div className="harvester-unit-input"><input type="number" min={10} max={2000} step={5} value={sharedInputs.finalTargetPercent} onChange={(event) => setShared("finalTargetPercent", Math.min(2000, Math.max(10, Number(event.target.value))))} {...numericAdjustmentTrigger("final-target")} /><em>%</em></div></label>
           <label><span>BENCHMARK</span><select value={sharedInputs.benchmark} onChange={(event) => setShared("benchmark", event.target.value as HarvesterBenchmark)}>{availableBenchmarks.map((value) => <option key={value} value={value}>{benchmarkLabels[value]}</option>)}</select></label>
@@ -679,7 +709,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
                 <small>REFERENCE &amp; RECOVERY</small>
                 <span className="benchmark">Benchmark ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
                 <span className="v4-delta">V4 vs Benchmark <b className={result.final.finalSurplus === null || result.final.finalSurplus === 0 ? "" : result.final.finalSurplus > 0 ? "positive" : "negative"}>{finalSurplusLabel(result.final.finalSurplus)}</b></span>
-                <span className="recovery-summary"><span>Initial Capital <b>{money(result.recovery.initialInvestment)}</b></span><span>Recovered <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recovered && result.recovery.recoveredAtMovePercent !== null && <> — at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</span></span>
+                <span className="recovery-summary"><span>{recoveryTargetLabel} <b>{money(result.recovery.initialRecoveryTarget)}</b></span><span>Recovered <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recovered && result.recovery.recoveredAtMovePercent !== null && <> — at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</span></span>
               </section>
             </div>
           </section>

@@ -114,7 +114,7 @@ export interface HarvesterRecovery {
   countedRecoveredCapital: number;
   excludedCashbackValue: number;
   originalExternalAtLatestCheckpoint: number;
-  initialInvestment: number;
+  initialRecoveryTarget: number;
 }
 
 export interface HarvesterResult {
@@ -132,6 +132,7 @@ export interface HarvesterChartPoint {
   initialCashback: number;
   totalWealth: number;
   benchmark: number | null;
+  comparisonReference: number | null;
   cumulativeHarvested: number;
   phase?: "before" | "after";
 }
@@ -194,6 +195,11 @@ export const originalActiveV4Value = (snapshot: HarvesterSnapshot, priceRatio: n
 
 export const originalExternalValue = (snapshot: HarvesterSnapshot, priceRatio: number) =>
   snapshot.config.deposit * portfolioComponents(priceRatio, snapshot.config).cashbackValue;
+
+export const initialRecoveryTarget = (snapshot: HarvesterSnapshot) =>
+  snapshot.comparisonMode === "perp" && snapshot.perpPosition
+    ? snapshot.perpPosition.margin
+    : snapshot.config.deposit;
 
 export const evaluateHarvesterBenchmark = (
   snapshot: HarvesterSnapshot,
@@ -276,6 +282,7 @@ export const evaluateHarvestPlan = (
   inputPoints: HarvestPoint[],
   accountInitialCashback = true,
 ): HarvesterResult => {
+  const recoveryTarget = initialRecoveryTarget(snapshot);
   const required = requiredFinalActiveFraction(snapshot, benchmark, finalTargetPercent);
   const feasible = required !== null && Number.isFinite(required) && required <= 1 + EPSILON;
   const minimumFraction = feasible ? Math.min(1, Math.max(0, required!)) : 1;
@@ -311,9 +318,9 @@ export const evaluateHarvestPlan = (
       harvestPercent,
     };
   });
-  const recoveredAtEntry = accountInitialCashback && originalExternalValue(snapshot, 1) >= snapshot.config.deposit - EPSILON;
+  const recoveredAtEntry = accountInitialCashback && originalExternalValue(snapshot, 1) >= recoveryTarget - EPSILON;
   const recoveryPoint = recoveredAtEntry ? undefined : points.find((point) =>
-    point.cumulativeHarvested + (accountInitialCashback ? originalExternalValue(snapshot, point.priceRatio) : 0) >= snapshot.config.deposit - EPSILON,
+    point.cumulativeHarvested + (accountInitialCashback ? originalExternalValue(snapshot, point.priceRatio) : 0) >= recoveryTarget - EPSILON,
   );
   const final = finalSummary(snapshot, benchmark, finalTargetPercent, priorFraction, cumulativeHarvested);
   const latestPoint = points.length > 0 ? points[points.length - 1] : undefined;
@@ -336,7 +343,7 @@ export const evaluateHarvestPlan = (
       countedRecoveredCapital,
       excludedCashbackValue: accountInitialCashback ? 0 : originalExternalAtLatestCheckpoint,
       originalExternalAtLatestCheckpoint,
-      initialInvestment: snapshot.config.deposit,
+      initialRecoveryTarget: recoveryTarget,
     },
   };
 };
@@ -775,11 +782,12 @@ export const resolveEarliestRecoveryPoints = (
   policyPoints: HarvestPoint[],
   accountInitialCashback: boolean,
 ) => {
+  const recoveryTarget = initialRecoveryTarget(snapshot);
   const policyResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, policyPoints);
   const policyWithdrawalById = new Map(policyResult.points.map((point) => [point.id, point.harvested]));
   const resolved: HarvestPoint[] = [];
   let cumulativeHarvested = 0;
-  let recovered = accountInitialCashback && originalExternalValue(snapshot, 1) >= snapshot.config.deposit - EPSILON;
+  let recovered = accountInitialCashback && originalExternalValue(snapshot, 1) >= recoveryTarget - EPSILON;
 
   for (const policyPoint of policyPoints) {
     const range = feasibleRangeAt(snapshot, inputs.benchmark, inputs.finalTargetPercent, resolved, policyPoint.movePercent);
@@ -788,12 +796,12 @@ export const resolveEarliestRecoveryPoints = (
       continue;
     }
     const external = accountInitialCashback ? originalExternalValue(snapshot, ratioAt(policyPoint.movePercent)) : 0;
-    const remainingForRecovery = Math.max(0, snapshot.config.deposit - external - cumulativeHarvested);
+    const remainingForRecovery = Math.max(0, recoveryTarget - external - cumulativeHarvested);
     const policyWithdrawal = policyWithdrawalById.get(policyPoint.id) ?? 0;
     const withdrawal = Math.min(Math.max(0, range.max - range.min), policyWithdrawal, remainingForRecovery);
     resolved.push({ ...policyPoint, activeAfter: range.max - withdrawal });
     cumulativeHarvested += withdrawal;
-    recovered = external + cumulativeHarvested >= snapshot.config.deposit - EPSILON;
+    recovered = external + cumulativeHarvested >= recoveryTarget - EPSILON;
   }
   return constrainHarvestPoints(snapshot, inputs.benchmark, inputs.finalTargetPercent, resolved);
 };
@@ -950,6 +958,7 @@ export const buildHarvesterChartSeries = (
   finalTargetPercent: number,
   points: HarvestPoint[],
   sampleCount = 180,
+  comparisonReference: HarvesterBenchmark | null = null,
 ): HarvesterChartPoint[] => {
   const result = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points);
   const moves = Array.from({ length: sampleCount }, (_, index) => finalTargetPercent * index / Math.max(1, sampleCount - 1));
@@ -968,6 +977,9 @@ export const buildHarvesterChartSeries = (
         initialCashback: state.external,
         totalWealth: state.totalWealth,
         benchmark: evaluateHarvesterBenchmark(snapshot, benchmark, p).value,
+        comparisonReference: comparisonReference === null || comparisonReference === benchmark
+          ? null
+          : evaluateHarvesterBenchmark(snapshot, comparisonReference, p).value,
         cumulativeHarvested: state.cumulativeHarvested,
         phase,
       });

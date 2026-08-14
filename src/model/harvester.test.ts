@@ -11,6 +11,7 @@ import {
   evaluateHarvesterBenchmark,
   generateHarvestPoints,
   insertHarvestPoint,
+  initialRecoveryTarget,
   originalActiveV4Value,
   originalActiveV4LegValues,
   originalExternalValue,
@@ -199,6 +200,28 @@ describe("Harvester constraints and editing", () => {
 });
 
 describe("Harvester recovery and benchmarks", () => {
+  it("uses Perp margin as the recovery target only for a Perp Harvester", () => {
+    const perp = createHarvesterSnapshot({
+      ...snapshot(),
+      comparisonMode: "perp",
+      perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" },
+    });
+    expect(initialRecoveryTarget(perp)).toBe(12_000);
+    expect(evaluateHarvestPlan(perp, "perp", 500, []).recovery.initialRecoveryTarget).toBe(12_000);
+    expect(initialRecoveryTarget(snapshot())).toBe(25_000);
+  });
+
+  it("keeps a Perp comparison reference in a Spot-benchmark chart", () => {
+    const perp = createHarvesterSnapshot({
+      ...snapshot(),
+      comparisonMode: "perp",
+      perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" },
+    });
+    const series = buildHarvesterChartSeries(perp, "spot", 100, [], 4, "perp");
+    expect(series.every((point) => point.benchmark !== null && point.comparisonReference !== null)).toBe(true);
+    expect(series[0].comparisonReference).toBeCloseTo(13_000, 8);
+  });
+
   it("counts marked external spot and harvested cash at the first recovery checkpoint", () => {
     const snap = snapshot({ longMode: "2.5x-cashback", cashbackMode: "spot" });
     const first = originalActiveV4Value(snap, 1.5) * .8;

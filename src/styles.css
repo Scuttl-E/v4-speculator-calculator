@@ -3464,6 +3464,7 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-chart-tooltip .cashback { color: #d7a276; }
 .harvester-chart-tooltip .wealth { color: #78b8aa; }
 .harvester-chart-tooltip .benchmark { color: #c4b17d; }
+.harvester-chart-tooltip .comparison-reference { color: #a687d0; }
 .harvester-placement-hint {
   position: absolute;
   left: 50%;
@@ -3504,6 +3505,8 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-legend .active { color: #e18a4a; }
 .harvester-legend .wealth { color: #78b8aa; }
 .harvester-legend .benchmark { color: #c4b17d; }
+.harvester-legend .comparison-reference { color: #a687d0; }
+.harvester-legend .comparison-reference::before { background: repeating-linear-gradient(90deg, currentColor 0 6px, transparent 6px 9px); }
 .harvester-bottom {
   height: 307px;
   display: grid;
