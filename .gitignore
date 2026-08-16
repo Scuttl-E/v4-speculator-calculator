@@ -39,6 +39,7 @@ public/scenarios*/
 /index-*.js
 
 # Editor and operating-system state
+.codex-remote-attachments/
 .vscode/
 .idea/
 .DS_Store
