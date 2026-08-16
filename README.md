@@ -4,7 +4,7 @@ An independent Windows desktop and web modelling tool for exploring potential Pe
 
 V4 Speculator combines modelled Long V4 and Short V4 products, compares cash and spot-asset Cashback routing, applies independent leg-risk constraints, and tests the resulting strategy against spot, leveraged lending positions, and perpetual futures.
 
-> **Web version:** The experimental web build contains the latest feature set and may change while development continues. Try it at [scuttl-e.github.io/v4-speculator-calculator](https://podded.xyz).
+> **Web version:** The experimental web build contains the latest feature set and may change while development continues. Try it at [scuttl-e.github.io/v4-speculator-calculator](https://scuttl-e.github.io/v4-speculator-calculator/).
 
 > [!IMPORTANT]
 > **Unofficial V4 model**
