@@ -50,9 +50,12 @@ const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
   debtPosition: { assetPrice: 2_000, assetAmount: 20, usdDebt: 15_000, liquidationLtv: .85 },
   perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" },
   assetName: "ETH",
+  defaultHarvestDirection: "long",
 });
 
 const inputs = (patch: Partial<HarvesterGenerationInputs> = {}): HarvesterGenerationInputs => ({
+  direction: "long",
+  withdrawalSource: "proportional",
   benchmark: "spot",
     finalTargetPercent: 500,
     intervalPercent: 100,
@@ -180,7 +183,7 @@ describe("Harvester four-plan state", () => {
     expect(updated.points.map((point) => point.movePercent)).toEqual(beforeMoves);
     expect(updated.points).not.toEqual(plans.earliestRecovery!.points);
     expect(updated.modified).toBe(true);
-    expect(result.points.slice((result.recovery.recoveredAtMovePercent === null ? result.points.length : result.points.findIndex((point) => point.movePercent === result.recovery.recoveredAtMovePercent)) + 1).every((point) => point.harvested < 1e-7)).toBe(true);
+    expect(result.points.slice((result.recovery.durablyCoveredAtMovePercent === null ? result.points.length : result.points.findIndex((point) => point.movePercent === result.recovery.durablyCoveredAtMovePercent)) + 1).every((point) => point.harvested < 1e-7)).toBe(true);
     expect(applyLiveHarvestRate(plans.equalRate!, snap, 50)).toBe(plans.equalRate);
     expect(applyLiveHarvestRate(plans.equalCash!, snap, 50)).toBe(plans.equalCash);
   });
@@ -199,6 +202,15 @@ describe("parity-relative Default Harvest", () => {
     expect(maximumCheckpointCount(500, 100, 200)).toBe(3);
     const plans = generateAllHarvesterPlans(snapshot(), inputs({ firstCheckpointPercent: 200, pointCount: 3 }));
     expect(Object.values(plans).every((plan) => plan?.points[0]?.movePercent === 200)).toBe(true);
+  });
+
+  it("generates the default Short schedule in descending signed moves", () => {
+    const shortInputs = inputs({ direction: "short", finalTargetPercent: -80, intervalPercent: 20, pointCount: 3 });
+    expect(generateCheckpointMoves(-80, 20, 3)).toEqual([-20, -40, -60]);
+    expect(maximumCheckpointCount(-80, 20)).toBe(3);
+    const plans = generateAllHarvesterPlans(snapshot({ longAllocation: .5 }), shortInputs);
+    expect(Object.values(plans).every((plan) => plan?.points.map((point) => point.movePercent).join(",") === "-20,-40,-60")).toBe(true);
+    expect(Object.values(plans).every((plan) => plan && evaluateHarvestPlan(snapshot({ longAllocation: .5 }), "spot", -80, plan.points, true, { direction: "short", withdrawalSource: "proportional" }).final.paritySatisfied)).toBe(true);
   });
 
   it("exposes only the required preset values", () => {
@@ -317,8 +329,8 @@ describe("Earliest Recovery", () => {
     const plan = generateEarliestRecoveryHarvestPlan(snap, inputs());
     const resolved = resolveEarliestRecoveryPoints(snap, inputs(), plan.points, true);
     const result = evaluateHarvestPlan(snap, "spot", 500, resolved, true);
-    expect(result.recovery.recoveredAtMovePercent).toBe(200);
-    expect(result.points[1].cumulativeHarvested + result.recovery.originalExternalAtLatestCheckpoint).toBeCloseTo(snap.config.deposit, 7);
+    expect(result.recovery.durablyCoveredAtMovePercent).toBe(200);
+    expect(result.points[1].cumulativeHarvested + result.recovery.countedCashbackValueAtTarget).toBeCloseTo(snap.config.deposit, 7);
     expect(result.points.slice(2).every((point) => point.harvested < 1e-7)).toBe(true);
     expect(result.final.paritySatisfied).toBe(true);
   });
@@ -328,8 +340,27 @@ describe("Earliest Recovery", () => {
     const plan = generateEarliestRecoveryHarvestPlan(snap, inputs());
     const resolved = resolveEarliestRecoveryPoints(snap, inputs(), plan.points, true);
     const result = evaluateHarvestPlan(snap, "spot", 500, resolved, true);
-    expect(result.recovery.recoveredAtMovePercent).toBe(100);
+    expect(result.recovery.durablyCoveredAtMovePercent).toBe(100);
     expect(result.points.every((point) => point.harvested < 1e-7)).toBe(true);
+  });
+
+  it("keeps Short-side spot cashback coverage durable through the final target", () => {
+    const snap = createHarvesterSnapshot({
+      ...snapshot({ longAllocation: .5, longMode: "2.5x-cashback", shortMode: "2.5x-looped", cashbackMode: "spot" }),
+      comparisonMode: "perp",
+      perpPosition: { assetPrice: 2_000, averageEntryPrice: 2_000, positionSize: 10, margin: 18_000, liquidationPrice: 3_000, side: "short" },
+    });
+    const shortInputs = inputs({ direction: "short", withdrawalSource: "longFirst", finalTargetPercent: -80, intervalPercent: 20, pointCount: 3, defaultHarvestPercent: 400 });
+    const policyPoints = [-20, -40, -60].map((movePercent, index) => ({ id: `short-${index}`, movePercent, activeAfter: 0 }));
+    const resolved = resolveEarliestRecoveryPoints(snap, shortInputs, policyPoints, true);
+    const result = evaluateHarvestPlan(snap, "spot", -80, resolved, true, { direction: "short", withdrawalSource: "longFirst" });
+
+    expect(result.recovery.coveredAtTarget).toBe(true);
+    expect(result.recovery.coverageAtTarget).toBeGreaterThanOrEqual(result.recovery.initialRecoveryTarget - 1e-7);
+    expect(result.recovery.durablyCoveredAtMovePercent).not.toBeNull();
+    expect(Math.abs(result.recovery.durablyCoveredAtMovePercent!)).toBeGreaterThanOrEqual(Math.abs(result.recovery.firstReachedAtMovePercent!));
+    const durableIndex = result.points.findIndex((point) => point.movePercent === result.recovery.durablyCoveredAtMovePercent);
+    expect(result.points.slice(durableIndex + 1).every((point) => point.harvested < 1e-7)).toBe(true);
   });
 
   it("defensively handles capital already recovered at entry", () => {
@@ -339,7 +370,7 @@ describe("Earliest Recovery", () => {
     const plan = generateEarliestRecoveryHarvestPlan(snap, inputs());
     const resolved = resolveEarliestRecoveryPoints(snap, inputs(), plan.points, true);
     expect(originalDeposit).toBeGreaterThan(0);
-    expect(evaluateHarvestPlan(snap, "spot", 500, resolved, true).recovery.recoveredAtMovePercent).toBe(0);
+    expect(evaluateHarvestPlan(snap, "spot", 500, resolved, true).recovery.durablyCoveredAtMovePercent).toBe(0);
     expect(resolved.every((point) => point.activeAfter === 0)).toBe(true);
   });
 
@@ -367,10 +398,10 @@ describe("Earliest Recovery", () => {
 
     expect(plan.points).toEqual(originalPoints);
     expect(withCashback.recovery.externalCashbackKind).toBe("cash");
-    expect(withCashback.recovery.countedRecoveredCapital).toBeCloseTo(withCashback.recovery.harvestedCash + withCashback.recovery.externalCashbackValue, 8);
-    expect(withoutCashback.recovery.countedRecoveredCapital).toBeCloseTo(withoutCashback.recovery.harvestedCash, 8);
-    expect(withoutCashback.recovery.excludedCashbackValue).toBeCloseTo(withCashback.recovery.externalCashbackValue, 8);
-    expect(withCashback.recovery.recovered).toBe(true);
+    expect(withCashback.recovery.coverageAtTarget).toBeCloseTo(withCashback.recovery.harvestedCash + withCashback.recovery.cashbackValueAtTarget, 8);
+    expect(withoutCashback.recovery.coverageAtTarget).toBeCloseTo(withoutCashback.recovery.harvestedCash, 8);
+    expect(withoutCashback.recovery.excludedCashbackValueAtTarget).toBeCloseTo(withCashback.recovery.cashbackValueAtTarget, 8);
+    expect(withCashback.recovery.coveredAtTarget).toBe(true);
     expect(withoutCashback.final.totalHarvested).toBeGreaterThan(withCashback.final.totalHarvested);
     expect(withoutCashback.final.originalExternalCapital).toBeCloseTo(withCashback.final.originalExternalCapital, 8);
   });
@@ -399,15 +430,15 @@ describe("Earliest Recovery", () => {
     const withoutCashback = evaluateHarvestPlan(snap, "spot", 500, resolveEarliestRecoveryPoints(snap, inputs(), plan.points, false), false);
 
     expect(withCashback.recovery.externalCashbackKind).toBe("spot");
-    expect(withCashback.recovery.externalCashbackValue).toBeGreaterThan(0);
-    expect(withCashback.recovery.externalCashbackValue).not.toBeCloseTo(5_000, 2);
-    expect(withCashback.recovery.recoveredAtMovePercent).not.toBe(withoutCashback.recovery.recoveredAtMovePercent);
-    expect(withoutCashback.recovery.excludedCashbackValue).toBeCloseTo(withCashback.recovery.externalCashbackValue, 8);
-    expect(withoutCashback.recovery.countedRecoveredCapital).toBeCloseTo(withoutCashback.recovery.harvestedCash, 8);
+    expect(withCashback.recovery.cashbackValueAtTarget).toBeGreaterThan(0);
+    expect(withCashback.recovery.cashbackValueAtTarget).not.toBeCloseTo(5_000, 2);
+    expect(withCashback.recovery.durablyCoveredAtMovePercent).not.toBe(withoutCashback.recovery.durablyCoveredAtMovePercent);
+    expect(withoutCashback.recovery.excludedCashbackValueAtTarget).toBeCloseTo(withCashback.recovery.cashbackValueAtTarget, 8);
+    expect(withoutCashback.recovery.coverageAtTarget).toBeCloseTo(withoutCashback.recovery.harvestedCash, 8);
     expect(withoutCashback.final.originalExternalCapital).toBeCloseTo(withCashback.final.originalExternalCapital, 8);
   });
 
-  it("exposes distinct spot-cashback valuation contexts for recovery and the final target", () => {
+  it("uses the final-target spot value for both capital coverage and final wealth", () => {
     const snap = snapshot({ longMode: "2.5x-cashback", cashbackMode: "spot" });
     const stateInputs = inputs();
     const policy = generateEarliestRecoveryHarvestPlan(snap, stateInputs);
@@ -416,9 +447,8 @@ describe("Earliest Recovery", () => {
 
     expect(originalExternalValue(snap, 1)).toBeGreaterThan(0);
     expect(originalExternalValue(snap, 2)).toBeGreaterThan(originalExternalValue(snap, 1));
-    expect(result.recovery.externalCashbackValuationMovePercent).toBe(400);
-    expect(result.recovery.externalCashbackValue).toBeCloseTo(originalExternalValue(snap, 5), 8);
+    expect(result.recovery.cashbackValueAtTarget).toBeCloseTo(originalExternalValue(snap, 6), 8);
     expect(result.final.originalExternalCapital).toBeCloseTo(originalExternalValue(snap, 6), 8);
-    expect(result.final.originalExternalCapital).toBeGreaterThan(result.recovery.externalCashbackValue);
+    expect(result.final.originalExternalCapital).toBeCloseTo(result.recovery.cashbackValueAtTarget, 8);
   });
 });

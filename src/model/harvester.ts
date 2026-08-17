@@ -24,6 +24,10 @@ export const HARVESTER_MOVE_STEP = 1;
 export type HarvesterBenchmark = "spot" | "lending" | "perp";
 export type HarvesterDragMode = "vertical" | "horizontal" | "both";
 export type HarvesterPlanKind = "user" | "equalRate" | "equalCash" | "earliestRecovery";
+export type HarvestDirection = "long" | "short";
+export type HarvestWithdrawalSource = "proportional" | "longFirst" | "shortFirst";
+export type HarvesterChartView = "long" | "complete" | "short";
+export type HarvesterPreviewThrough = "before" | "all" | `checkpoint:${number}`;
 export const HARVESTER_PLAN_KINDS: readonly HarvesterPlanKind[] = ["user", "equalRate", "equalCash", "earliestRecovery"];
 export const DEFAULT_HARVEST_PRESETS = [25, 50, 75, 100, 125, 150, 200, 400] as const;
 
@@ -35,6 +39,7 @@ export interface HarvesterSnapshot {
   /** Price of the selected source asset at import time, if known. */
   spotAssetPrice: number | null;
   assetName: string;
+  defaultHarvestDirection: HarvestDirection;
   importedAt: number;
 }
 
@@ -49,7 +54,12 @@ export interface HarvestPointResult extends HarvestPoint {
   activeBefore: number;
   harvested: number;
   cumulativeHarvested: number;
-  survivingFraction: number;
+  longBefore: number;
+  shortBefore: number;
+  longAfter: number;
+  shortAfter: number;
+  longFractionAfter: number;
+  shortFractionAfter: number;
   feasibleMin: number;
   feasibleMax: number;
   maximumAdditionalHarvest: number;
@@ -59,6 +69,8 @@ export interface HarvestPointResult extends HarvestPoint {
 }
 
 export interface HarvesterGenerationInputs {
+  direction: HarvestDirection;
+  withdrawalSource: HarvestWithdrawalSource;
   benchmark: HarvesterBenchmark;
   finalTargetPercent: number;
   intervalPercent: number;
@@ -93,6 +105,10 @@ export interface HarvesterBenchmarkValue {
 
 export interface HarvesterFinalSummary {
   remainingActiveV4: number;
+  remainingLong: number;
+  remainingShort: number;
+  longFraction: number;
+  shortFraction: number;
   benchmarkValue: number | null;
   benchmarkStatus: HarvesterBenchmarkValue["status"];
   originalExternalCapital: number;
@@ -104,22 +120,21 @@ export interface HarvesterFinalSummary {
 
 export interface HarvesterRecovery {
   accountInitialCashback: boolean;
-  recovered: boolean;
-  recoveredAtMovePercent: number | null;
-  currentSecured: number;
+  coveredAtTarget: boolean;
+  coverageAtTarget: number;
+  coverageGapAtTarget: number;
+  firstReachedAtMovePercent: number | null;
+  durablyCoveredAtMovePercent: number | null;
   harvestedCash: number;
-  externalCashbackValue: number;
+  cashbackValueAtTarget: number;
+  countedCashbackValueAtTarget: number;
+  excludedCashbackValueAtTarget: number;
   externalCashbackKind: "cash" | "spot";
-  externalCashbackValuationMovePercent: number;
-  countedRecoveredCapital: number;
-  excludedCashbackValue: number;
-  originalExternalAtLatestCheckpoint: number;
   initialRecoveryTarget: number;
 }
 
 export interface HarvesterResult {
   points: HarvestPointResult[];
-  requiredFinalFraction: number | null;
   feasible: boolean;
   final: HarvesterFinalSummary;
   recovery: HarvesterRecovery;
@@ -129,39 +144,28 @@ export interface HarvesterChartPoint {
   move: number;
   originalActiveV4: number;
   harvestedActiveV4: number;
+  historicalActiveV4: number | null;
+  previewedActiveV4: number;
+  previewedRemainingLong: number;
+  previewedRemainingShort: number;
+  previewedCumulativeHarvested: number;
+  remainingLong: number;
+  remainingShort: number;
   initialCashback: number;
   totalWealth: number;
+  previewedTotalWealth: number;
   benchmark: number | null;
   comparisonReference: number | null;
   cumulativeHarvested: number;
   phase?: "before" | "after";
-}
-
-export interface HarvesterExportPayload {
-  importedStrategy: {
-    config: Config;
-    comparisonMode: ComparisonMode;
-    assetName: string;
-    importedAt: number;
-  };
-  originalActiveV4Curve: Array<{ move: number; value: number }>;
-  harvestedActiveV4Curve: Array<{ move: number; value: number }>;
-  totalWealthCurve: Array<{ move: number; value: number }>;
-  selectedBenchmarkCurve: Array<{ move: number; value: number | null }>;
-  harvestCheckpoints: HarvestPointResult[];
-  finalTarget: number;
-  finalBenchmark: HarvesterBenchmark;
-  totalHarvested: number;
-  originalExternalCapital: number;
-  securedCapital: number;
-  initialCapitalRecoveryPoint: number | null;
-  finalTargetSummary: HarvesterFinalSummary;
+  projection?: boolean;
 }
 
 export const createHarvesterSnapshot = (input: Omit<HarvesterSnapshot, "importedAt">): HarvesterSnapshot => ({
   config: { ...input.config },
   comparisonMode: input.comparisonMode,
   assetName: input.assetName,
+  defaultHarvestDirection: input.defaultHarvestDirection,
   spotAssetPrice: Number.isFinite(input.spotAssetPrice) && (input.spotAssetPrice ?? 0) > 0 ? input.spotAssetPrice : null,
   ...(input.comparisonMode === "lending" && input.debtPosition ? { debtPosition: { ...input.debtPosition } } : {}),
   ...(input.comparisonMode === "perp" && input.perpPosition ? { perpPosition: { ...input.perpPosition } } : {}),
@@ -187,7 +191,7 @@ export const originalActiveV4LegValues = (snapshot: HarvesterSnapshot, priceRati
 };
 
 /** Imported active protocol value. The canonical active Long/Short primitives
- * exclude external cashback; both legs are always scaled by the same fraction. */
+ * exclude external cashback; withdrawal routing applies the surviving leg fractions. */
 export const originalActiveV4Value = (snapshot: HarvesterSnapshot, priceRatio: number) => {
   const legs = originalActiveV4LegValues(snapshot, priceRatio);
   return legs.long + legs.short;
@@ -220,43 +224,156 @@ export const evaluateHarvesterBenchmark = (
     : { value: perpPositionValue(priceRatio, snapshot.perpPosition), status: "valid" };
 };
 
-export const requiredFinalActiveFraction = (
-  snapshot: HarvesterSnapshot,
-  benchmark: HarvesterBenchmark,
-  finalTargetPercent: number,
-) => {
-  const p = 1 + finalTargetPercent / 100;
-  const benchmarkResult = evaluateHarvesterBenchmark(snapshot, benchmark, p);
-  if (benchmarkResult.status !== "valid" || benchmarkResult.value === null) return null;
-  const active = originalActiveV4Value(snapshot, p);
-  if (active <= EPSILON) return benchmarkResult.value <= EPSILON ? 0 : Number.POSITIVE_INFINITY;
-  return Math.max(0, benchmarkResult.value / active);
-};
-
 const pointId = () => `harvest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const ratioAt = (movePercent: number) => 1 + movePercent / 100;
 const clonePoints = (points: HarvestPoint[]) => points.map((point) => ({ ...point }));
 const preservePointIds = (points: HarvestPoint[], existingPoints: HarvestPoint[]) =>
   points.map((point, index) => ({ ...point, id: existingPoints[index]?.id ?? point.id }));
 
+export interface HarvesterEvaluationOptions {
+  direction: HarvestDirection;
+  withdrawalSource: HarvestWithdrawalSource;
+}
+
+interface HarvesterLegFractions {
+  long: number;
+  short: number;
+}
+
+const evaluationOptionsFor = (
+  finalTargetPercent: number,
+  options?: Partial<HarvesterEvaluationOptions>,
+): HarvesterEvaluationOptions => ({
+  direction: options?.direction ?? (finalTargetPercent < 0 ? "short" : "long"),
+  withdrawalSource: options?.withdrawalSource ?? "proportional",
+});
+
+const evaluationOptionsFromInputs = (inputs: HarvesterGenerationInputs): HarvesterEvaluationOptions => ({
+  direction: inputs.direction,
+  withdrawalSource: inputs.withdrawalSource,
+});
+
+const directionSign = (direction: HarvestDirection) => direction === "long" ? 1 : -1;
+const progressAt = (movePercent: number, direction: HarvestDirection) => movePercent * directionSign(direction);
+const moveAtProgress = (progress: number, direction: HarvestDirection) => progress * directionSign(direction);
+const orderHarvestPoints = (points: HarvestPoint[], direction: HarvestDirection) =>
+  clonePoints(points).sort((left, right) => progressAt(left.movePercent, direction) - progressAt(right.movePercent, direction));
+
+const activeLegValuesAt = (
+  snapshot: HarvesterSnapshot,
+  movePercent: number,
+  fractions: HarvesterLegFractions,
+) => {
+  const original = originalActiveV4LegValues(snapshot, ratioAt(movePercent));
+  const long = original.long * fractions.long;
+  const short = original.short * fractions.short;
+  return { original, long, short, total: long + short };
+};
+
+const maximumWithdrawalAt = (
+  snapshot: HarvesterSnapshot,
+  benchmark: HarvesterBenchmark,
+  finalTargetPercent: number,
+  movePercent: number,
+  fractions: HarvesterLegFractions,
+  withdrawalSource: HarvestWithdrawalSource,
+) => {
+  const targetBenchmark = evaluateHarvesterBenchmark(snapshot, benchmark, ratioAt(finalTargetPercent));
+  if (targetBenchmark.status !== "valid" || targetBenchmark.value === null) return { amount: 0, feasible: false };
+  const checkpoint = activeLegValuesAt(snapshot, movePercent, fractions);
+  const target = activeLegValuesAt(snapshot, finalTargetPercent, fractions);
+  let remainingHeadroom = target.total - targetBenchmark.value;
+  if (remainingHeadroom < -EPSILON) return { amount: 0, feasible: false };
+  remainingHeadroom = Math.max(0, remainingHeadroom);
+  if (withdrawalSource === "proportional") {
+    if (checkpoint.total <= EPSILON) return { amount: 0, feasible: true };
+    if (target.total <= EPSILON) return { amount: checkpoint.total, feasible: true };
+    return {
+      amount: Math.min(checkpoint.total, remainingHeadroom * checkpoint.total / target.total),
+      feasible: true,
+    };
+  }
+  const preferred = withdrawalSource === "longFirst" ? "long" : "short";
+  const fallback = preferred === "long" ? "short" : "long";
+  let amount = 0;
+  for (const leg of [preferred, fallback] as const) {
+    const available = checkpoint[leg];
+    if (available <= EPSILON) continue;
+    const originalCheckpoint = checkpoint.original[leg];
+    const originalTarget = originalActiveV4LegValues(snapshot, ratioAt(finalTargetPercent))[leg];
+    const finalCostPerDollar = originalCheckpoint <= EPSILON ? Number.POSITIVE_INFINITY : originalTarget / originalCheckpoint;
+    if (finalCostPerDollar <= EPSILON) {
+      amount += available;
+      continue;
+    }
+    const permitted = Math.min(available, remainingHeadroom / finalCostPerDollar);
+    amount += permitted;
+    remainingHeadroom = Math.max(0, remainingHeadroom - permitted * finalCostPerDollar);
+    if (permitted < available - EPSILON) break;
+  }
+  return { amount, feasible: true };
+};
+
+const applyWithdrawalAt = (
+  snapshot: HarvesterSnapshot,
+  movePercent: number,
+  fractions: HarvesterLegFractions,
+  withdrawalSource: HarvestWithdrawalSource,
+  requestedAmount: number,
+) => {
+  const checkpoint = activeLegValuesAt(snapshot, movePercent, fractions);
+  const amount = Math.min(checkpoint.total, Math.max(0, requestedAmount));
+  if (amount <= EPSILON || checkpoint.total <= EPSILON) return { fractions: { ...fractions }, amount: 0 };
+  if (withdrawalSource === "proportional") {
+    const surviving = Math.max(0, 1 - amount / checkpoint.total);
+    return {
+      fractions: { long: fractions.long * surviving, short: fractions.short * surviving },
+      amount,
+    };
+  }
+  const next = { ...fractions };
+  let remaining = amount;
+  const preferred = withdrawalSource === "longFirst" ? "long" : "short";
+  const fallback = preferred === "long" ? "short" : "long";
+  for (const leg of [preferred, fallback] as const) {
+    const available = checkpoint[leg];
+    const originalAtCheckpoint = checkpoint.original[leg];
+    if (remaining <= EPSILON || available <= EPSILON || originalAtCheckpoint <= EPSILON) continue;
+    const taken = Math.min(available, remaining);
+    next[leg] = Math.max(0, next[leg] - taken / originalAtCheckpoint);
+    remaining -= taken;
+  }
+  return { fractions: next, amount: amount - remaining };
+};
+
 export const snapHarvestMove = (movePercent: number) => Math.round(movePercent / HARVESTER_MOVE_STEP) * HARVESTER_MOVE_STEP;
 
-export const horizontalBoundsForPoint = (points: HarvestPoint[], index: number, finalTargetPercent: number) => ({
-  min: index === 0 ? HARVESTER_MOVE_STEP : points[index - 1].movePercent + HARVESTER_MOVE_STEP,
-  max: index === points.length - 1
-    ? finalTargetPercent - HARVESTER_MOVE_STEP
-    : points[index + 1].movePercent - HARVESTER_MOVE_STEP,
-});
+export const horizontalBoundsForPoint = (points: HarvestPoint[], index: number, finalTargetPercent: number) => {
+  const direction = finalTargetPercent < 0 ? "short" : "long";
+  const ordered = orderHarvestPoints(points, direction);
+  const lowerProgress = index === 0
+    ? HARVESTER_MOVE_STEP
+    : progressAt(ordered[index - 1].movePercent, direction) + HARVESTER_MOVE_STEP;
+  const upperProgress = index === ordered.length - 1
+    ? progressAt(finalTargetPercent, direction) - HARVESTER_MOVE_STEP
+    : progressAt(ordered[index + 1].movePercent, direction) - HARVESTER_MOVE_STEP;
+  const first = moveAtProgress(lowerProgress, direction);
+  const second = moveAtProgress(upperProgress, direction);
+  return { min: Math.min(first, second), max: Math.max(first, second) };
+};
 
 const finalSummary = (
   snapshot: HarvesterSnapshot,
   benchmark: HarvesterBenchmark,
   finalTargetPercent: number,
-  survivingFraction: number,
+  fractions: HarvesterLegFractions,
   totalHarvested: number,
 ): HarvesterFinalSummary => {
   const p = ratioAt(finalTargetPercent);
-  const remainingActiveV4 = survivingFraction * originalActiveV4Value(snapshot, p);
+  const legs = originalActiveV4LegValues(snapshot, p);
+  const remainingLong = fractions.long * legs.long;
+  const remainingShort = fractions.short * legs.short;
+  const remainingActiveV4 = remainingLong + remainingShort;
   const originalExternalCapital = originalExternalValue(snapshot, p);
   const benchmarkResult = evaluateHarvesterBenchmark(snapshot, benchmark, p);
   const totalWealth = remainingActiveV4 + originalExternalCapital + totalHarvested;
@@ -265,6 +382,10 @@ const finalSummary = (
     : remainingActiveV4 - benchmarkResult.value;
   return {
     remainingActiveV4,
+    remainingLong,
+    remainingShort,
+    longFraction: fractions.long,
+    shortFraction: fractions.short,
     benchmarkValue: benchmarkResult.value,
     benchmarkStatus: benchmarkResult.status,
     originalExternalCapital,
@@ -281,35 +402,59 @@ export const evaluateHarvestPlan = (
   finalTargetPercent: number,
   inputPoints: HarvestPoint[],
   accountInitialCashback = true,
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
 ): HarvesterResult => {
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
   const recoveryTarget = initialRecoveryTarget(snapshot);
-  const required = requiredFinalActiveFraction(snapshot, benchmark, finalTargetPercent);
-  const feasible = required !== null && Number.isFinite(required) && required <= 1 + EPSILON;
-  const minimumFraction = feasible ? Math.min(1, Math.max(0, required!)) : 1;
-  const ordered = clonePoints(inputPoints).sort((a, b) => a.movePercent - b.movePercent);
-  let priorFraction = 1;
+  const ordered = orderHarvestPoints(inputPoints, options.direction);
+  let fractions: HarvesterLegFractions = { long: 1, short: 1 };
   let cumulativeHarvested = 0;
+  const targetBenchmark = evaluateHarvesterBenchmark(snapshot, benchmark, ratioAt(finalTargetPercent));
+  const originalTargetActive = originalActiveV4Value(snapshot, ratioAt(finalTargetPercent));
+  let feasible = targetBenchmark.status === "valid" && targetBenchmark.value !== null && originalTargetActive >= targetBenchmark.value - EPSILON;
   const points = ordered.map((point) => {
     const priceRatio = ratioAt(point.movePercent);
-    const originalActive = originalActiveV4Value(snapshot, priceRatio);
-    const activeBefore = priorFraction * originalActive;
-    const feasibleMin = minimumFraction * originalActive;
+    const before = activeLegValuesAt(snapshot, point.movePercent, fractions);
+    const activeBefore = before.total;
+    const maximum = maximumWithdrawalAt(
+      snapshot,
+      benchmark,
+      finalTargetPercent,
+      point.movePercent,
+      fractions,
+      options.withdrawalSource,
+    );
+    feasible = feasible && maximum.feasible;
+    const feasibleMin = activeBefore - maximum.amount;
     const feasibleMax = activeBefore;
     const activeAfter = Math.min(feasibleMax, Math.max(feasibleMin, point.activeAfter));
-    const harvested = Math.max(0, activeBefore - activeAfter);
+    const applied = applyWithdrawalAt(
+      snapshot,
+      point.movePercent,
+      fractions,
+      options.withdrawalSource,
+      activeBefore - activeAfter,
+    );
+    fractions = applied.fractions;
+    const after = activeLegValuesAt(snapshot, point.movePercent, fractions);
+    const harvested = applied.amount;
     const benchmarkValue = evaluateHarvesterBenchmark(snapshot, benchmark, priceRatio).value;
     const surplusBefore = benchmarkValue === null ? 0 : activeBefore - benchmarkValue;
     const harvestPercent = surplusBefore > EPSILON ? (harvested / surplusBefore) * 100 : 0;
     cumulativeHarvested += harvested;
-    priorFraction = originalActive > EPSILON ? activeAfter / originalActive : priorFraction;
     return {
       ...point,
-      activeAfter,
+      activeAfter: after.total,
       priceRatio,
       activeBefore,
       harvested,
       cumulativeHarvested,
-      survivingFraction: priorFraction,
+      longBefore: before.long,
+      shortBefore: before.short,
+      longAfter: after.long,
+      shortAfter: after.short,
+      longFractionAfter: fractions.long,
+      shortFractionAfter: fractions.short,
       feasibleMin,
       feasibleMax,
       maximumAdditionalHarvest: Math.max(0, activeAfter - feasibleMin),
@@ -318,31 +463,45 @@ export const evaluateHarvestPlan = (
       harvestPercent,
     };
   });
-  const recoveredAtEntry = accountInitialCashback && originalExternalValue(snapshot, 1) >= recoveryTarget - EPSILON;
-  const recoveryPoint = recoveredAtEntry ? undefined : points.find((point) =>
-    point.cumulativeHarvested + (accountInitialCashback ? originalExternalValue(snapshot, point.priceRatio) : 0) >= recoveryTarget - EPSILON,
-  );
-  const final = finalSummary(snapshot, benchmark, finalTargetPercent, priorFraction, cumulativeHarvested);
-  const latestPoint = points.length > 0 ? points[points.length - 1] : undefined;
-  const originalExternalAtLatestCheckpoint = originalExternalValue(snapshot, latestPoint?.priceRatio ?? 1);
-  const countedRecoveredCapital = cumulativeHarvested + (accountInitialCashback ? originalExternalAtLatestCheckpoint : 0);
+  const final = finalSummary(snapshot, benchmark, finalTargetPercent, fractions, cumulativeHarvested);
+  const coverageAt = (harvestedCash: number, movePercent: number) => harvestedCash
+    + (accountInitialCashback ? originalExternalValue(snapshot, ratioAt(movePercent)) : 0);
+  const coverageTimeline: Array<{ movePercent: number; coverage: number; milestone: boolean }> = [{
+    movePercent: 0,
+    coverage: coverageAt(0, 0),
+    milestone: true,
+  }];
+  let priorHarvested = 0;
+  points.forEach((point) => {
+    coverageTimeline.push({ movePercent: point.movePercent, coverage: coverageAt(priorHarvested, point.movePercent), milestone: false });
+    coverageTimeline.push({ movePercent: point.movePercent, coverage: coverageAt(point.cumulativeHarvested, point.movePercent), milestone: true });
+    priorHarvested = point.cumulativeHarvested;
+  });
+  const coverageAtTarget = coverageAt(cumulativeHarvested, finalTargetPercent);
+  coverageTimeline.push({ movePercent: finalTargetPercent, coverage: coverageAtTarget, milestone: true });
+  const firstReachedAtMovePercent = coverageTimeline.find((entry) => entry.milestone && entry.coverage >= recoveryTarget - EPSILON)?.movePercent ?? null;
+  const durableCoverageIndex = coverageTimeline.findIndex((entry, index) =>
+    entry.milestone
+    && entry.coverage >= recoveryTarget - EPSILON
+    && coverageTimeline.slice(index).every((candidate) => candidate.coverage >= recoveryTarget - EPSILON));
+  const durablyCoveredAtMovePercent = durableCoverageIndex < 0 ? null : coverageTimeline[durableCoverageIndex].movePercent;
+  const countedCashbackValueAtTarget = accountInitialCashback ? final.originalExternalCapital : 0;
   return {
     points,
-    requiredFinalFraction: required,
     feasible,
     final,
     recovery: {
       accountInitialCashback,
-      recovered: recoveredAtEntry || Boolean(recoveryPoint),
-      recoveredAtMovePercent: recoveredAtEntry ? 0 : recoveryPoint?.movePercent ?? null,
-      currentSecured: countedRecoveredCapital,
+      coveredAtTarget: coverageAtTarget >= recoveryTarget - EPSILON,
+      coverageAtTarget,
+      coverageGapAtTarget: coverageAtTarget - recoveryTarget,
+      firstReachedAtMovePercent,
+      durablyCoveredAtMovePercent,
       harvestedCash: cumulativeHarvested,
-      externalCashbackValue: originalExternalAtLatestCheckpoint,
+      cashbackValueAtTarget: final.originalExternalCapital,
+      countedCashbackValueAtTarget,
+      excludedCashbackValueAtTarget: accountInitialCashback ? 0 : final.originalExternalCapital,
       externalCashbackKind: snapshot.config.cashbackMode === "spot" ? "spot" : "cash",
-      externalCashbackValuationMovePercent: latestPoint?.movePercent ?? 0,
-      countedRecoveredCapital,
-      excludedCashbackValue: accountInitialCashback ? 0 : originalExternalAtLatestCheckpoint,
-      originalExternalAtLatestCheckpoint,
       initialRecoveryTarget: recoveryTarget,
     },
   };
@@ -353,7 +512,8 @@ export const constrainHarvestPoints = (
   benchmark: HarvesterBenchmark,
   finalTargetPercent: number,
   points: HarvestPoint[],
-) => evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points).points.map(({ id, movePercent, activeAfter }) => ({ id, movePercent, activeAfter }));
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
+) => evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points, true, evaluationOptions).points.map(({ id, movePercent, activeAfter }) => ({ id, movePercent, activeAfter }));
 
 export const feasibleRangeAt = (
   snapshot: HarvesterSnapshot,
@@ -361,16 +521,21 @@ export const feasibleRangeAt = (
   finalTargetPercent: number,
   points: HarvestPoint[],
   movePercent: number,
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
 ) => {
-  const before = points.filter((point) => point.movePercent < movePercent);
-  const previous = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, before);
-  const priorFraction = previous.points.length > 0
-    ? previous.points[previous.points.length - 1].survivingFraction
-    : 1;
-  const required = requiredFinalActiveFraction(snapshot, benchmark, finalTargetPercent);
-  const active = originalActiveV4Value(snapshot, ratioAt(movePercent));
-  if (required === null || !Number.isFinite(required) || required > 1 + EPSILON) return { min: active, max: active, feasible: false };
-  return { min: Math.max(0, required) * active, max: priorFraction * active, feasible: true };
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
+  const targetProgress = progressAt(movePercent, options.direction);
+  const before = points.filter((point) => progressAt(point.movePercent, options.direction) < targetProgress);
+  const previous = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, before, true, options);
+  const fractions = previous.points.length > 0
+    ? {
+      long: previous.points[previous.points.length - 1].longFractionAfter,
+      short: previous.points[previous.points.length - 1].shortFractionAfter,
+    }
+    : { long: 1, short: 1 };
+  const active = activeLegValuesAt(snapshot, movePercent, fractions).total;
+  const maximum = maximumWithdrawalAt(snapshot, benchmark, finalTargetPercent, movePercent, fractions, options.withdrawalSource);
+  return { min: active - maximum.amount, max: active, feasible: maximum.feasible };
 };
 
 export const generateHarvestPoints = (
@@ -379,14 +544,16 @@ export const generateHarvestPoints = (
   finalTargetPercent: number,
   intervalPercent: number,
   pointCount: number,
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
 ) => {
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
   const count = Math.min(maximumCheckpointCount(finalTargetPercent, intervalPercent), Math.max(0, Math.floor(pointCount)));
   const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
   const generated: HarvestPoint[] = [];
   for (let index = 1; index <= count; index += 1) {
-    const movePercent = interval * index;
-    if (movePercent >= finalTargetPercent) break;
-    const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, generated, movePercent);
+    const movePercent = moveAtProgress(interval * index, options.direction);
+    if (progressAt(movePercent, options.direction) >= progressAt(finalTargetPercent, options.direction)) break;
+    const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, generated, movePercent, options);
     const benchmarkResult = evaluateHarvesterBenchmark(snapshot, benchmark, ratioAt(movePercent));
     const benchmarkActive = benchmarkResult.value === null
       ? range.max
@@ -397,7 +564,7 @@ export const generateHarvestPoints = (
       activeAfter: Math.min(range.max, Math.max(range.min, benchmarkActive)),
     });
   }
-  return constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, generated);
+  return constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, generated, options);
 };
 
 export const editHarvestPoint = (
@@ -408,17 +575,19 @@ export const editHarvestPoint = (
   pointIdToEdit: string,
   edit: { movePercent?: number; activeAfter?: number },
   dragMode: HarvesterDragMode = "both",
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
 ) => {
-  const ordered = clonePoints(points).sort((a, b) => a.movePercent - b.movePercent);
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
+  const ordered = orderHarvestPoints(points, options.direction);
   const index = ordered.findIndex((point) => point.id === pointIdToEdit);
   if (index < 0) return ordered;
-  const oldResult = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, ordered).points[index];
+  const oldResult = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, ordered, true, options).points[index];
   const bounds = horizontalBoundsForPoint(ordered, index, finalTargetPercent);
   const nextMove = dragMode === "vertical" || edit.movePercent === undefined
     ? ordered[index].movePercent
     : Math.min(bounds.max, Math.max(bounds.min, snapHarvestMove(edit.movePercent)));
   const beforePoints = ordered.slice(0, index);
-  const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, beforePoints, nextMove);
+  const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, beforePoints, nextMove, options);
   let nextAfter = ordered[index].activeAfter;
   if (dragMode === "horizontal") {
     nextAfter = range.max - oldResult.harvested;
@@ -426,7 +595,7 @@ export const editHarvestPoint = (
     nextAfter = edit.activeAfter;
   }
   ordered[index] = { ...ordered[index], movePercent: nextMove, activeAfter: Math.min(range.max, Math.max(range.min, nextAfter)) };
-  return constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, ordered);
+  return constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, ordered, options);
 };
 
 export const insertHarvestPoint = (
@@ -435,14 +604,21 @@ export const insertHarvestPoint = (
   finalTargetPercent: number,
   points: HarvestPoint[],
   clickedMovePercent: number,
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
 ) => {
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
   const occupied = new Set(points.map((point) => point.movePercent));
-  let movePercent = Math.min(finalTargetPercent - HARVESTER_MOVE_STEP, Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(clickedMovePercent)));
+  const clickedProgress = progressAt(snapHarvestMove(clickedMovePercent), options.direction);
+  const clampedProgress = Math.min(
+    progressAt(finalTargetPercent, options.direction) - HARVESTER_MOVE_STEP,
+    Math.max(HARVESTER_MOVE_STEP, clickedProgress),
+  );
+  const movePercent = moveAtProgress(clampedProgress, options.direction);
   if (occupied.has(movePercent)) return clonePoints(points);
-  const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, points, movePercent);
+  const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, points, movePercent, options);
   const next = [...points, { id: pointId(), movePercent, activeAfter: (range.min + range.max) / 2 }]
-    .sort((a, b) => a.movePercent - b.movePercent);
-  return constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, next);
+    .sort((a, b) => progressAt(a.movePercent, options.direction) - progressAt(b.movePercent, options.direction));
+  return constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, next, options);
 };
 
 export const deleteHarvestPoint = (
@@ -451,7 +627,8 @@ export const deleteHarvestPoint = (
   finalTargetPercent: number,
   points: HarvestPoint[],
   id: string,
-) => constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, points.filter((point) => point.id !== id));
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
+) => constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, points.filter((point) => point.id !== id), evaluationOptions);
 
 export const resetHarvestPoints = (generatedPoints: HarvestPoint[]) => clonePoints(generatedPoints);
 
@@ -478,8 +655,10 @@ export const editHarvestPointPercent = (
   points: HarvestPoint[],
   pointIdToEdit: string,
   harvestPercent: number,
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
 ) => {
-  const evaluated = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points);
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
+  const evaluated = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points, true, options);
   const point = evaluated.points.find((candidate) => candidate.id === pointIdToEdit);
   if (!point) return clonePoints(points);
   return editHarvestPoint(
@@ -490,6 +669,7 @@ export const editHarvestPointPercent = (
     pointIdToEdit,
     { activeAfter: harvestPercentToActiveAfter(point, harvestPercent) },
     "vertical",
+    options,
   );
 };
 
@@ -509,10 +689,11 @@ export const availableCheckpointMoves = (
   finalTargetPercent: number,
   intervalPercent: number,
 ) => {
-  const target = Math.max(0, finalTargetPercent);
+  const direction: HarvestDirection = finalTargetPercent < 0 ? "short" : "long";
+  const target = Math.abs(finalTargetPercent);
   const interval = Math.max(HARVESTER_MOVE_STEP, snapHarvestMove(intervalPercent));
   const count = Math.max(0, Math.floor((target - HARVESTER_MOVE_STEP) / interval));
-  return Array.from({ length: count }, (_, index) => interval * (index + 1));
+  return Array.from({ length: count }, (_, index) => moveAtProgress(interval * (index + 1), direction));
 };
 
 export const maximumCheckpointCount = (
@@ -531,7 +712,7 @@ interface ScheduleAttempt {
   eligibleCount: number;
 }
 
-const buildSchedule = (
+const buildScheduleWithOptions = (
   snapshot: HarvesterSnapshot,
   benchmark: HarvesterBenchmark,
   finalTargetPercent: number,
@@ -545,14 +726,15 @@ const buildSchedule = (
     maximumWithdrawal: number;
     cumulativeHarvested: number;
   }) => number,
-  requirePositiveSurplusForPositiveWithdrawal = false,
+  requirePositiveSurplusForPositiveWithdrawal: boolean,
+  options: HarvesterEvaluationOptions,
 ): ScheduleAttempt => {
   const points: HarvestPoint[] = [];
   let exact = true;
   let eligibleCount = 0;
   let cumulativeHarvested = 0;
   moves.forEach((movePercent, index) => {
-    const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, points, movePercent);
+    const range = feasibleRangeAt(snapshot, benchmark, finalTargetPercent, points, movePercent, options);
     const benchmarkValue = evaluateHarvesterBenchmark(snapshot, benchmark, ratioAt(movePercent)).value;
     const surplus = benchmarkValue === null ? 0 : Math.max(0, range.max - benchmarkValue);
     if (surplus > EPSILON) eligibleCount += 1;
@@ -572,7 +754,7 @@ const buildSchedule = (
     points.push({ id: pointId(), movePercent, activeAfter: range.max - withdrawn });
     cumulativeHarvested += withdrawn;
   });
-  return { points: constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, points), exact, eligibleCount };
+  return { points: constrainHarvestPoints(snapshot, benchmark, finalTargetPercent, points, options), exact, eligibleCount };
 };
 
 export const generateUserHarvestPlan = (
@@ -581,12 +763,14 @@ export const generateUserHarvestPlan = (
 ): HarvesterGeneratedPlan => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
   const rate = Math.max(0, inputs.defaultHarvestPercent) / 100;
-  const attempt = buildSchedule(
+  const attempt = buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     moves,
     ({ surplus }) => surplus > EPSILON ? surplus * rate : 0,
+    false,
+    evaluationOptionsFromInputs(inputs),
   );
   return { kind: "user", points: attempt.points, summary: "Custom plan", commonHarvestPercent: null, commonWithdrawal: null };
 };
@@ -597,12 +781,14 @@ export const reapplyUserHarvestRate = (
   existingPoints: HarvestPoint[],
   harvestRatePercent: number,
 ) => {
-  const attempt = buildSchedule(
+  const attempt = buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     existingPoints.map((point) => point.movePercent),
     ({ surplus }) => surplus > EPSILON ? surplus * Math.max(0, harvestRatePercent) / 100 : 0,
+    false,
+    evaluationOptionsFromInputs(inputs),
   );
   return preservePointIds(attempt.points, existingPoints);
 };
@@ -612,18 +798,21 @@ export const generateEqualRateHarvestPlan = (
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
-  const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
-  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
+  const options = evaluationOptionsFromInputs(inputs);
+  const baseline = buildScheduleWithOptions(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0, false, options);
+  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points, true, options);
   const baselineSurpluses = baselineResult.points.map((point) => Math.max(0, point.surplusBefore));
   const participatingIndices = new Set(baselineSurpluses
     .map((surplus, index) => surplus > EPSILON ? index : -1)
     .filter((index) => index >= 0));
-  const attemptAt = (ratePercent: number) => buildSchedule(
+  const attemptAt = (ratePercent: number) => buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     moves,
     ({ index }) => baselineSurpluses[index] * ratePercent / 100,
+    false,
+    options,
   );
   if (participatingIndices.size === 0) return { kind: "equalRate", points: baseline.points, summary: "0% each checkpoint", commonHarvestPercent: 0, commonWithdrawal: null };
   let low = 0;
@@ -656,15 +845,18 @@ export const evaluateEqualRateCandidate = (
   ratePercent: number,
 ) => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
-  const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
-  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
+  const options = evaluationOptionsFromInputs(inputs);
+  const baseline = buildScheduleWithOptions(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0, false, options);
+  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points, true, options);
   const baselineSurpluses = baselineResult.points.map((point) => Math.max(0, point.surplusBefore));
-  const attempt = buildSchedule(
+  const attempt = buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     moves,
     ({ index }) => baselineSurpluses[index] * Math.max(0, ratePercent) / 100,
+    false,
+    options,
   );
   return {
     ...attempt,
@@ -680,17 +872,20 @@ export const generateEqualCashHarvestPlan = (
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
-  const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
-  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
+  const options = evaluationOptionsFromInputs(inputs);
+  const baseline = buildScheduleWithOptions(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0, false, options);
+  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points, true, options);
   const participatingIndices = new Set(baselineResult.points
     .map((point, index) => point.surplusBefore > EPSILON ? index : -1)
     .filter((index) => index >= 0));
-  const attemptAt = (withdrawal: number) => buildSchedule(
+  const attemptAt = (withdrawal: number) => buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     moves,
     ({ index }) => participatingIndices.has(index) ? withdrawal : 0,
+    false,
+    options,
   );
   if (moves.length === 0) return { kind: "equalCash", points: [], summary: "$0 each checkpoint", commonHarvestPercent: null, commonWithdrawal: 0 };
   if (participatingIndices.size === 0) return { kind: "equalCash", points: baseline.points, summary: "$0 each checkpoint", commonHarvestPercent: null, commonWithdrawal: 0 };
@@ -718,19 +913,22 @@ export const evaluateEqualCashCandidate = (
   withdrawal: number,
 ) => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
-  const baseline = buildSchedule(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0);
-  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points);
+  const options = evaluationOptionsFromInputs(inputs);
+  const baseline = buildScheduleWithOptions(snapshot, inputs.benchmark, inputs.finalTargetPercent, moves, () => 0, false, options);
+  const baselineResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, baseline.points, true, options);
   const participatingIndices = baselineResult.points
     .map((point, index) => point.surplusBefore > EPSILON ? index : -1)
     .filter((index) => index >= 0);
   const participating = new Set(participatingIndices);
   return {
-    ...buildSchedule(
+    ...buildScheduleWithOptions(
       snapshot,
       inputs.benchmark,
       inputs.finalTargetPercent,
       moves,
       ({ index }) => participating.has(index) ? Math.max(0, withdrawal) : 0,
+      false,
+      options,
     ),
     participatingIndices,
   };
@@ -741,12 +939,14 @@ export const generateEarliestRecoveryHarvestPlan = (
   inputs: HarvesterGenerationInputs,
 ): HarvesterGeneratedPlan => {
   const moves = generateCheckpointMoves(inputs.finalTargetPercent, inputs.intervalPercent, inputs.pointCount, inputs.firstCheckpointPercent);
-  const policy = buildSchedule(
+  const policy = buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     moves,
     ({ surplus }) => surplus > EPSILON ? surplus * Math.max(0, inputs.defaultHarvestPercent) / 100 : 0,
+    false,
+    evaluationOptionsFromInputs(inputs),
   );
   return {
     kind: "earliestRecovery",
@@ -763,12 +963,14 @@ export const reapplyEarliestRecoveryHarvestRate = (
   existingPoints: HarvestPoint[],
   harvestRatePercent: number,
 ) => {
-  const policy = buildSchedule(
+  const policy = buildScheduleWithOptions(
     snapshot,
     inputs.benchmark,
     inputs.finalTargetPercent,
     existingPoints.map((point) => point.movePercent),
     ({ surplus }) => surplus > EPSILON ? surplus * Math.max(0, harvestRatePercent) / 100 : 0,
+    false,
+    evaluationOptionsFromInputs(inputs),
   );
   return preservePointIds(policy.points, existingPoints);
 };
@@ -783,27 +985,37 @@ export const resolveEarliestRecoveryPoints = (
   accountInitialCashback: boolean,
 ) => {
   const recoveryTarget = initialRecoveryTarget(snapshot);
-  const policyResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, policyPoints);
+  const options = evaluationOptionsFromInputs(inputs);
+  const policyResult = evaluateHarvestPlan(snapshot, inputs.benchmark, inputs.finalTargetPercent, policyPoints, true, options);
   const policyWithdrawalById = new Map(policyResult.points.map((point) => [point.id, point.harvested]));
   const resolved: HarvestPoint[] = [];
   let cumulativeHarvested = 0;
-  let recovered = accountInitialCashback && originalExternalValue(snapshot, 1) >= recoveryTarget - EPSILON;
+  const minimumFutureExternal = (fromIndex: number) => {
+    if (!accountInitialCashback) return 0;
+    const futureMoves = [
+      ...(fromIndex < 0 ? [0] : []),
+      ...policyPoints.slice(Math.max(0, fromIndex)).map((point) => point.movePercent),
+      inputs.finalTargetPercent,
+    ];
+    return Math.min(...futureMoves.map((movePercent) => originalExternalValue(snapshot, ratioAt(movePercent))));
+  };
+  let recovered = minimumFutureExternal(-1) >= recoveryTarget - EPSILON;
 
-  for (const policyPoint of policyPoints) {
-    const range = feasibleRangeAt(snapshot, inputs.benchmark, inputs.finalTargetPercent, resolved, policyPoint.movePercent);
+  for (const [index, policyPoint] of policyPoints.entries()) {
+    const range = feasibleRangeAt(snapshot, inputs.benchmark, inputs.finalTargetPercent, resolved, policyPoint.movePercent, options);
     if (recovered) {
       resolved.push({ ...policyPoint, activeAfter: range.max });
       continue;
     }
-    const external = accountInitialCashback ? originalExternalValue(snapshot, ratioAt(policyPoint.movePercent)) : 0;
-    const remainingForRecovery = Math.max(0, recoveryTarget - external - cumulativeHarvested);
+    const durableExternal = minimumFutureExternal(index);
+    const remainingForRecovery = Math.max(0, recoveryTarget - durableExternal - cumulativeHarvested);
     const policyWithdrawal = policyWithdrawalById.get(policyPoint.id) ?? 0;
     const withdrawal = Math.min(Math.max(0, range.max - range.min), policyWithdrawal, remainingForRecovery);
     resolved.push({ ...policyPoint, activeAfter: range.max - withdrawal });
     cumulativeHarvested += withdrawal;
-    recovered = external + cumulativeHarvested >= recoveryTarget - EPSILON;
+    recovered = durableExternal + cumulativeHarvested >= recoveryTarget - EPSILON;
   }
-  return constrainHarvestPoints(snapshot, inputs.benchmark, inputs.finalTargetPercent, resolved);
+  return constrainHarvestPoints(snapshot, inputs.benchmark, inputs.finalTargetPercent, resolved, options);
 };
 
 export const generateHarvesterPlan = (
@@ -864,9 +1076,11 @@ export const regenerateHarvesterPlanPreservingEdits = (
       : [];
   }));
   const baselineIds = new Set(state.baseline.map((point) => point.id));
-  const customPoints = state.points.filter((point) => !baselineIds.has(point.id) && point.movePercent < inputs.finalTargetPercent);
+  const customPoints = state.points.filter((point) =>
+    !baselineIds.has(point.id) &&
+    progressAt(point.movePercent, inputs.direction) < progressAt(inputs.finalTargetPercent, inputs.direction));
   const merged = regenerated.points.map((point, index) => overridesByIndex.get(index) ?? point);
-  const points = constrainHarvestPoints(snapshot, inputs.benchmark, inputs.finalTargetPercent, [...merged, ...customPoints]);
+  const points = constrainHarvestPoints(snapshot, inputs.benchmark, inputs.finalTargetPercent, [...merged, ...customPoints], evaluationOptionsFromInputs(inputs));
   const selectedPointId = points.some((point) => point.id === state.selectedPointId)
     ? state.selectedPointId
     : points[0]?.id ?? null;
@@ -939,17 +1153,54 @@ export const evaluateHarvestedStateAt = (
   planResult: HarvesterResult,
   movePercent: number,
   includeEventsAtMove = true,
+  direction: HarvestDirection = "long",
 ) => {
   const reached = planResult.points.filter((point) => includeEventsAtMove
-    ? point.movePercent <= movePercent + EPSILON
-    : point.movePercent < movePercent - EPSILON);
+    ? progressAt(point.movePercent, direction) <= progressAt(movePercent, direction) + EPSILON
+    : progressAt(point.movePercent, direction) < progressAt(movePercent, direction) - EPSILON);
   const last = reached.length > 0 ? reached[reached.length - 1] : undefined;
-  const survivingFraction = last?.survivingFraction ?? 1;
+  const fractions = {
+    long: last?.longFractionAfter ?? 1,
+    short: last?.shortFractionAfter ?? 1,
+  };
   const cumulativeHarvested = last?.cumulativeHarvested ?? 0;
-  const p = ratioAt(movePercent);
-  const activeV4 = survivingFraction * originalActiveV4Value(snapshot, p);
-  const external = originalExternalValue(snapshot, p);
-  return { survivingFraction, cumulativeHarvested, activeV4, external, totalWealth: activeV4 + external + cumulativeHarvested };
+  const legs = activeLegValuesAt(snapshot, movePercent, fractions);
+  const external = originalExternalValue(snapshot, ratioAt(movePercent));
+  return {
+    longFraction: fractions.long,
+    shortFraction: fractions.short,
+    cumulativeHarvested,
+    remainingLong: legs.long,
+    remainingShort: legs.short,
+    activeV4: legs.total,
+    external,
+    totalWealth: legs.total + external + cumulativeHarvested,
+  };
+};
+
+export const evaluateProjectedStateAt = (
+  snapshot: HarvesterSnapshot,
+  planResult: HarvesterResult,
+  movePercent: number,
+) => {
+  const last = planResult.points.length > 0 ? planResult.points[planResult.points.length - 1] : undefined;
+  const fractions = {
+    long: last?.longFractionAfter ?? 1,
+    short: last?.shortFractionAfter ?? 1,
+  };
+  const cumulativeHarvested = last?.cumulativeHarvested ?? 0;
+  const legs = activeLegValuesAt(snapshot, movePercent, fractions);
+  const external = originalExternalValue(snapshot, ratioAt(movePercent));
+  return {
+    longFraction: fractions.long,
+    shortFraction: fractions.short,
+    cumulativeHarvested,
+    remainingLong: legs.long,
+    remainingShort: legs.short,
+    activeV4: legs.total,
+    external,
+    totalWealth: legs.total + external + cumulativeHarvested,
+  };
 };
 
 export const buildHarvesterChartSeries = (
@@ -959,64 +1210,63 @@ export const buildHarvesterChartSeries = (
   points: HarvestPoint[],
   sampleCount = 180,
   comparisonReference: HarvesterBenchmark | null = null,
+  evaluationOptions?: Partial<HarvesterEvaluationOptions>,
+  chartRange?: { minMove: number; maxMove: number },
 ): HarvesterChartPoint[] => {
-  const result = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points);
-  const moves = Array.from({ length: sampleCount }, (_, index) => finalTargetPercent * index / Math.max(1, sampleCount - 1));
-  moves.push(...result.points.map((point) => point.movePercent), finalTargetPercent);
+  const options = evaluationOptionsFor(finalTargetPercent, evaluationOptions);
+  const result = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points, true, options);
+  const minMove = chartRange?.minMove ?? Math.min(0, finalTargetPercent);
+  const maxMove = chartRange?.maxMove ?? Math.max(0, finalTargetPercent);
+  const moves = Array.from({ length: sampleCount }, (_, index) => minMove + (maxMove - minMove) * index / Math.max(1, sampleCount - 1));
+  moves.push(...result.points.map((point) => point.movePercent), finalTargetPercent, 0, minMove, maxMove);
   const uniqueMoves = [...new Set(moves)].sort((a, b) => a - b);
   const series: HarvesterChartPoint[] = [];
+  const isCompleteRange = minMove < -EPSILON && maxMove > EPSILON;
+  const oppositeOnly = options.direction === "long"
+    ? maxMove <= EPSILON && minMove < -EPSILON
+    : minMove >= -EPSILON && maxMove > EPSILON;
   for (const move of uniqueMoves) {
     const isCheckpoint = result.points.some((point) => Math.abs(point.movePercent - move) < EPSILON);
-    const append = (includeEventsAtMove: boolean, phase?: "before" | "after") => {
+    const isActiveSide = !oppositeOnly && (options.direction === "long" ? move >= -EPSILON : move <= EPSILON);
+    const append = (includeEventsAtMove: boolean, phase?: "before" | "after", projection = !isActiveSide) => {
       const p = ratioAt(move);
-      const state = evaluateHarvestedStateAt(snapshot, result, move, includeEventsAtMove);
+      const state = projection
+        ? evaluateProjectedStateAt(snapshot, result, move)
+        : evaluateHarvestedStateAt(snapshot, result, move, includeEventsAtMove, options.direction);
+      const previewedState = evaluateProjectedStateAt(snapshot, result, move);
       series.push({
         move,
         originalActiveV4: originalActiveV4Value(snapshot, p),
         harvestedActiveV4: state.activeV4,
+        historicalActiveV4: isCompleteRange && !projection ? state.activeV4 : null,
+        previewedActiveV4: previewedState.activeV4,
+        previewedRemainingLong: previewedState.remainingLong,
+        previewedRemainingShort: previewedState.remainingShort,
+        previewedCumulativeHarvested: previewedState.cumulativeHarvested,
+        remainingLong: state.remainingLong,
+        remainingShort: state.remainingShort,
         initialCashback: state.external,
         totalWealth: state.totalWealth,
+        previewedTotalWealth: previewedState.totalWealth,
         benchmark: evaluateHarvesterBenchmark(snapshot, benchmark, p).value,
         comparisonReference: comparisonReference === null || comparisonReference === benchmark
           ? null
           : evaluateHarvesterBenchmark(snapshot, comparisonReference, p).value,
         cumulativeHarvested: state.cumulativeHarvested,
         phase,
+        projection,
       });
     };
-    if (isCheckpoint) append(false, "before");
-    append(true, isCheckpoint ? "after" : undefined);
+    const isCompleteBoundary = Math.abs(move) < EPSILON && minMove < 0 && maxMove > 0;
+    if (isCompleteBoundary && options.direction === "long") append(true, undefined, true);
+    if (isCheckpoint && options.direction === "short") {
+      append(true, "after", false);
+      append(false, "before", false);
+    } else {
+      if (isCheckpoint) append(false, "before", false);
+      append(true, isCheckpoint ? "after" : undefined, isCompleteBoundary ? false : !isActiveSide);
+    }
+    if (isCompleteBoundary && options.direction === "short") append(true, undefined, true);
   }
   return series;
-};
-
-export const createHarvesterExportPayload = (
-  snapshot: HarvesterSnapshot,
-  benchmark: HarvesterBenchmark,
-  finalTargetPercent: number,
-  points: HarvestPoint[],
-  accountInitialCashback = true,
-): HarvesterExportPayload => {
-  const result = evaluateHarvestPlan(snapshot, benchmark, finalTargetPercent, points, accountInitialCashback);
-  const curve = buildHarvesterChartSeries(snapshot, benchmark, finalTargetPercent, points);
-  return {
-    importedStrategy: {
-      config: { ...snapshot.config },
-      comparisonMode: snapshot.comparisonMode,
-      assetName: snapshot.assetName,
-      importedAt: snapshot.importedAt,
-    },
-    originalActiveV4Curve: curve.map(({ move, originalActiveV4: value }) => ({ move, value })),
-    harvestedActiveV4Curve: curve.map(({ move, harvestedActiveV4: value }) => ({ move, value })),
-    totalWealthCurve: curve.map(({ move, totalWealth: value }) => ({ move, value })),
-    selectedBenchmarkCurve: curve.map(({ move, benchmark: value }) => ({ move, value })),
-    harvestCheckpoints: result.points,
-    finalTarget: finalTargetPercent,
-    finalBenchmark: benchmark,
-    totalHarvested: result.final.totalHarvested,
-    originalExternalCapital: result.final.originalExternalCapital,
-    securedCapital: result.recovery.currentSecured,
-    initialCapitalRecoveryPoint: result.recovery.recoveredAtMovePercent,
-    finalTargetSummary: result.final,
-  };
 };

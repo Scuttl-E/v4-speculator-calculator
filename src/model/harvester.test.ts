@@ -3,7 +3,6 @@ import type { Config } from "./types";
 import {
   availableHarvesterBenchmarks,
   buildHarvesterChartSeries,
-  createHarvesterExportPayload,
   createHarvesterSnapshot,
   deleteHarvestPoint,
   editHarvestPoint,
@@ -15,7 +14,6 @@ import {
   originalActiveV4Value,
   originalActiveV4LegValues,
   originalExternalValue,
-  requiredFinalActiveFraction,
   resetHarvestPoints,
   snapHarvestMove,
   type HarvestPoint,
@@ -44,6 +42,7 @@ const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
   debtPosition: { assetPrice: 2_000, assetAmount: 20, usdDebt: 15_000, liquidationLtv: .85 },
   perpPosition: { assetPrice: 2_000, averageEntryPrice: 1_900, positionSize: 10, margin: 12_000, liquidationPrice: 1_200, side: "long" },
   assetName: "ETH",
+  defaultHarvestDirection: "long",
 });
 
 const point = (id: string, movePercent: number, activeAfter: number): HarvestPoint => ({ id, movePercent, activeAfter });
@@ -94,10 +93,11 @@ describe("Harvester accounting", () => {
     const snap = snapshot({ longAllocation: .45, longMode: "2.5x-cashback", shortMode: "2.5x-looped" });
     const after = originalActiveV4Value(snap, 2) * .7;
     const result = evaluateHarvestPlan(snap, "spot", 500, [point("a", 100, after)]);
-    expect(result.points[0].survivingFraction).toBeCloseTo(.7, 10);
+    expect(result.points[0].longFractionAfter).toBeCloseTo(.7, 10);
+    expect(result.points[0].shortFractionAfter).toBeCloseTo(.7, 10);
     expect(result.final.remainingActiveV4).toBeCloseTo(originalActiveV4Value(snap, 6) * .7, 10);
     const targetLegs = originalActiveV4LegValues(snap, 6);
-    expect(targetLegs.long * result.points[0].survivingFraction + targetLegs.short * result.points[0].survivingFraction)
+    expect(targetLegs.long * result.points[0].longFractionAfter + targetLegs.short * result.points[0].shortFractionAfter)
       .toBeCloseTo(result.final.remainingActiveV4, 10);
   });
 
@@ -121,14 +121,28 @@ describe("Harvester accounting", () => {
     expect(result.points[1].activeBefore).toBeCloseTo(originalActiveV4Value(snap, 3) * .8, 8);
     expect(result.points[1].harvested).toBeCloseTo(originalActiveV4Value(snap, 3) * .2, 8);
   });
+
+  it("routes withdrawals proportionally or through the preferred leg first", () => {
+    const snap = snapshot({ longAllocation: .5, longMode: "2.5x-looped", shortMode: "2.5x-looped" });
+    const requested = [point("a", -20, 0)];
+    const proportional = evaluateHarvestPlan(snap, "spot", -80, requested, true, { direction: "short", withdrawalSource: "proportional" });
+    const longFirst = evaluateHarvestPlan(snap, "spot", -80, requested, true, { direction: "short", withdrawalSource: "longFirst" });
+    const shortFirst = evaluateHarvestPlan(snap, "spot", -80, requested, true, { direction: "short", withdrawalSource: "shortFirst" });
+
+    expect(proportional.points[0].longFractionAfter).toBeCloseTo(proportional.points[0].shortFractionAfter, 10);
+    expect(longFirst.points[0].longFractionAfter).toBeLessThan(longFirst.points[0].shortFractionAfter);
+    expect(shortFirst.points[0].shortFractionAfter).toBeLessThan(shortFirst.points[0].longFractionAfter);
+    for (const result of [proportional, longFirst, shortFirst]) {
+      expect(result.final.paritySatisfied).toBe(true);
+      expect(result.points[0].activeBefore - result.points[0].activeAfter).toBeCloseTo(result.points[0].harvested, 8);
+    }
+  });
 });
 
 describe("Harvester constraints and editing", () => {
   it("satisfies final parity and excludes harvested cash from the constraint", () => {
     const snap = snapshot();
-    const required = requiredFinalActiveFraction(snap, "spot", 500)!;
-    const targetActive = originalActiveV4Value(snap, 2) * required;
-    const result = evaluateHarvestPlan(snap, "spot", 500, [point("a", 100, targetActive)]);
+    const result = evaluateHarvestPlan(snap, "spot", 500, [point("a", 100, 0)]);
     expect(result.final.paritySatisfied).toBe(true);
     expect(result.final.remainingActiveV4).toBeGreaterThanOrEqual(result.final.benchmarkValue! - 1e-7);
     expect(result.final.totalHarvested).toBeGreaterThan(0);
@@ -181,6 +195,27 @@ describe("Harvester constraints and editing", () => {
     expect(after.points[0].activeBefore).not.toBeCloseTo(before.points[1].activeBefore, 5);
   });
 
+  it("orders and edits Short checkpoints outward from entry", () => {
+    const snap = snapshot({ longAllocation: .5 });
+    const options = { direction: "short" as const, withdrawalSource: "proportional" as const };
+    const generated = generateHarvestPoints(snap, "spot", -80, 20, 3, options);
+    expect(generated.map((entry) => entry.movePercent)).toEqual([-20, -40, -60]);
+    const moved = editHarvestPoint(snap, "spot", -80, generated, generated[1].id, { movePercent: -79 }, "horizontal", options);
+    expect(moved.map((entry) => entry.movePercent)).toEqual([-20, -59, -60]);
+    expect(evaluateHarvestPlan(snap, "spot", -80, moved, true, options).final.paritySatisfied).toBe(true);
+  });
+
+  it("orders duplicate Short chart states after-to-before for one clean checkpoint transition", () => {
+    const snap = snapshot({ longAllocation: .5 });
+    const options = { direction: "short" as const, withdrawalSource: "proportional" as const };
+    const points = generateHarvestPoints(snap, "spot", -80, 20, 3, options);
+    const series = buildHarvesterChartSeries(snap, "spot", -80, points, 180, null, options, { minMove: -80, maxMove: 0 });
+    const checkpointStates = series.filter((entry) => entry.move === -20);
+
+    expect(checkpointStates.map((entry) => entry.phase)).toEqual(["after", "before"]);
+    expect(checkpointStates[0].harvestedActiveV4).toBeLessThan(checkpointStates[1].harvestedActiveV4);
+  });
+
   it("resets the exact generated X/Y point set", () => {
     const snap = snapshot();
     const generated = generateHarvestPoints(snap, "spot", 500, 100, 4);
@@ -222,20 +257,82 @@ describe("Harvester recovery and benchmarks", () => {
     expect(series[0].comparisonReference).toBeCloseTo(13_000, 8);
   });
 
-  it("counts marked external spot and harvested cash at the first recovery checkpoint", () => {
+  it("exposes one full-range preview state plus the harvested-side Long history for Complete", () => {
+    const snap = snapshot({ longAllocation: .5, longMode: "2.5x-looped", shortMode: "2.5x-looped" });
+    const options = { direction: "long" as const, withdrawalSource: "proportional" as const };
+    const plan = generateHarvestPoints(snap, "spot", 500, 100, 3, options);
+    const firstOnly = buildHarvesterChartSeries(snap, "spot", 500, plan.slice(0, 1), 180, null, options, { minMove: -80, maxMove: 500 });
+    const full = buildHarvesterChartSeries(snap, "spot", 500, plan, 180, null, options, { minMove: -80, maxMove: 500 });
+    const firstDownside = firstOnly.find((entry) => entry.move === -80)!;
+    const fullDownside = full.find((entry) => entry.move === -80)!;
+
+    expect(firstDownside.projection).toBe(true);
+    expect(firstDownside.previewedActiveV4).toBeCloseTo(firstDownside.harvestedActiveV4, 8);
+    expect(firstDownside.previewedTotalWealth).toBeCloseTo(firstDownside.totalWealth, 8);
+    expect(firstDownside.historicalActiveV4).toBeNull();
+    expect(firstDownside.harvestedActiveV4).toBeLessThan(firstDownside.originalActiveV4);
+    expect(fullDownside.previewedActiveV4).toBeLessThanOrEqual(firstDownside.previewedActiveV4);
+    expect(fullDownside.remainingLong + fullDownside.remainingShort).toBeCloseTo(fullDownside.harvestedActiveV4, 8);
+
+    const anchorMove = plan[0].movePercent;
+    const historyBeforeAnchor = firstOnly.find((entry) => entry.move > 0 && entry.move < anchorMove && entry.historicalActiveV4 !== null)!;
+    const anchorAfter = firstOnly.find((entry) => entry.move === anchorMove && entry.phase === "after")!;
+    const beyondAnchor = firstOnly.find((entry) => entry.move > anchorMove)!;
+
+    expect(historyBeforeAnchor.previewedActiveV4).toBeLessThan(historyBeforeAnchor.historicalActiveV4!);
+    expect(historyBeforeAnchor.previewedTotalWealth).toBeGreaterThan(historyBeforeAnchor.previewedActiveV4);
+    expect(anchorAfter.previewedActiveV4).toBeCloseTo(anchorAfter.historicalActiveV4!, 8);
+    expect(beyondAnchor.previewedActiveV4).toBeCloseTo(beyondAnchor.historicalActiveV4!, 8);
+  });
+
+  it("mirrors the full-range preview state and harvested-side history for Short harvesting", () => {
+    const snap = snapshot({ longAllocation: .5, longMode: "2.5x-looped", shortMode: "2.5x-looped" });
+    const options = { direction: "short" as const, withdrawalSource: "proportional" as const };
+    const plan = generateHarvestPoints(snap, "spot", -80, 20, 3, options);
+    const series = buildHarvesterChartSeries(snap, "spot", -80, plan, 180, null, options, { minMove: -80, maxMove: 500 });
+    const anchorMove = plan[plan.length - 1].movePercent;
+    const historyBeforeAnchor = series.find((entry) => entry.move > anchorMove && entry.move < 0 && entry.historicalActiveV4 !== null)!;
+    const beyondAnchor = series.find((entry) => entry.move < anchorMove)!;
+    const opposite = series.find((entry) => entry.move === 500)!;
+
+    expect(historyBeforeAnchor.previewedActiveV4).toBeLessThan(historyBeforeAnchor.historicalActiveV4!);
+    expect(beyondAnchor.previewedActiveV4).toBeCloseTo(beyondAnchor.historicalActiveV4!, 8);
+    expect(opposite.historicalActiveV4).toBeNull();
+    expect(opposite.previewedActiveV4).toBeCloseTo(opposite.harvestedActiveV4, 8);
+    expect(opposite.previewedTotalWealth).toBeCloseTo(opposite.totalWealth, 8);
+  });
+
+  it("reports the first and durable capital-coverage checkpoints", () => {
     const snap = snapshot({ longMode: "2.5x-cashback", cashbackMode: "spot" });
     const first = originalActiveV4Value(snap, 1.5) * .8;
     const second = originalActiveV4Value(snap, 2) * .6;
     const result = evaluateHarvestPlan(snap, "spot", 500, [point("a", 50, first), point("b", 100, second)]);
-    expect(result.recovery.recovered).toBe(true);
-    expect(result.recovery.recoveredAtMovePercent).toBe(100);
+    expect(result.recovery.coveredAtTarget).toBe(true);
+    expect(result.recovery.firstReachedAtMovePercent).toBe(100);
+    expect(result.recovery.durablyCoveredAtMovePercent).toBe(100);
   });
 
-  it("reports secured-capital progress at the latest checkpoint rather than borrowing future spot appreciation", () => {
+  it("values capital coverage consistently at the final target", () => {
     const snap = snapshot({ longMode: "2.5x-cashback", cashbackMode: "spot" });
     const noPoints = evaluateHarvestPlan(snap, "spot", 500, []);
-    expect(noPoints.recovery.currentSecured).toBe(12_500);
+    expect(noPoints.recovery.coverageAtTarget).toBe(75_000);
+    expect(noPoints.recovery.cashbackValueAtTarget).toBe(75_000);
     expect(noPoints.final.originalExternalCapital).toBe(75_000);
+  });
+
+  it("does not keep a temporary Short-side spot-cashback recovery marked as covered at target", () => {
+    const snap = createHarvesterSnapshot({
+      ...snapshot({ longAllocation: .5, longMode: "2.5x-cashback", shortMode: "2.5x-looped", cashbackMode: "spot" }),
+      comparisonMode: "perp",
+      perpPosition: { assetPrice: 2_000, averageEntryPrice: 2_000, positionSize: 10, margin: 20_000, liquidationPrice: 3_000, side: "short" },
+    });
+    const options = { direction: "short" as const, withdrawalSource: "longFirst" as const };
+    const result = evaluateHarvestPlan(snap, "spot", -80, [point("first", -20, 0)], true, options);
+
+    expect(result.recovery.firstReachedAtMovePercent).toBe(-20);
+    expect(result.recovery.coveredAtTarget).toBe(false);
+    expect(result.recovery.durablyCoveredAtMovePercent).toBeNull();
+    expect(result.recovery.coverageGapAtTarget).toBeLessThan(0);
   });
 
   it("scopes benchmark availability and imported positions to the source chart", () => {
@@ -268,16 +365,4 @@ describe("Harvester recovery and benchmarks", () => {
     expect(result.final.paritySatisfied).toBe(false);
   });
 
-  it("builds a renderer-independent export payload", () => {
-    const snap = snapshot();
-    const points = generateHarvestPoints(snap, "spot", 500, 100, 3);
-    const payload = createHarvesterExportPayload(snap, "spot", 500, points);
-    expect(payload.harvestCheckpoints).toHaveLength(3);
-    expect(payload.originalActiveV4Curve.length).toBeGreaterThan(100);
-    expect(payload.harvestedActiveV4Curve).toHaveLength(payload.originalActiveV4Curve.length);
-    expect(payload.totalWealthCurve).toHaveLength(payload.originalActiveV4Curve.length);
-    expect(payload.selectedBenchmarkCurve).toHaveLength(payload.originalActiveV4Curve.length);
-    expect(payload.finalTargetSummary.paritySatisfied).toBe(true);
-    expect(payload.totalHarvested).toBeGreaterThan(0);
-  });
 });

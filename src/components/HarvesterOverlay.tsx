@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -19,13 +19,15 @@ import {
   benchmarkForComparisonMode,
   buildHarvesterChartSeries,
   createEmptyHarvesterPlans,
-  createHarvesterExportPayload,
   deleteHarvestPoint,
   editHarvestPoint,
   editHarvestPointPercent,
+  evaluateHarvestedStateAt,
+  evaluateHarvesterBenchmark,
   evaluateHarvestPlan,
   horizontalBoundsForPoint,
   insertHarvestPoint,
+  initialRecoveryTarget,
   maximumCheckpointCount,
   originalExternalValue,
   resetHarvesterPlanState,
@@ -36,10 +38,13 @@ import {
   type HarvestPointResult,
   type HarvesterBenchmark,
   type HarvesterDragMode,
-  type HarvesterExportPayload,
+  type HarvestDirection,
+  type HarvestWithdrawalSource,
+  type HarvesterChartView,
   type HarvesterGenerationInputs,
   type HarvesterPlanKind,
   type HarvesterPlans,
+  type HarvesterPreviewThrough,
   type HarvesterSnapshot,
 } from "../model/harvester";
 
@@ -55,7 +60,7 @@ const assetPriceMoney = (value: number) => new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 }).format(value);
 const signedMove = (value: number) => `${value >= 0 ? "+" : ""}${Math.round(value)}%`;
-const benchmarkLabels: Record<HarvesterBenchmark, string> = { spot: "Spot", lending: "Lending", perp: "Perp" };
+const benchmarkLabels: Record<HarvesterBenchmark, string> = { spot: "Spot Hold", lending: "Lending", perp: "Perp" };
 const planLabels: Record<HarvesterPlanKind, string> = {
   user: "User",
   equalRate: "Max Harvest Rate",
@@ -68,9 +73,12 @@ const planDescriptions: Record<HarvesterPlanKind, string> = {
   equalCash: "Maximise the same cash withdrawal across eligible checkpoints while preserving final benchmark parity.",
   earliestRecovery: "Recover initial capital as early as possible while preserving final benchmark parity.",
 };
-const recoverySummary = (recovered: boolean, movePercent: number | null) => recovered
-  ? movePercent === 0 ? "Recovered at entry" : `Recovered at ${signedMove(movePercent ?? 0)}`
-  : "Not recovered before target";
+const coverageSummary = (coveredAtTarget: boolean, movePercent: number | null, targetPercent: number) => {
+  if (!coveredAtTarget || movePercent === null) return "Short at target";
+  if (movePercent === 0) return "Covered from entry";
+  if (movePercent === targetPercent) return "Covered at target";
+  return `Covered from ${signedMove(movePercent)}`;
+};
 const intervalOptions = Array.from({ length: 10 }, (_, index) => (index + 1) * 10);
 type NumericAdjustmentControl = {
   id: string;
@@ -90,7 +98,6 @@ const finalSurplusLabel = (value: number | null) => {
 interface HarvesterOverlayProps {
   snapshot: HarvesterSnapshot;
   onClose: () => void;
-  onExport?: (payload: HarvesterExportPayload) => void;
 }
 
 const HARVESTER_UNDO_LIMIT = 50;
@@ -113,6 +120,21 @@ interface HarvesterUndoState {
   accountInitialCashback: boolean;
 }
 
+type ByDirection<T> = Record<HarvestDirection, T>;
+const byDirection = <T,>(long: T, short: T): ByDirection<T> => ({ long, short });
+const resolveStateAction = <T,>(action: SetStateAction<T>, current: T) =>
+  typeof action === "function" ? (action as (value: T) => T)(current) : action;
+type HarvesterChartSeriesKey = "original" | "active" | "wealth" | "history" | "benchmark" | "comparisonReference";
+type HarvesterChartSeriesVisibility = Record<HarvesterChartSeriesKey, boolean>;
+const DEFAULT_HARVESTER_CHART_SERIES_VISIBILITY: HarvesterChartSeriesVisibility = {
+  original: true,
+  active: true,
+  wealth: true,
+  history: true,
+  benchmark: true,
+  comparisonReference: true,
+};
+
 const cloneUndoState = (state: HarvesterUndoState): HarvesterUndoState => structuredClone(state);
 
 function HarvesterTooltip({
@@ -121,26 +143,58 @@ function HarvesterTooltip({
   label,
   benchmarkLabel,
   comparisonReferenceLabel,
+  detailed,
+  previewLabel,
+  showTotalWealth,
+  completeView,
+  seriesVisibility,
 }: {
   active?: boolean;
   payload?: any[];
   label?: number;
   benchmarkLabel: string;
   comparisonReferenceLabel: string | null;
+  detailed: boolean;
+  previewLabel: string;
+  showTotalWealth: boolean;
+  completeView: boolean;
+  seriesVisibility: HarvesterChartSeriesVisibility;
 }) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
+  const activeV4 = completeView ? row.previewedActiveV4 : row.harvestedActiveV4;
+  const remainingLong = completeView ? row.previewedRemainingLong : row.remainingLong;
+  const remainingShort = completeView ? row.previewedRemainingShort : row.remainingShort;
+  const cumulativeHarvested = completeView ? row.previewedCumulativeHarvested : row.cumulativeHarvested;
+  const totalWealth = completeView ? row.previewedTotalWealth : row.totalWealth;
   return <div className="harvester-chart-tooltip">
     <b>{signedMove(label ?? row.move)}</b>
-    <span className="benchmark">Benchmark · {benchmarkLabel} <strong>{row.benchmark === null ? "Unavailable" : money(row.benchmark)}</strong></span>
-    {comparisonReferenceLabel && <span className="comparison-reference">Reference · {comparisonReferenceLabel} <strong>{row.comparisonReference === null ? "Liquidated" : money(row.comparisonReference)}</strong></span>}
-    <span className="original">Original V4 <strong>{money(row.originalActiveV4)}</strong></span>
-    <span className="active">Active V4 <strong>{money(row.harvestedActiveV4)}</strong></span>
-    <span className="harvested">Harvested Cash <strong>{money(row.cumulativeHarvested)}</strong></span>
-    {row.initialCashback !== 0 && <span className="cashback">Initial Cashback <strong>{money(row.initialCashback)}</strong></span>}
-    <span className="wealth">Total wealth <strong>{money(row.totalWealth)}</strong></span>
+    {completeView
+      ? <small className="projection-label">Position after · {previewLabel}</small>
+      : row.projection && <small className="projection-label">Projected · {previewLabel}</small>}
+    {seriesVisibility.benchmark && <span className="benchmark">Benchmark · {benchmarkLabel} <strong>{row.benchmark === null ? (completeView ? "Liquidated" : "Unavailable") : money(row.benchmark)}</strong></span>}
+    {seriesVisibility.comparisonReference && comparisonReferenceLabel && <span className="comparison-reference">Reference · {comparisonReferenceLabel} <strong>{row.comparisonReference === null ? "Liquidated" : money(row.comparisonReference)}</strong></span>}
+    {seriesVisibility.original && <span className="original">Original V4 <strong>{money(row.originalActiveV4)}</strong></span>}
+    {seriesVisibility.active && <span className="active">{completeView ? "Previewed Active V4" : "Active V4"} <strong>{money(activeV4)}</strong></span>}
+    {seriesVisibility.active && detailed && <span className="active-breakdown"><i aria-hidden="true" /><span>Long component <strong>{money(remainingLong)}</strong></span><span>Short component <strong>{money(remainingShort)}</strong></span></span>}
+    {seriesVisibility.history && completeView && row.historicalActiveV4 !== null && <span className="history">Harvest path <strong>{money(row.historicalActiveV4)}</strong></span>}
+    <span className="harvested">Harvested Cash <strong>{money(cumulativeHarvested)}</strong></span>
+    {row.initialCashback !== 0 && <span className="cashback">Cashback value <strong>{money(row.initialCashback)}</strong></span>}
+    {showTotalWealth && seriesVisibility.wealth && <span className="wealth">{completeView ? "Previewed Total Wealth" : "Total wealth"} <strong>{money(totalWealth)}</strong></span>}
   </div>;
+}
+
+function HarvesterLegendToggle({ label, seriesClass, visible, onToggle }: {
+  label: string;
+  seriesClass: string;
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  return <button type="button" className={`harvester-legend-item${visible ? " on" : ""}`} aria-pressed={visible} aria-label={`${visible ? "Hide" : "Show"} ${label}`} onClick={onToggle}>
+    <span className={seriesClass}>{label}</span>
+    <svg viewBox="0 0 24 16" aria-hidden="true"><path d="M2 8s3.8-5.2 10-5.2S22 8 22 8s-3.8 5.2-10 5.2S2 8 2 8Z" /><circle cx="12" cy="8" r="2.4" />{!visible && <path className="slash" d="M4 2l16 12" />}</svg>
+  </button>;
 }
 
 function HarvestedTooltipAnchor({
@@ -162,56 +216,101 @@ function CheckpointDot({
   cx,
   cy,
   selected,
+  muted,
   onPointerDown,
   onClick,
 }: {
   cx?: number;
   cy?: number;
   selected: boolean;
+  muted: boolean;
   onPointerDown: (event: ReactPointerEvent<SVGCircleElement>) => void;
   onClick: (event: ReactMouseEvent<SVGCircleElement>) => void;
 }) {
   if (typeof cx !== "number" || typeof cy !== "number") return null;
-  return <g className="harvester-checkpoint-dot">
+  return <g className={`harvester-checkpoint-dot${muted ? " muted" : ""}`}>
     <circle cx={cx} cy={cy} r={selected ? 7 : 5.5} fill={selected ? "#f5b57f" : "#e18a4a"} stroke="#151616" strokeWidth={2} pointerEvents="none" />
     <circle cx={cx} cy={cy} r={16} fill="transparent" stroke="transparent" style={{ touchAction: "none" }} onPointerDown={onPointerDown} onClick={onClick} />
   </g>;
 }
 
-export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverlayProps) {
+export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
   const availableBenchmarks = useMemo(() => availableHarvesterBenchmarks(snapshot), [snapshot]);
   const launchedBenchmark = benchmarkForComparisonMode(snapshot.comparisonMode);
   const initialBenchmark = availableBenchmarks.includes(launchedBenchmark) ? launchedBenchmark : "spot";
-  const [sharedInputs, setSharedInputs] = useState<HarvesterGenerationInputs>({
+  const initialInputs = useMemo<ByDirection<HarvesterGenerationInputs>>(() => byDirection({
+    direction: "long",
+    withdrawalSource: "proportional",
     benchmark: initialBenchmark,
     finalTargetPercent: 500,
     intervalPercent: 100,
     firstCheckpointPercent: null,
     pointCount: 4,
     defaultHarvestPercent: 100,
-  });
-  const [plans, setPlans] = useState<HarvesterPlans>(createEmptyHarvesterPlans);
-  const [activeKind, setActiveKind] = useState<HarvesterPlanKind>("user");
-  const [accountInitialCashback, setAccountInitialCashback] = useState(false);
-  const [dragMode, setDragMode] = useState<HarvesterDragMode>("vertical");
+  }, {
+    direction: "short",
+    withdrawalSource: "proportional",
+    benchmark: initialBenchmark,
+    finalTargetPercent: -80,
+    intervalPercent: 20,
+    firstCheckpointPercent: null,
+    pointCount: 3,
+    defaultHarvestPercent: 100,
+  }), [initialBenchmark]);
+  const [activeDirection, setActiveDirection] = useState<HarvestDirection>(snapshot.defaultHarvestDirection);
+  const [sharedInputsByDirection, setSharedInputsByDirection] = useState(initialInputs);
+  const [plansByDirection, setPlansByDirection] = useState<ByDirection<HarvesterPlans>>(() => byDirection(createEmptyHarvesterPlans(), createEmptyHarvesterPlans()));
+  const [activeKindByDirection, setActiveKindByDirection] = useState<ByDirection<HarvesterPlanKind>>(() => byDirection("user", "user"));
+  const [accountInitialCashbackByDirection, setAccountInitialCashbackByDirection] = useState<ByDirection<boolean>>(() => byDirection(false, false));
+  const [dragModeByDirection, setDragModeByDirection] = useState<ByDirection<HarvesterDragMode>>(() => byDirection("vertical", "vertical"));
+  const [previewThroughByDirection, setPreviewThroughByDirection] = useState<ByDirection<HarvesterPreviewThrough>>(() => byDirection("all", "all"));
+  const [chartView, setChartView] = useState<HarvesterChartView>(snapshot.defaultHarvestDirection);
+  const [completeMinMove, setCompleteMinMove] = useState(-80);
+  const [completeMaxMove, setCompleteMaxMove] = useState(500);
+  const [showDetailedTooltip, setShowDetailedTooltip] = useState(false);
   const [activeNumericAdjustmentId, setActiveNumericAdjustmentId] = useState<string | null>(null);
   const [addPointArmed, setAddPointArmed] = useState(false);
-  const [exportReady, setExportReady] = useState(false);
   const [harvestedTooltipAnchor, setHarvestedTooltipAnchor] = useState<{ x: number; y: number } | null>(null);
   const [showLegendCard, setShowLegendCard] = useState(true);
+  const [chartSeriesVisibility, setChartSeriesVisibility] = useState<HarvesterChartSeriesVisibility>(() => ({ ...DEFAULT_HARVESTER_CHART_SERIES_VISIBILITY }));
   const [finalTargetDraft, setFinalTargetDraft] = useState("500");
   const [intervalDraft, setIntervalDraft] = useState("100");
   const [checkpointCountDraft, setCheckpointCountDraft] = useState("4");
   const [firstCheckpointDraft, setFirstCheckpointDraft] = useState("");
   const [harvestRateDraft, setHarvestRateDraft] = useState("100");
+  const [analysisMoveByDirection, setAnalysisMoveByDirection] = useState<ByDirection<number>>(() => byDirection(500, -80));
+  const [analysisMoveDraft, setAnalysisMoveDraft] = useState("500");
   const [pointFieldDrafts, setPointFieldDrafts] = useState<Record<string, string>>({});
   const [openSelector, setOpenSelector] = useState<"interval" | "checkpoints" | "firstCheckpoint" | "harvestRate" | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
-  const undoHistoryRef = useRef<HarvesterUndoState[]>([]);
+  const undoHistoryRef = useRef<ByDirection<HarvesterUndoState[]>>(byDirection([], []));
   const undoCoalesceKeyRef = useRef<string | null>(null);
   const undoCoalesceTimerRef = useRef<number | null>(null);
-  const [undoCount, setUndoCount] = useState(0);
+  const [undoCountByDirection, setUndoCountByDirection] = useState<ByDirection<number>>(() => byDirection(0, 0));
+
+  const sharedInputs = sharedInputsByDirection[activeDirection];
+  const plans = plansByDirection[activeDirection];
+  const activeKind = activeKindByDirection[activeDirection];
+  const accountInitialCashback = accountInitialCashbackByDirection[activeDirection];
+  const dragMode = dragModeByDirection[activeDirection];
+  const previewThrough = previewThroughByDirection[activeDirection];
+  const analysisMove = analysisMoveByDirection[activeDirection];
+  const undoCount = undoCountByDirection[activeDirection];
+  const setSharedInputs = (action: SetStateAction<HarvesterGenerationInputs>) => setSharedInputsByDirection((current) => ({
+    ...current,
+    [activeDirection]: resolveStateAction(action, current[activeDirection]),
+  }));
+  const setPlans = (action: SetStateAction<HarvesterPlans>) => setPlansByDirection((current) => ({
+    ...current,
+    [activeDirection]: resolveStateAction(action, current[activeDirection]),
+  }));
+  const setActiveKind = (kind: HarvesterPlanKind) => setActiveKindByDirection((current) => ({ ...current, [activeDirection]: kind }));
+  const setAccountInitialCashback = (value: boolean) => setAccountInitialCashbackByDirection((current) => ({ ...current, [activeDirection]: value }));
+  const setDragMode = (mode: HarvesterDragMode) => setDragModeByDirection((current) => ({ ...current, [activeDirection]: mode }));
+  const setPreviewThrough = (value: HarvesterPreviewThrough) => setPreviewThroughByDirection((current) => ({ ...current, [activeDirection]: value }));
+  const setUndoCount = (value: number) => setUndoCountByDirection((current) => ({ ...current, [activeDirection]: value }));
+  const toggleChartSeriesVisibility = (series: HarvesterChartSeriesKey) => setChartSeriesVisibility((current) => ({ ...current, [series]: !current[series] }));
 
   const activePlan = plans[activeKind];
   const hasGeneratedPlans = HARVESTER_PLAN_KINDS.every((kind) => plans[kind] !== null);
@@ -228,21 +327,61 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     return Array.from({ length: maximum }, (_, index) => index + 1);
   }, [sharedInputs.finalTargetPercent, sharedInputs.intervalPercent, sharedInputs.firstCheckpointPercent]);
   const evaluationInputs = activePlan?.generationInputs ?? sharedInputs;
+  const evaluationOptions = useMemo(() => ({
+    direction: evaluationInputs.direction,
+    withdrawalSource: evaluationInputs.withdrawalSource,
+  }), [evaluationInputs.direction, evaluationInputs.withdrawalSource]);
   const storedPoints = activePlan?.points ?? [];
   const points = useMemo(() => activePlan && activeKind === "earliestRecovery"
     ? resolveEarliestRecoveryPoints(snapshot, activePlan.generationInputs, storedPoints, accountInitialCashback)
     : storedPoints,
   [snapshot, activePlan, activeKind, storedPoints, accountInitialCashback]);
   const result = useMemo(
-    () => evaluateHarvestPlan(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, accountInitialCashback),
-    [snapshot, evaluationInputs, points, accountInitialCashback],
+    () => evaluateHarvestPlan(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, accountInitialCashback, evaluationOptions),
+    [snapshot, evaluationInputs, points, accountInitialCashback, evaluationOptions],
   );
+  const analysisState = useMemo(
+    () => evaluateHarvestedStateAt(snapshot, result, analysisMove, true, evaluationInputs.direction),
+    [snapshot, result, analysisMove, evaluationInputs.direction],
+  );
+  const analysisBenchmark = useMemo(
+    () => evaluateHarvesterBenchmark(snapshot, evaluationInputs.benchmark, 1 + analysisMove / 100),
+    [snapshot, evaluationInputs.benchmark, analysisMove],
+  );
+  const analysisSurplus = analysisBenchmark.value === null
+    ? null
+    : analysisState.activeV4 - analysisBenchmark.value;
+  const analysisRecoveryTarget = initialRecoveryTarget(snapshot);
+  const analysisCoverage = analysisState.cumulativeHarvested + (accountInitialCashback ? analysisState.external : 0);
+  const analysisCoverageGap = analysisCoverage - analysisRecoveryTarget;
+  const analysisCovered = analysisCoverageGap >= -1e-7;
+  const durableRecoveryReached = result.recovery.durablyCoveredAtMovePercent !== null
+    && Math.abs(result.recovery.durablyCoveredAtMovePercent) <= Math.abs(analysisMove) + 1e-7;
+  const previewCheckpointIndex = previewThrough.startsWith("checkpoint:")
+    ? Number(previewThrough.slice("checkpoint:".length))
+    : null;
+  const previewPoints = useMemo(() => {
+    if (previewThrough === "before") return [];
+    if (previewThrough === "all") return points;
+    return previewCheckpointIndex === null || !Number.isInteger(previewCheckpointIndex)
+      ? points
+      : points.slice(0, previewCheckpointIndex + 1);
+  }, [points, previewThrough, previewCheckpointIndex]);
+  const previewIncludedIds = useMemo(() => new Set(previewPoints.map((point) => point.id)), [previewPoints]);
+  const previewLabel = previewThrough === "before"
+    ? "Before cashouts"
+    : previewThrough === "all"
+      ? "All cashouts"
+      : previewCheckpointIndex === null || previewCheckpointIndex >= result.points.length
+        ? "All cashouts"
+        : `Checkpoint ${previewCheckpointIndex + 1}`;
   const recoveryTargetLabel = snapshot.comparisonMode === "perp" ? "Initial Margin" : "Initial Capital";
   const hasKnownAssetPrice = snapshot.spotAssetPrice !== null
     && Number.isFinite(snapshot.spotAssetPrice)
     && snapshot.spotAssetPrice > 0;
   const analysisCashbackLabel = useMemo(() => {
-    if (snapshot.config.cashbackMode !== "spot") return "Initial Cashback (Cash)";
+    const targetLabel = signedMove(analysisMove);
+    if (snapshot.config.cashbackMode !== "spot") return `Cashback value at ${targetLabel} (Cash)`;
     const assetName = snapshot.assetName.trim();
     const assetPrice = snapshot.spotAssetPrice;
     const initialCashbackValue = originalExternalValue(snapshot, 1);
@@ -250,35 +389,62 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       ? initialCashbackValue / assetPrice
       : null;
     const spotDescription = spotAmount !== null && assetName
-      ? `Spot - ${spotAmount.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${assetName}`
+      ? `${spotAmount.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${assetName}`
       : "Spot";
-    return `Initial Cashback (${spotDescription})`;
-  }, [snapshot]);
+    return `Cashback value at ${targetLabel} (${spotDescription})`;
+  }, [snapshot, analysisMove]);
   const earliestRecoverySummary = useMemo(() => {
     const plan = plans.earliestRecovery;
     if (!plan) return "Generate a plan";
     const resolved = resolveEarliestRecoveryPoints(snapshot, plan.generationInputs, plan.points, accountInitialCashback);
-    const recovery = evaluateHarvestPlan(snapshot, plan.generationInputs.benchmark, plan.generationInputs.finalTargetPercent, resolved, accountInitialCashback).recovery;
-    return recoverySummary(recovery.recovered, recovery.recoveredAtMovePercent);
+    const recovery = evaluateHarvestPlan(snapshot, plan.generationInputs.benchmark, plan.generationInputs.finalTargetPercent, resolved, accountInitialCashback, {
+      direction: plan.generationInputs.direction,
+      withdrawalSource: plan.generationInputs.withdrawalSource,
+    }).recovery;
+    return coverageSummary(recovery.coveredAtTarget, recovery.durablyCoveredAtMovePercent, plan.generationInputs.finalTargetPercent);
   }, [snapshot, plans.earliestRecovery, accountInitialCashback]);
+  const activeTarget = evaluationInputs.finalTargetPercent;
+  const chartMinMove = chartView === "long"
+    ? 0
+    : Math.min(completeMinMove, evaluationInputs.direction === "short" ? activeTarget : 0);
+  const chartMaxMove = chartView === "short"
+    ? 0
+    : Math.max(completeMaxMove, evaluationInputs.direction === "long" ? activeTarget : 0);
+  const chartSupportsEditing = chartView === "complete" || chartView === activeDirection;
   const chartSeries = useMemo(
     () => buildHarvesterChartSeries(
       snapshot,
       evaluationInputs.benchmark,
       evaluationInputs.finalTargetPercent,
-      points,
+      previewPoints,
       180,
       evaluationInputs.benchmark === "spot" && snapshot.comparisonMode !== "base"
         ? benchmarkForComparisonMode(snapshot.comparisonMode)
         : null,
+      evaluationOptions,
+      { minMove: chartMinMove, maxMove: chartMaxMove },
     ),
-    [snapshot, evaluationInputs, points],
+    [snapshot, evaluationInputs, previewPoints, evaluationOptions, chartMinMove, chartMaxMove],
   );
   const chartComparisonReference = evaluationInputs.benchmark === "spot" && snapshot.comparisonMode !== "base"
     ? benchmarkForComparisonMode(snapshot.comparisonMode)
     : null;
   const selectedPoint = result.points.find((point) => point.id === activePlan?.selectedPointId) ?? null;
-  const yValues = chartSeries.flatMap((entry) => [entry.originalActiveV4, entry.harvestedActiveV4, entry.totalWealth, entry.benchmark ?? 0, entry.comparisonReference ?? 0]);
+  const yValues = chartSeries.flatMap((entry) => [
+    ...(chartSeriesVisibility.original ? [entry.originalActiveV4] : []),
+    ...(chartView === "complete"
+      ? [
+          ...(chartSeriesVisibility.active ? [entry.previewedActiveV4] : []),
+          ...(chartSeriesVisibility.wealth ? [entry.previewedTotalWealth] : []),
+          ...(chartSeriesVisibility.history ? [entry.historicalActiveV4 ?? 0] : []),
+        ]
+      : [
+          ...(chartSeriesVisibility.active ? [entry.harvestedActiveV4] : []),
+          ...(chartSeriesVisibility.wealth ? [entry.totalWealth] : []),
+        ]),
+    ...(chartSeriesVisibility.benchmark ? [entry.benchmark ?? 0] : []),
+    ...(chartSeriesVisibility.comparisonReference ? [entry.comparisonReference ?? 0] : []),
+  ]);
   const rawYMax = Math.max(snapshot.config.deposit, ...yValues);
   const yStep = rawYMax <= 100_000 ? 25_000 : rawYMax <= 500_000 ? 100_000 : 250_000;
   const yMax = Math.max(yStep, Math.ceil(rawYMax / yStep) * yStep);
@@ -286,15 +452,18 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   const harvestedTooltipPosition = useMemo(() => {
     if (!harvestedTooltipAnchor) return undefined;
     const tooltipWidth = 190;
-    const tooltipHeight = 106;
+    const tooltipHeight = showDetailedTooltip
+      ? chartView === "complete" ? 176 : 154
+      : chartView === "complete" ? 142 : 118;
     const chartWidth = chartRef.current?.clientWidth ?? 0;
     const rightX = harvestedTooltipAnchor.x + 18;
     const x = chartWidth && rightX + tooltipWidth > chartWidth
       ? Math.max(0, harvestedTooltipAnchor.x - tooltipWidth - 18)
       : rightX;
     const aboveY = harvestedTooltipAnchor.y - 150 - tooltipHeight;
-    return { x, y: aboveY >= 0 ? aboveY : harvestedTooltipAnchor.y + 150 };
-  }, [harvestedTooltipAnchor]);
+    const preferredY = aboveY >= 58 ? aboveY : harvestedTooltipAnchor.y + 150;
+    return { x, y: Math.max(58, preferredY) };
+  }, [harvestedTooltipAnchor, showDetailedTooltip, chartView]);
   const activeHarvestRate = activePlan?.harvestRatePercent ?? sharedInputs.defaultHarvestPercent;
 
   useEffect(() => {
@@ -318,8 +487,42 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   }, [activeHarvestRate]);
 
   useEffect(() => {
+    setAnalysisMoveDraft(String(analysisMove));
+  }, [analysisMove]);
+
+  useEffect(() => {
+    const minimum = Math.min(0, evaluationInputs.finalTargetPercent);
+    const maximum = Math.max(0, evaluationInputs.finalTargetPercent);
+    setAnalysisMoveByDirection((current) => {
+      const nextValue = Math.min(maximum, Math.max(minimum, current[activeDirection]));
+      return nextValue === current[activeDirection]
+        ? current
+        : { ...current, [activeDirection]: nextValue };
+    });
+  }, [activeDirection, evaluationInputs.finalTargetPercent]);
+
+  useEffect(() => {
     setPlans((current) => regenerateHarvesterPlansPreservingEdits(current, snapshot, sharedInputs));
-  }, [snapshot, sharedInputs.benchmark, sharedInputs.finalTargetPercent, sharedInputs.intervalPercent, sharedInputs.firstCheckpointPercent, sharedInputs.pointCount]);
+  }, [snapshot, activeDirection, sharedInputs.direction, sharedInputs.withdrawalSource, sharedInputs.benchmark, sharedInputs.finalTargetPercent, sharedInputs.intervalPercent, sharedInputs.firstCheckpointPercent, sharedInputs.pointCount]);
+
+  useEffect(() => {
+    if (sharedInputs.direction === "long") setCompleteMaxMove((current) => Math.max(current, sharedInputs.finalTargetPercent));
+    else setCompleteMinMove((current) => Math.min(current, sharedInputs.finalTargetPercent));
+  }, [sharedInputs.direction, sharedInputs.finalTargetPercent]);
+
+  useEffect(() => {
+    if (previewCheckpointIndex !== null && (!Number.isInteger(previewCheckpointIndex) || previewCheckpointIndex < 0 || previewCheckpointIndex >= points.length)) {
+      setPreviewThrough("all");
+    }
+  }, [points, previewCheckpointIndex]);
+
+  useEffect(() => {
+    setAddPointArmed(false);
+    setActiveNumericAdjustmentId(null);
+    setPointFieldDrafts({});
+    setOpenSelector(null);
+    undoCoalesceKeyRef.current = null;
+  }, [activeDirection]);
 
   useEffect(() => () => {
     if (undoCoalesceTimerRef.current !== null) window.clearTimeout(undoCoalesceTimerRef.current);
@@ -375,12 +578,14 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   }, [onClose]);
 
   const recordUndoState = (coalesceKey?: string) => {
-    if (coalesceKey && undoCoalesceKeyRef.current === coalesceKey) return;
-    undoHistoryRef.current.unshift(cloneUndoState({ plans, sharedInputs, accountInitialCashback }));
-    undoHistoryRef.current.length = Math.min(undoHistoryRef.current.length, HARVESTER_UNDO_LIMIT);
-    setUndoCount(undoHistoryRef.current.length);
+    const scopedKey = coalesceKey ? `${activeDirection}:${coalesceKey}` : undefined;
+    if (scopedKey && undoCoalesceKeyRef.current === scopedKey) return;
+    const history = undoHistoryRef.current[activeDirection];
+    history.unshift(cloneUndoState({ plans, sharedInputs, accountInitialCashback }));
+    history.length = Math.min(history.length, HARVESTER_UNDO_LIMIT);
+    setUndoCount(history.length);
     if (!coalesceKey) return;
-    undoCoalesceKeyRef.current = coalesceKey;
+    undoCoalesceKeyRef.current = scopedKey ?? null;
     if (undoCoalesceTimerRef.current !== null) window.clearTimeout(undoCoalesceTimerRef.current);
     undoCoalesceTimerRef.current = window.setTimeout(() => {
       undoCoalesceKeyRef.current = null;
@@ -389,7 +594,8 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   };
 
   const undoLastAction = () => {
-    const previous = undoHistoryRef.current.shift();
+    const history = undoHistoryRef.current[activeDirection];
+    const previous = history.shift();
     if (!previous) return;
     if (undoCoalesceTimerRef.current !== null) window.clearTimeout(undoCoalesceTimerRef.current);
     undoCoalesceKeyRef.current = null;
@@ -398,7 +604,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     setSharedInputs(previous.sharedInputs);
     setAccountInitialCashback(previous.accountInitialCashback);
     setAddPointArmed(false);
-    setUndoCount(undoHistoryRef.current.length);
+    setUndoCount(history.length);
   };
 
   const setShared = <K extends keyof HarvesterGenerationInputs>(key: K, value: HarvesterGenerationInputs[K]) => {
@@ -451,7 +657,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
 
   const updateFinalTargetDraft = (draft: string) => {
     setFinalTargetDraft(draft);
-    const entered = parseNumericDraft(draft, { min: 10, max: 2000 });
+    const entered = parseNumericDraft(draft, sharedInputs.direction === "long" ? { min: 10, max: 2000 } : { min: -99, max: -1 });
     if (entered !== null) setShared("finalTargetPercent", entered);
   };
 
@@ -480,7 +686,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   };
 
   const commitFinalTarget = () => {
-    if (parseNumericDraft(finalTargetDraft, { min: 10, max: 2000 }) === null) {
+    if (parseNumericDraft(finalTargetDraft, sharedInputs.direction === "long" ? { min: 10, max: 2000 } : { min: -99, max: -1 }) === null) {
       setFinalTargetDraft(String(sharedInputs.finalTargetPercent));
     }
   };
@@ -509,6 +715,23 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     if (entered === null || !availableFirstCheckpoints.includes(entered)) {
       setFirstCheckpointDraft(sharedInputs.firstCheckpointPercent?.toString() ?? "");
     }
+  };
+
+  const setAnalysisMove = (value: number) => {
+    setAnalysisMoveByDirection((current) => ({ ...current, [activeDirection]: value }));
+    setAnalysisMoveDraft(String(value));
+  };
+
+  const commitAnalysisMove = () => {
+    const entered = parseNumericDraft(analysisMoveDraft, {
+      min: Math.min(0, evaluationInputs.finalTargetPercent),
+      max: Math.max(0, evaluationInputs.finalTargetPercent),
+    });
+    if (entered === null) {
+      setAnalysisMoveDraft(String(analysisMove));
+      return;
+    }
+    setAnalysisMove(entered);
   };
 
   const beginPointFieldDraft = (id: string, value: number) => {
@@ -558,7 +781,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
 
   const resolveNumericAdjustment = (id: string): NumericAdjustmentControl | null => {
     if (id === "final-target") return {
-      id, label: "Final target", value: sharedInputs.finalTargetPercent, min: 10, max: 2000, steps: [1, 5, 10],
+      id, label: "Final target", value: sharedInputs.finalTargetPercent, min: sharedInputs.direction === "long" ? 10 : -99, max: sharedInputs.direction === "long" ? 2000 : -1, steps: [1, 5, 10],
       onChange: (value) => setShared("finalTargetPercent", value),
     };
     if (id === "interval") return {
@@ -573,6 +796,10 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       id, label: "Harvest rate", value: Math.round(activeHarvestRate), min: 0, max: 1000, steps: [1, 5, 10],
       onChange: setLiveHarvestRate,
     };
+    if (id === "analysis-move") return {
+      id, label: "Analysis point", value: analysisMove, min: Math.min(0, evaluationInputs.finalTargetPercent), max: Math.max(0, evaluationInputs.finalTargetPercent), steps: [1, 5, 10],
+      onChange: setAnalysisMove,
+    };
     const match = /^(checkpoint|harvest):(.+)$/.exec(id);
     if (!match || !activePlan) return null;
     const [, kind, pointId] = match;
@@ -580,9 +807,9 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     const index = result.points.findIndex((candidate) => candidate.id === pointId);
     if (!entry || index < 0) return null;
     if (kind === "checkpoint") return {
-      id, label: `Checkpoint ${index + 1}`, value: entry.movePercent, min: 0, max: evaluationInputs.finalTargetPercent, steps: [1, 5, 10],
+      id, label: `Checkpoint ${index + 1}`, value: entry.movePercent, min: Math.min(0, evaluationInputs.finalTargetPercent), max: Math.max(0, evaluationInputs.finalTargetPercent), steps: [1, 5, 10],
       onChange: (value) => updateActivePoints(
-        editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, { movePercent: value }, "horizontal"),
+        editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, { movePercent: value }, "horizontal", evaluationOptions),
         entry.id,
         `checkpoint:${activeKind}:${entry.id}`,
       ),
@@ -593,7 +820,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     return {
       id, label: `Checkpoint ${index + 1} harvest`, value: Math.round(displayedHarvestRate), min: 0, max: 1000, steps: [1, 5, 10],
       onChange: (value) => updateActivePoints(
-        editHarvestPointPercent(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, value),
+        editHarvestPointPercent(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, value, evaluationOptions),
         entry.id,
         `harvest:${activeKind}:${entry.id}`,
       ),
@@ -608,15 +835,18 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
   };
 
   const handleChartClick = (state: any) => {
-    if (!activePlan || !addPointArmed || typeof state?.activeLabel !== "number") return;
-    const next = insertHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, state.activeLabel);
+    if (!activePlan || !addPointArmed || !chartSupportsEditing || typeof state?.activeLabel !== "number") return;
+    const clickedProgress = state.activeLabel * (evaluationInputs.direction === "long" ? 1 : -1);
+    const targetProgress = Math.abs(evaluationInputs.finalTargetPercent);
+    if (clickedProgress <= 0 || clickedProgress >= targetProgress) return;
+    const next = insertHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, state.activeLabel, evaluationOptions);
     const inserted = next.find((candidate) => !points.some((point) => point.id === candidate.id));
     updateActivePoints(next, inserted?.id ?? activePlan.selectedPointId);
     setAddPointArmed(false);
   };
 
   const dragPoint = (point: HarvestPointResult, event: ReactPointerEvent<SVGCircleElement>) => {
-    if (!activePlan) return;
+    if (!activePlan || !chartSupportsEditing) return;
     event.preventDefault();
     event.stopPropagation();
     const pointerId = event.pointerId;
@@ -635,7 +865,8 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       const plotRight = bounds.right - 34;
       const plotTop = bounds.top + 22;
       const plotBottom = bounds.bottom - 48;
-      const movePercent = Math.max(0, Math.min(evaluationInputs.finalTargetPercent, ((moveEvent.clientX - plotLeft) / Math.max(1, plotRight - plotLeft)) * evaluationInputs.finalTargetPercent));
+      const chartRatio = Math.max(0, Math.min(1, (moveEvent.clientX - plotLeft) / Math.max(1, plotRight - plotLeft)));
+      const movePercent = chartMinMove + chartRatio * (chartMaxMove - chartMinMove);
       const activeAfter = yMax - ((moveEvent.clientY - plotTop) / Math.max(1, plotBottom - plotTop)) * (yMax - yMin);
       if (!recordedDrag) {
         recordUndoState();
@@ -644,7 +875,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
       setPlans((current) => {
         const currentPlan = current[activeKind];
         if (!currentPlan) return current;
-        const next = editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, currentPlan.points, point.id, { movePercent, activeAfter }, dragMode);
+        const next = editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, currentPlan.points, point.id, { movePercent, activeAfter }, dragMode, evaluationOptions);
         return { ...current, [activeKind]: updateHarvesterPlanPoints(currentPlan, next, point.id) };
       });
     };
@@ -661,14 +892,6 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
     window.addEventListener("pointercancel", onUp);
   };
 
-  const exportPayload = () => {
-    const payload = createHarvesterExportPayload(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, accountInitialCashback);
-    onExport?.(payload);
-    window.dispatchEvent(new CustomEvent("harvester:export", { detail: payload }));
-    setExportReady(true);
-    window.setTimeout(() => setExportReady(false), 1800);
-  };
-
   return <div className="harvester-backdrop" role="presentation">
     <section ref={dialogRef} className="harvester-workspace" role="dialog" aria-modal="true" aria-labelledby="harvester-title" tabIndex={-1}>
       <header className="harvester-head">
@@ -677,11 +900,18 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
             <small>SCENARIO WORKSPACE</small>
             <h2 id="harvester-title">Harvester</h2>
           </div>
-          <div className="harvester-chart-card-toggles" aria-label="Chart card visibility">
-            <button type="button" className={showLegendCard ? "on" : ""} aria-pressed={showLegendCard} aria-label="Toggle chart legend" title="Toggle chart legend" onClick={() => setShowLegendCard((visible) => !visible)}>
-              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h3M7 4h7M2 8h3M7 8h7M2 12h3M7 12h7" /></svg>
-            </button>
+          <div className="harvester-chart-view-panel">
+            <small className="harvester-chart-view-title">CHART VIEW</small>
+            <div className="harvester-chart-view" role="group" aria-label="Chart view">
+              <div className="harvester-chart-view-sides">
+                {(["long", "short"] as const).map((view) => <button key={view} type="button" className={chartView === view ? "on" : ""} onClick={() => { setChartView(view); setAddPointArmed(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>)}
+              </div>
+              <div className="harvester-complete-view-control">
+                <button type="button" className={chartView === "complete" ? "on" : ""} aria-describedby={chartView === "complete" ? "harvester-complete-view-help" : undefined} onClick={() => { setChartView("complete"); setAddPointArmed(false); }}>Complete</button>
+              </div>
+            </div>
           </div>
+          {chartView === "complete" && <div id="harvester-complete-view-help" className="harvester-complete-view-help" role="note">View the complete position at a selected cashout stage. Dotted line shows the harvested-side cashout path.</div>}
         </div>
         <nav className="harvester-plan-tabs" aria-label="Harvest plans">
           {HARVESTER_PLAN_KINDS.map((kind) => <button
@@ -695,27 +925,42 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
             <small>{kind === "earliestRecovery" ? earliestRecoverySummary : plans[kind]?.summary ?? "Generate a plan"}</small>
           </button>)}
         </nav>
-        <div className="harvester-head-actions">
-          <button type="button" className="harvester-export" onClick={exportPayload}>{exportReady ? "Payload ready" : "Export Chart"}</button>
+        <div className={`harvester-head-actions${chartView === "complete" ? " has-complete-range" : ""}`}>
+          {chartView === "complete" && <div className="harvester-complete-range" aria-label="Complete chart range">
+            <label><span>SHORT</span><div className="harvester-unit-input"><input aria-label="Complete chart short bound" inputMode="numeric" value={completeMinMove} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) setCompleteMinMove(Math.max(-99, Math.min(-1, evaluationInputs.direction === "short" ? Math.min(value, evaluationInputs.finalTargetPercent) : value))); }} /><em>%</em></div></label>
+            <label><span>LONG</span><div className="harvester-unit-input"><input aria-label="Complete chart long bound" inputMode="numeric" value={completeMaxMove} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) setCompleteMaxMove(Math.min(2000, Math.max(10, evaluationInputs.direction === "long" ? Math.max(value, evaluationInputs.finalTargetPercent) : value))); }} /><em>%</em></div></label>
+          </div>}
+          <div className="harvester-chart-card-toggles" aria-label="Chart display controls">
+            <button type="button" className={showLegendCard ? "on" : ""} aria-pressed={showLegendCard} aria-label="Toggle chart legend" onClick={() => setShowLegendCard((visible) => !visible)}>Legend</button>
+            <button type="button" className={`harvester-detailed-toggle${showDetailedTooltip ? " on" : ""}`} aria-pressed={showDetailedTooltip} onClick={() => setShowDetailedTooltip((visible) => !visible)}><span>Detailed</span><span>Tooltip</span></button>
+          </div>
           <button type="button" className="harvester-close" onClick={onClose}>Close</button>
         </div>
       </header>
 
       <div className="harvester-chart-shell">
-        <div ref={chartRef} className={`harvester-chart${addPointArmed ? " is-placing" : ""}${showLegendCard ? " has-legend-card" : ""}`}>
+        <div ref={chartRef} className={`harvester-chart${addPointArmed ? " is-placing" : ""}${showLegendCard ? " has-legend-card" : ""}${chartView === "complete" ? " has-complete-help" : ""}`}>
+          <label className="harvester-preview-through"><span>CASHOUT STAGE</span><select aria-label="Cashout stage" value={previewThrough} onChange={(event) => setPreviewThrough(event.target.value as HarvesterPreviewThrough)}><option value="before">Before cashouts</option>{result.points.map((point, index) => <option key={point.id} value={`checkpoint:${index}`}>Checkpoint {index + 1} · {signedMove(point.movePercent)} · {money(point.harvested)}</option>)}<option value="all">All cashouts</option></select></label>
           <ResponsiveContainer>
             <ComposedChart data={chartSeries} margin={{ top: 20, right: 32, bottom: 12, left: 10 }} onClick={addPointArmed ? handleChartClick : undefined}>
               <CartesianGrid stroke="#312f2c" strokeOpacity={0.72} vertical={false} />
-              <XAxis dataKey="move" type="number" domain={[0, evaluationInputs.finalTargetPercent]} tickFormatter={signedMove} stroke="#4f4a45" tick={{ fontSize: 11, fill: "#9b9187" }} label={{ value: `${snapshot.assetName} price change`, position: "insideBottom", offset: -7, fill: "#9b9187", fontSize: 11 }} />
+              <XAxis dataKey="move" type="number" domain={[chartMinMove, chartMaxMove]} allowDataOverflow tickFormatter={signedMove} stroke="#4f4a45" tick={{ fontSize: 11, fill: "#9b9187" }} label={{ value: `${snapshot.assetName} price change`, position: "insideBottom", offset: -7, fill: "#9b9187", fontSize: 11 }} />
               <YAxis type="number" domain={[yMin, yMax]} tickFormatter={(value) => money(value)} width={70} stroke="#4f4a45" tick={{ fontSize: 10, fill: "#9b9187" }} />
-              <Tooltip content={<HarvesterTooltip benchmarkLabel={benchmarkLabels[evaluationInputs.benchmark]} comparisonReferenceLabel={chartComparisonReference === null ? null : benchmarkLabels[chartComparisonReference]} />} position={harvestedTooltipPosition} />
+              <Tooltip content={<HarvesterTooltip benchmarkLabel={benchmarkLabels[evaluationInputs.benchmark]} comparisonReferenceLabel={chartComparisonReference === null ? null : benchmarkLabels[chartComparisonReference]} detailed={showDetailedTooltip} previewLabel={previewLabel} showTotalWealth completeView={chartView === "complete"} seriesVisibility={chartSeriesVisibility} />} position={harvestedTooltipPosition} />
+              {chartView === "complete" && <ReferenceLine x={0} stroke="#6d655e" strokeWidth={1} strokeDasharray="2 4" />}
               <ReferenceLine x={evaluationInputs.finalTargetPercent} stroke="#d7a276" strokeWidth={1.5} strokeDasharray="5 4" />
-              <Line dataKey="originalActiveV4" name="Original V4" stroke="#8b8178" strokeOpacity={points.length ? .42 : .7} strokeDasharray="5 5" strokeWidth={1.4} dot={false} isAnimationActive={false} />
-              <Line dataKey="benchmark" name={benchmarkLabels[evaluationInputs.benchmark]} stroke="#c4b17d" strokeOpacity={.72} strokeDasharray="3 4" strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />
-              {chartComparisonReference !== null && <Line dataKey="comparisonReference" name={`${benchmarkLabels[chartComparisonReference]} Reference`} stroke="#a687d0" strokeOpacity={.82} strokeDasharray="7 3" strokeWidth={1.8} dot={false} connectNulls={false} isAnimationActive={false} />}
-              <Line dataKey="totalWealth" name="Total Wealth" stroke="#78b8aa" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              <Line dataKey="harvestedActiveV4" name="Active V4" stroke="#e18a4a" strokeWidth={3.4} dot={false} activeDot={(props: { cx?: number; cy?: number }) => <HarvestedTooltipAnchor {...props} onPosition={setHarvestedTooltipAnchor} />} isAnimationActive={false} />
-              {result.points.map((point) => <ReferenceDot
+              {chartSeriesVisibility.original && <Line dataKey="originalActiveV4" name="Original V4" stroke="#8b8178" strokeOpacity={previewPoints.length ? .42 : .7} strokeDasharray="5 5" strokeWidth={1.4} dot={false} isAnimationActive={false} />}
+              {chartSeriesVisibility.benchmark && <Line dataKey="benchmark" name={benchmarkLabels[evaluationInputs.benchmark]} stroke="#c4b17d" strokeOpacity={.72} strokeDasharray="3 4" strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />}
+              {chartSeriesVisibility.comparisonReference && chartComparisonReference !== null && <Line dataKey="comparisonReference" name={`${benchmarkLabels[chartComparisonReference]} Reference`} stroke="#a687d0" strokeOpacity={.82} strokeDasharray="7 3" strokeWidth={1.8} dot={false} connectNulls={false} isAnimationActive={false} />}
+              {chartView === "complete" ? <>
+                {chartSeriesVisibility.history && <Line dataKey="historicalActiveV4" name="Harvest Path" stroke="#e18a4a" strokeOpacity={.7} strokeWidth={2.4} strokeDasharray="2 5" strokeLinecap="round" dot={false} connectNulls={false} isAnimationActive={false} />}
+                {chartSeriesVisibility.wealth && <Line dataKey="previewedTotalWealth" name="Previewed Total Wealth" stroke="#78b8aa" strokeWidth={2.5} dot={false} connectNulls={false} isAnimationActive={false} />}
+                {chartSeriesVisibility.active && <Line dataKey="previewedActiveV4" name="Previewed Active V4" stroke="#e18a4a" strokeWidth={3.4} dot={false} connectNulls={false} activeDot={(props: { cx?: number; cy?: number }) => <HarvestedTooltipAnchor {...props} onPosition={setHarvestedTooltipAnchor} />} isAnimationActive={false} />}
+              </> : <>
+                {chartSeriesVisibility.wealth && <Line dataKey="totalWealth" name="Total Wealth" stroke="#78b8aa" strokeWidth={2.5} dot={false} isAnimationActive={false} />}
+                {chartSeriesVisibility.active && <Line dataKey="harvestedActiveV4" name="Active V4" stroke="#e18a4a" strokeWidth={3.4} dot={false} activeDot={(props: { cx?: number; cy?: number }) => <HarvestedTooltipAnchor {...props} onPosition={setHarvestedTooltipAnchor} />} isAnimationActive={false} />}
+              </>}
+              {chartSupportsEditing && (chartView === "complete" ? chartSeriesVisibility.history : chartSeriesVisibility.active) && result.points.map((point) => <ReferenceDot
                 key={point.id}
                 x={point.movePercent}
                 y={point.activeAfter}
@@ -723,6 +968,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
                   cx={cx}
                   cy={cy}
                   selected={point.id === activePlan?.selectedPointId}
+                  muted={!previewIncludedIds.has(point.id)}
                   onPointerDown={(event) => dragPoint(point, event)}
                   onClick={(event) => {
                   event.stopPropagation();
@@ -732,7 +978,7 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               />)}
             </ComposedChart>
           </ResponsiveContainer>
-          {addPointArmed && <div className="harvester-placement-hint">Click the chart to place one checkpoint</div>}
+          {addPointArmed && chartSupportsEditing && <div className="harvester-placement-hint">Click the harvested side to place one checkpoint</div>}
           {activeNumericAdjustment && <div className="harvester-touch-number-editor" role="dialog" aria-label={`Adjust ${activeNumericAdjustment.label}`}>
             <div className="harvester-touch-number-steps negative">
               {[...activeNumericAdjustment.steps].reverse().map((step) => <button key={step} type="button" onPointerDown={(event) => event.preventDefault()} onClick={() => adjustNumericValue(-step)}>−{step}</button>)}
@@ -746,11 +992,12 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
           </div>}
           {showLegendCard && <aside className="harvester-legend" aria-label="Chart legend">
             <small>CHART LEGEND</small>
-            <span className="original">Original V4</span>
-            <span className="active">Active V4</span>
-            <span className="wealth">Total Wealth</span>
-            <span className="benchmark">Benchmark - {benchmarkLabels[evaluationInputs.benchmark]}</span>
-            {chartComparisonReference !== null && <span className="comparison-reference">Reference - {benchmarkLabels[chartComparisonReference]}</span>}
+            <HarvesterLegendToggle label="Original V4" seriesClass="original" visible={chartSeriesVisibility.original} onToggle={() => toggleChartSeriesVisibility("original")} />
+            <HarvesterLegendToggle label={chartView === "complete" ? "Previewed Active V4" : "Active V4"} seriesClass="active" visible={chartSeriesVisibility.active} onToggle={() => toggleChartSeriesVisibility("active")} />
+            <HarvesterLegendToggle label={chartView === "complete" ? "Previewed Total Wealth" : "Total Wealth"} seriesClass="wealth" visible={chartSeriesVisibility.wealth} onToggle={() => toggleChartSeriesVisibility("wealth")} />
+            {chartView === "complete" && <HarvesterLegendToggle label="Harvest path" seriesClass="history" visible={chartSeriesVisibility.history} onToggle={() => toggleChartSeriesVisibility("history")} />}
+            <HarvesterLegendToggle label={`Benchmark - ${benchmarkLabels[evaluationInputs.benchmark]}`} seriesClass="benchmark" visible={chartSeriesVisibility.benchmark} onToggle={() => toggleChartSeriesVisibility("benchmark")} />
+            {chartComparisonReference !== null && <HarvesterLegendToggle label={`Reference - ${benchmarkLabels[chartComparisonReference]}`} seriesClass="comparison-reference" visible={chartSeriesVisibility.comparisonReference} onToggle={() => toggleChartSeriesVisibility("comparisonReference")} />}
           </aside>}
         </div>
       </div>
@@ -763,42 +1010,53 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
               ? "Recover initial margin as early as possible while preserving final benchmark parity."
               : planDescriptions[activeKind]}</span>
           </div>
-          <label className="harvester-compact-control"><span>FINAL TARGET</span><div className="harvester-unit-input"><input aria-label="Final target" inputMode="decimal" value={finalTargetDraft} onChange={(event) => updateFinalTargetDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("final-target", commitFinalTarget)} /><em>%</em></div></label>
-          <label><span>BENCHMARK</span><select value={sharedInputs.benchmark} onChange={(event) => setShared("benchmark", event.target.value as HarvesterBenchmark)}>{availableBenchmarks.map((value) => <option key={value} value={value}>{benchmarkLabels[value]}</option>)}</select></label>
-          <label><span>INTERVAL</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Interval" inputMode="numeric" value={intervalDraft} onChange={(event) => updateIntervalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("interval", commitInterval)} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose interval" aria-expanded={openSelector === "interval"} onClick={() => setOpenSelector((current) => current === "interval" ? null : "interval")} />{openSelector === "interval" && <div className="harvester-selector-menu">{intervalOptions.map((value) => <button key={value} type="button" onClick={() => { setShared("intervalPercent", value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-          <label><span>CHECKPOINTS</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Checkpoints" inputMode="numeric" value={checkpointCountDraft} disabled={availableCheckpointCounts.length === 0} onChange={(event) => updateCheckpointCountDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("checkpoints", commitCheckpointCount)} /></div><button type="button" className="harvester-selector-button" disabled={availableCheckpointCounts.length === 0} aria-label="Choose checkpoints" aria-expanded={openSelector === "checkpoints"} onClick={() => setOpenSelector((current) => current === "checkpoints" ? null : "checkpoints")} />{openSelector === "checkpoints" && <div className="harvester-selector-menu">{availableCheckpointCounts.map((value) => <button key={value} type="button" onClick={() => { setShared("pointCount", value); setOpenSelector(null); }}>{value}</button>)}</div>}</div></label>
-          <i className="harvester-control-row-break" aria-hidden="true" />
-          <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Harvest rate" inputMode="decimal" value={harvestRateDraft} disabled={activeKind === "equalRate" || activeKind === "equalCash"} onChange={(event) => updateHarvestRateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("harvest-rate", commitHarvestRate)} /><em>%</em></div><button type="button" className="harvester-selector-button" disabled={activeKind === "equalRate" || activeKind === "equalCash"} aria-label="Choose harvest rate" aria-expanded={openSelector === "harvestRate"} onClick={() => setOpenSelector((current) => current === "harvestRate" ? null : "harvestRate")} />{openSelector === "harvestRate" && <div className="harvester-selector-menu">{DEFAULT_HARVEST_PRESETS.map((value) => <button key={value} type="button" onClick={() => { setLiveHarvestRate(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-          <label><span>FIRST CHECKPOINT</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="First checkpoint" inputMode="numeric" placeholder="Auto" value={firstCheckpointDraft} onChange={(event) => updateFirstCheckpointDraft(event.target.value)} onBlur={commitFirstCheckpoint} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose first checkpoint" aria-expanded={openSelector === "firstCheckpoint"} onClick={() => setOpenSelector((current) => current === "firstCheckpoint" ? null : "firstCheckpoint")} />{openSelector === "firstCheckpoint" && <div className="harvester-selector-menu"><button type="button" onClick={() => { setLiveFirstCheckpoint(null); setOpenSelector(null); }}>Auto</button>{availableFirstCheckpoints.map((value) => <button key={value} type="button" onClick={() => { setLiveFirstCheckpoint(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-          <fieldset className="harvester-cashback-toggle" aria-label="Include initial cashback in capital recovery"><div className="harvester-cashback-title"><span>INCLUDE INITIAL CASHBACK</span><span>IN CAPITAL RECOVERY</span></div><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => { if (!accountInitialCashback) { recordUndoState(); setAccountInitialCashback(true); } }}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => { if (accountInitialCashback) { recordUndoState(); setAccountInitialCashback(false); } }}>Off</button></fieldset>
-          <i className="harvester-control-row-break" aria-hidden="true" />
-          <fieldset className="harvester-drag-mode"><legend>CHECKPOINT DRAG MODE</legend>{(["vertical", "horizontal", "both"] as const).map((mode) => <button key={mode} type="button" className={dragMode === mode ? "on" : ""} onClick={() => setDragMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</fieldset>
+          <div className="harvester-primary-controls">
+            <label className="harvester-compact-control"><span>FINAL TARGET</span><div className="harvester-unit-input"><input aria-label="Final target" inputMode="decimal" value={finalTargetDraft} onChange={(event) => updateFinalTargetDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("final-target", commitFinalTarget)} /><em>%</em></div></label>
+            <label><span>BENCHMARK</span><select value={sharedInputs.benchmark} onChange={(event) => setShared("benchmark", event.target.value as HarvesterBenchmark)}>{availableBenchmarks.map((value) => <option key={value} value={value}>{benchmarkLabels[value]}</option>)}</select></label>
+            <label><span>INTERVAL</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Interval" inputMode="numeric" value={intervalDraft} onChange={(event) => updateIntervalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("interval", commitInterval)} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose interval" aria-expanded={openSelector === "interval"} onClick={() => setOpenSelector((current) => current === "interval" ? null : "interval")} />{openSelector === "interval" && <div className="harvester-selector-menu">{intervalOptions.map((value) => <button key={value} type="button" onClick={() => { setShared("intervalPercent", value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+            <label><span>CHECKPOINTS</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Checkpoints" inputMode="numeric" value={checkpointCountDraft} disabled={availableCheckpointCounts.length === 0} onChange={(event) => updateCheckpointCountDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("checkpoints", commitCheckpointCount)} /></div><button type="button" className="harvester-selector-button" disabled={availableCheckpointCounts.length === 0} aria-label="Choose checkpoints" aria-expanded={openSelector === "checkpoints"} onClick={() => setOpenSelector((current) => current === "checkpoints" ? null : "checkpoints")} />{openSelector === "checkpoints" && <div className="harvester-selector-menu">{availableCheckpointCounts.map((value) => <button key={value} type="button" onClick={() => { setShared("pointCount", value); setOpenSelector(null); }}>{value}</button>)}</div>}</div></label>
+            <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Harvest rate" inputMode="decimal" value={harvestRateDraft} disabled={activeKind === "equalRate" || activeKind === "equalCash"} onChange={(event) => updateHarvestRateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("harvest-rate", commitHarvestRate)} /><em>%</em></div><button type="button" className="harvester-selector-button" disabled={activeKind === "equalRate" || activeKind === "equalCash"} aria-label="Choose harvest rate" aria-expanded={openSelector === "harvestRate"} onClick={() => setOpenSelector((current) => current === "harvestRate" ? null : "harvestRate")} />{openSelector === "harvestRate" && <div className="harvester-selector-menu">{DEFAULT_HARVEST_PRESETS.map((value) => <button key={value} type="button" onClick={() => { setLiveHarvestRate(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+            <label><span>FIRST CHECKPOINT</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="First checkpoint" inputMode="numeric" placeholder="Auto" value={firstCheckpointDraft} onChange={(event) => updateFirstCheckpointDraft(event.target.value)} onBlur={commitFirstCheckpoint} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose first checkpoint" aria-expanded={openSelector === "firstCheckpoint"} onClick={() => setOpenSelector((current) => current === "firstCheckpoint" ? null : "firstCheckpoint")} />{openSelector === "firstCheckpoint" && <div className="harvester-selector-menu"><button type="button" onClick={() => { setLiveFirstCheckpoint(null); setOpenSelector(null); }}>Auto</button>{availableFirstCheckpoints.map((value) => <button key={value} type="button" onClick={() => { setLiveFirstCheckpoint(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+            <fieldset className="harvester-cashback-toggle" aria-label="Include initial cashback in capital recovery"><div className="harvester-cashback-title"><span>INCLUDE INITIAL CASHBACK</span><span>IN CAPITAL RECOVERY</span></div><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => { if (!accountInitialCashback) { recordUndoState(); setAccountInitialCashback(true); } }}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => { if (accountInitialCashback) { recordUndoState(); setAccountInitialCashback(false); } }}>Off</button></fieldset>
+            <fieldset className="harvester-drag-mode"><legend>CHECKPOINT DRAG MODE</legend>{(["vertical", "horizontal", "both"] as const).map((mode) => <button key={mode} type="button" className={dragMode === mode ? "on" : ""} onClick={() => setDragMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</fieldset>
+          </div>
+          <div className="harvester-side-controls">
+            <fieldset className="harvester-harvest-direction"><legend>HARVEST DIRECTION</legend>{(["long", "short"] as const).map((direction) => <button key={direction} type="button" className={activeDirection === direction ? "on" : ""} onClick={() => setActiveDirection(direction)}>{direction === "long" ? "Long" : "Short"}</button>)}</fieldset>
+            <fieldset className="harvester-withdrawal-source"><legend>WITHDRAWAL SOURCE</legend>{(["proportional", "longFirst", "shortFirst"] as const).map((source) => <button key={source} type="button" className={sharedInputs.withdrawalSource === source ? "on" : ""} onClick={() => setShared("withdrawalSource", source as HarvestWithdrawalSource)}>{source === "proportional" ? "Proportional" : source === "longFirst" ? "Long first" : "Short first"}</button>)}</fieldset>
+          </div>
         </div>
 
         <div className="harvester-output-row">
           <section className="secured-capital" />
           <section className="harvester-final-metrics">
-            <small>HARVESTING ANALYSIS: <span className="harvester-final-target">{signedMove(evaluationInputs.finalTargetPercent)}</span></small>
+            <div className="harvester-analysis-heading">
+              <small>HARVESTING ANALYSIS</small>
+              <label className="harvester-analysis-point"><span>ANALYSIS POINT</span><div className="harvester-unit-input"><input aria-label="Harvesting analysis point" inputMode="decimal" value={analysisMoveDraft} onChange={(event) => setAnalysisMoveDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("analysis-move", commitAnalysisMove)} /><em>%</em></div></label>
+            </div>
             <div className="harvester-final-summary-card">
               <section className="harvester-analysis-section harvester-analysis-wealth">
-                <span className="harvested">Harvested <b>{money(result.final.totalHarvested)}</b></span>
-                <span className="active">Remaining Active V4 <b>{money(result.final.remainingActiveV4)}</b></span>
-                <span className="cashback">{analysisCashbackLabel} <b>{money(result.final.originalExternalCapital)}</b></span>
-                <strong className="positive">Total Wealth <b>{money(result.final.totalWealth)}</b></strong>
+                <span className="harvested">Harvested Cash <b>{money(analysisState.cumulativeHarvested)}</b></span>
+                <span className="active">Remaining Active V4 at {signedMove(analysisMove)} <b>{money(analysisState.activeV4)}</b></span>
+                <div className="harvester-analysis-leg-breakdown">
+                  <span>Short component <b>{money(analysisState.remainingShort)}</b></span>
+                  <span>Long component <b>{money(analysisState.remainingLong)}</b></span>
+                </div>
+                <span className="cashback">{analysisCashbackLabel} <b>{money(analysisState.external)}</b></span>
+                <strong className="harvester-total-wealth">Total Wealth at {signedMove(analysisMove)} <b>{money(analysisState.totalWealth)}</b></strong>
               </section>
               <section className="harvester-analysis-section harvester-analysis-reference">
                 <small>REFERENCE &amp; RECOVERY</small>
-                <span className="benchmark">Benchmark at target ({benchmarkLabels[evaluationInputs.benchmark]}) <b>{result.final.benchmarkValue === null ? "Unavailable" : money(result.final.benchmarkValue)}</b></span>
-                <span className="v4-delta">V4 versus benchmark at target <b className={result.final.finalSurplus === null || result.final.finalSurplus === 0 ? "" : result.final.finalSurplus > 0 ? "positive" : "negative"}>{finalSurplusLabel(result.final.finalSurplus)}</b></span>
-                <span className="recovery-summary"><span>{recoveryTargetLabel} <b>{money(result.recovery.initialRecoveryTarget)}</b></span><span>Recovered <b>{result.recovery.recovered ? "Yes" : "No"}</b>{result.recovery.recovered && result.recovery.recoveredAtMovePercent !== null && <> — at <b>{result.recovery.recoveredAtMovePercent === 0 ? "Entry" : signedMove(result.recovery.recoveredAtMovePercent)}</b></>}</span></span>
+                <div className="harvester-reference-metric benchmark"><span>{evaluationInputs.benchmark === "spot" ? "Spot hold" : benchmarkLabels[evaluationInputs.benchmark]} value at {signedMove(analysisMove)}</span><b>{analysisBenchmark.value === null ? "Unavailable" : money(analysisBenchmark.value)}</b></div>
+                <div className="harvester-reference-metric v4-delta"><span>Remaining Active V4 vs benchmark at {signedMove(analysisMove)}</span><b className={analysisSurplus !== null && analysisSurplus < 0 ? "negative" : ""}>{analysisSurplus !== null && analysisSurplus !== 0 ? <><small className="harvester-surplus-label">{analysisSurplus > 0 ? "Surplus" : "Shortfall"}</small> {money(Math.abs(analysisSurplus))}</> : finalSurplusLabel(analysisSurplus)}</b></div>
+                <div className="harvester-reference-metric recovery-summary"><div><span>{recoveryTargetLabel} coverage</span><b>{money(analysisCoverage)} / {money(analysisRecoveryTarget)}</b></div><small className={analysisCovered ? "covered" : "negative"}>{analysisCovered ? (durableRecoveryReached ? coverageSummary(true, result.recovery.durablyCoveredAtMovePercent, evaluationInputs.finalTargetPercent) : "Covered at this point") : <>Short by {money(Math.abs(analysisCoverageGap))}</>}</small></div>
               </section>
             </div>
           </section>
           <section className="harvester-plan-actions" aria-label="Harvest plan actions">
             <button type="button" className="placeholder" disabled aria-label="Future action" title="Future action placeholder">↑</button>
             <button type="button" disabled={undoCount === 0} aria-label="Undo last action" title="Undo last action" onClick={undoLastAction}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 14-5-5 5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H13" /></svg></button>
-            <button type="button" className={addPointArmed ? "armed" : ""} disabled={activeKind !== "user" || !activePlan} aria-label="Add point" title="Add point" onClick={() => setAddPointArmed((armed) => !armed)}>+</button>
-            <button type="button" className="danger" disabled={activeKind !== "user" || !selectedPoint || !activePlan} aria-label="Delete selected point" title="Delete selected point" onClick={() => selectedPoint && updateActivePoints(deleteHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, selectedPoint.id), null)}>−</button>
+            <button type="button" className={addPointArmed ? "armed" : ""} disabled={activeKind !== "user" || !activePlan || !chartSupportsEditing} aria-label="Add point" title={chartSupportsEditing ? "Add point" : "Switch to the harvested side or Complete view to edit checkpoints"} onClick={() => setAddPointArmed((armed) => !armed)}>+</button>
+            <button type="button" className="danger" disabled={activeKind !== "user" || !selectedPoint || !activePlan} aria-label="Delete selected point" title="Delete selected point" onClick={() => selectedPoint && updateActivePoints(deleteHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, selectedPoint.id, evaluationOptions), null)}>−</button>
             <button type="button" className="reset" disabled={!activePlan?.modified} aria-label="Reset harvest plan" title="Reset harvest plan" onClick={() => { if (!activePlan?.modified) return; recordUndoState(); setPlans((current) => ({ ...current, [activeKind]: resetHarvesterPlanState(activePlan) })); }}>↺</button>
           </section>
           <section className="harvester-ledger harvester-plan-table">
@@ -819,14 +1077,14 @@ export function HarvesterOverlay({ snapshot, onClose, onExport }: HarvesterOverl
                       const draft = event.target.value;
                       setPointFieldDrafts((current) => ({ ...current, [checkpointFieldId]: draft }));
                       const entered = parseNumericDraft(draft, { min: checkpointBounds.min, max: checkpointBounds.max, integer: true });
-                      if (entered !== null) updateActivePoints(editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, { movePercent: entered }, "horizontal"), entry.id, `checkpoint:${activeKind}:${entry.id}`);
+                      if (entered !== null) updateActivePoints(editHarvestPoint(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, { movePercent: entered }, "horizontal", evaluationOptions), entry.id, `checkpoint:${activeKind}:${entry.id}`);
                     }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger(checkpointFieldId, () => finishPointFieldDraft(checkpointFieldId), () => beginPointFieldDraft(checkpointFieldId, entry.movePercent))} />{(pointFieldDrafts[checkpointFieldId] !== undefined || entry.movePercent !== 0) && <em>%</em>}</div></td>
                     {hasKnownAssetPrice && <td className="asset-price-value">{assetPriceMoney((snapshot.spotAssetPrice ?? 0) * (1 + entry.movePercent / 100))}</td>}
                     <td className="harvest-input-cell"><div className="harvester-table-input"><input aria-label={`${planLabels[activeKind]} harvest percent ${index + 1}`} inputMode="decimal" value={pointFieldDrafts[harvestFieldId] ?? (displayedHarvestRate === 0 ? "—" : displayedHarvestRate)} onChange={(event) => {
                       const draft = event.target.value;
                       setPointFieldDrafts((current) => ({ ...current, [harvestFieldId]: draft }));
                       const entered = parseNumericDraft(draft, { min: 0, max: 1000 });
-                      if (entered !== null) updateActivePoints(editHarvestPointPercent(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, entered), entry.id, `harvest:${activeKind}:${entry.id}`);
+                      if (entered !== null) updateActivePoints(editHarvestPointPercent(snapshot, evaluationInputs.benchmark, evaluationInputs.finalTargetPercent, points, entry.id, entered, evaluationOptions), entry.id, `harvest:${activeKind}:${entry.id}`);
                     }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger(harvestFieldId, () => finishPointFieldDraft(harvestFieldId), () => beginPointFieldDraft(harvestFieldId, displayedHarvestRate))} />{(pointFieldDrafts[harvestFieldId] !== undefined || displayedHarvestRate !== 0) && <em>%</em>}</div></td>
                     <td className="withdrawn-value"><b>{money(entry.harvested)}</b></td>
                     <td className="running-total-value">{money(entry.cumulativeHarvested)}</td>

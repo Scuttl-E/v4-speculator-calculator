@@ -3002,6 +3002,7 @@ export default function App() {
                     ...(displayComparisonMode === "lending" ? { debtPosition: displayDebtPosition } : {}),
                     ...(displayComparisonMode === "perp" ? { perpPosition: displayPerpState } : {}),
                     assetName: assetLabel,
+                    defaultHarvestDirection: mode === "optimise" && displayObjective === "bearish" ? "short" : "long",
                   }))}
                 >
                   Open Harvester
