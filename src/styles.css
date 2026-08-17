@@ -3492,10 +3492,10 @@ body.web-build.phone-web .harvester-bottom { height: auto; min-height: 307px; }
 body.web-build.phone-web .harvester-ledger-scroll { flex: 0 0 auto; overflow: visible; overscroll-behavior: auto; }
 .harvester-orientation-notice { display: none; }
 @media (orientation: portrait) {
-  body.web-build .harvester-workspace { display: none; }
-  body.web-build .harvester-orientation-notice { display: grid; place-items: center; gap: 10px; width: min(82vw, 360px); padding: 28px 24px; border: 1px solid #5c4b3e; border-radius: 14px; background: linear-gradient(150deg, #242524, #121313); box-shadow: 0 24px 70px #000c; color: var(--cream); text-align: center; }
-  body.web-build .harvester-orientation-notice strong { color: var(--bright); font: 600 18px Atelier; }
-  body.web-build .harvester-orientation-notice span { color: var(--warm); font: 14px Atelier; }
+  body.web-build.phone-web .harvester-workspace { display: none; }
+  body.web-build.phone-web .harvester-orientation-notice { display: grid; place-items: center; gap: 10px; width: min(82vw, 360px); padding: 28px 24px; border: 1px solid #5c4b3e; border-radius: 14px; background: linear-gradient(150deg, #242524, #121313); box-shadow: 0 24px 70px #000c; color: var(--cream); text-align: center; }
+  body.web-build.phone-web .harvester-orientation-notice strong { color: var(--bright); font: 600 18px Atelier; }
+  body.web-build.phone-web .harvester-orientation-notice span { color: var(--warm); font: 14px Atelier; }
 }
 .harvester-head {
   display: grid;
