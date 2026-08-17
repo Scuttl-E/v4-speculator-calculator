@@ -472,7 +472,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
       : chartView === "complete" ? 142 : 118;
     const chartWidth = chartRef.current?.clientWidth ?? 0;
     if (isPhoneBrowser && chartWidth) {
-      return { x: Math.max(0, (chartWidth - tooltipWidth) / 2), y: 12 };
+      return { x: Math.max(0, (chartWidth - tooltipWidth) / 2), y: 62 };
     }
     const rightX = harvestedTooltipAnchor.x + 18;
     const x = chartWidth && rightX + tooltipWidth > chartWidth
@@ -715,13 +715,6 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
   const commitHarvestRate = () => {
     if (parseNumericDraft(harvestRateDraft, { min: 0 }) === null) {
       setHarvestRateDraft(String(activeHarvestRate));
-    }
-  };
-
-  const commitFirstCheckpoint = () => {
-    const entered = parseNumericDraft(firstCheckpointDraft, { min: 1, integer: true });
-    if (entered === null || !availableFirstCheckpoints.includes(entered)) {
-      setFirstCheckpointDraft(sharedInputs.firstCheckpointPercent?.toString() ?? "");
     }
   };
 
