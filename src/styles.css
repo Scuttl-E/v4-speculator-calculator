@@ -93,6 +93,8 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
   height: 1px;
   background: linear-gradient(90deg, #c97a453f 0 22px, #f3e7d817 22px 100%);
 }
+.control-group.optimisation-target { margin-top: -8px; padding-top: 8px; padding-bottom: 9px; }
+.control-group.optimisation-target::before { display: none; }
 .control-group-title {
   margin-bottom: 9px;
   color: #c3b5a7;
@@ -106,6 +108,70 @@ main { width: 100%; height: 100vh; min-width: 1180px; display: flex; flex-direct
 .capital-settlement .wide { margin-top: 8px; }
 .cashback-segments button { min-width: 0; padding-inline: 7px; font-size: 11px; }
 .cashback-policy-controls { display: grid; gap: 7px; }
+.cashback-policy-controls .wide { margin-top: 0; }
+.cashback-control-label { min-height: 16px; justify-content: flex-start; gap: 6px; }
+.cashback-degen-control > .cashback-control-label { margin-bottom: 0; }
+.cashback-degen-control > .cashback-control-label + .cashback-segments,
+.cashback-degen-control > .cashback-control-label + .cashback-policy-controls { margin-top: 6px; }
+.cashback-control-help {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #c99c774d;
+  border-radius: 50%;
+  background: #ffffff08;
+  color: #d7b08d;
+  font: 700 10px/1 var(--mono);
+  cursor: help;
+}
+.rail.optimise .cashback-control-help {
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
+  min-height: 15px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #c99c774d;
+  border-radius: 50%;
+  background: #ffffff08;
+  box-shadow: none;
+  color: #d7b08d;
+  font: 700 10px/1 var(--mono);
+}
+.cashback-control-help > span {
+  position: absolute;
+  z-index: 100;
+  bottom: calc(100% + 6px);
+  right: calc(100% + 6px);
+  width: 230px;
+  padding: 7px 8px;
+  border: 1px solid #d7a27638;
+  border-radius: 7px;
+  background: #151413f2;
+  box-shadow: 0 8px 22px #0009;
+  color: #c6b8aa;
+  font: 500 10px/1.35 Atelier;
+  letter-spacing: 0;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.cashback-control-help:hover > span,
+.cashback-control-help:focus-visible > span { opacity: 1; transform: translateY(0); }
+.cashback-control-help:focus-visible { outline: 1px solid #d7a276; outline-offset: 2px; }
+.rail:has(.cashback-control-help:hover),
+.rail:has(.cashback-control-help:focus-visible) { position: relative; z-index: 5; overflow: visible; }
+main:has(.cashback-control-help:hover) .shell,
+main:has(.cashback-control-help:focus-visible) .shell { overflow: visible; }
+.cashback-degen-control .cashback-policy-controls .cashback-routing-label { margin: 2px 0 1px; }
 .cashback-policy-controls .cashout-disabled { opacity: .48; }
 .cashback-policy-controls button:disabled { cursor: default; }
 .cashback-degen-capsule {
@@ -2460,11 +2526,15 @@ main.desktop-app .workspace { grid-template-rows: minmax(360px, 1fr) minmax(480p
 .debt-input-row .field-label { display: grid; gap: 5px; }
 .debt-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .debt-inputs .field-label { display: grid; gap: 5px; }
+.liquidation-ltv-input > span { padding: 10px 14px 10px 8px; }
 .perp-position-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px; align-items: end; }
 .perp-position-row .field-label { display: grid; gap: 5px; }
 .perp-side-control { display: grid; gap: 5px; }
-.perp-side-control .segments { margin: 0; height: 39px; }
+.perp-side-control .segments { margin: 0; height: 43px; }
 .perp-side-control .segments button { flex: 1 1 50%; padding-inline: 5px; }
+@media (max-height: 1100px) {
+  .perp-side-control .segments { height: 39px; }
+}
 .scenarios { display: grid; grid-template-columns: minmax(0, 1fr) 220px; column-gap: 0; }
 .scenarios > .panel-head { grid-column: 1 / -1; }
 .scenarios > .scenario-table { grid-column: 1; }

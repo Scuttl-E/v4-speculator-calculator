@@ -246,7 +246,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     intervalPercent: 100,
     firstCheckpointPercent: null,
     pointCount: 4,
-    defaultHarvestPercent: 100,
+    defaultHarvestPercent: 50,
   }, {
     direction: "short",
     withdrawalSource: "proportional",
@@ -255,7 +255,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     intervalPercent: 20,
     firstCheckpointPercent: null,
     pointCount: 3,
-    defaultHarvestPercent: 100,
+    defaultHarvestPercent: 50,
   }), [initialBenchmark]);
   const [activeDirection, setActiveDirection] = useState<HarvestDirection>(snapshot.defaultHarvestDirection);
   const [sharedInputsByDirection, setSharedInputsByDirection] = useState(initialInputs);
@@ -277,7 +277,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
   const [intervalDraft, setIntervalDraft] = useState("100");
   const [checkpointCountDraft, setCheckpointCountDraft] = useState("4");
   const [firstCheckpointDraft, setFirstCheckpointDraft] = useState("");
-  const [harvestRateDraft, setHarvestRateDraft] = useState("100");
+  const [harvestRateDraft, setHarvestRateDraft] = useState("50");
   const [analysisMoveByDirection, setAnalysisMoveByDirection] = useState<ByDirection<number>>(() => byDirection(500, -80));
   const [analysisMoveDraft, setAnalysisMoveDraft] = useState("500");
   const [pointFieldDrafts, setPointFieldDrafts] = useState<Record<string, string>>({});

@@ -244,6 +244,16 @@ function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
 
 const routingLabel = (routing: CashbackMode) => routing === "cash" ? "Cash" : "Spot asset";
 
+function CashbackControlLabel({ label, help, className = "" }: { label: string; help: string; className?: string }) {
+  return <div className={`section-label cashback-control-label ${className}`.trim()}>
+    <b>{label}</b>
+    <button type="button" className="cashback-control-help" aria-label={`${label} help: ${help}`}>
+      ?
+      <span role="tooltip">{help}</span>
+    </button>
+  </div>;
+}
+
 function ProductRoutingDecisionBlock({ decision }: { decision: ProductRoutingDecision }) {
   const selectedAdvantagePoints = decision.selected.targetReturn - decision.alternative.targetReturn;
   const selectedAdvantagePercent = Math.abs(decision.alternative.targetReturn) > 1e-9
@@ -2260,7 +2270,7 @@ export default function App() {
                 </div>
               </label>
               <label className="field-label">LIQUIDATION LTV
-                <div className="deposit-input">
+                <div className="deposit-input liquidation-ltv-input">
                   <NumericInput min={1} max={99} step="1" value={liquidationLtv} onValueChange={(value) => setLiquidationLtv(Math.min(99, Math.max(1, value)))} />
                   <span>%</span>
                 </div>
@@ -2306,7 +2316,12 @@ export default function App() {
               </section>
             </>}
             <section className="compact-control cashback-degen-control">
-              <div className="section-label"><b>CASHBACK</b></div>
+              <CashbackControlLabel
+                label={mode === "manual" ? "CASHBACK ROUTING" : "CASHBACK"}
+                help={mode === "manual"
+                  ? "Choose how Cashback is held. Cash keeps it uninvested, while Spot asset converts it to spot exposure."
+                  : "Controls whether Cashback is excluded, required, or left for the optimizer to decide."}
+              />
               {mode === "manual" ? <div className="segments wide cashback-segments">
                 <button className={manualConfig.cashbackMode === "cash" ? "on" : ""} onClick={() => update("cashbackMode", "cash")}>Cash</button>
                 <button className={manualConfig.cashbackMode === "spot" ? "on" : ""} onClick={() => update("cashbackMode", "spot")}>Spot asset</button>
@@ -2316,6 +2331,11 @@ export default function App() {
                   <button className={cashbackPolicy === "forced" ? "on" : ""} onClick={() => setCashbackPolicy("forced")}>Forced</button>
                   <button className={cashbackPolicy === "auto" ? "on" : ""} onClick={() => setCashbackPolicy("auto")}>Auto</button>
                 </div>
+                <CashbackControlLabel
+                  className="cashback-routing-label"
+                  label="CASHBACK ROUTING"
+                  help="Choose how Cashback is held. Cash keeps it uninvested, Spot asset converts it to spot exposure, and Auto lets the optimizer choose."
+                />
                 <div className={`segments wide cashback-segments ${cashbackPolicy === "off" ? "cashout-disabled" : ""}`}>
                   <button className={cashbackRouting === "cash" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("cash")}>Cash</button>
                   <button className={cashbackRouting === "spot" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("spot")}>Spot asset</button>
@@ -2578,8 +2598,8 @@ export default function App() {
                   />
                   <span />
                   <div>
-                    Require adverse-side breakeven
-                    <small>Allow the smallest necessary risk relaxation</small>
+                    Require opposing-side profit
+                    <small>Opposing leg must eventually exceed the initial deposit value</small>
                   </div>
                 </label>
                 {requireBreakeven && (
