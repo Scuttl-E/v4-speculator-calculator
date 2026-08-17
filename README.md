@@ -40,17 +40,23 @@ The app is a price-response modeller, not a price predictor. It asks:
 
 ## Harvester
 
-Harvester is an interactive, chart-led workspace for planning V4 cash withdrawals while preserving final benchmark parity.
+Harvester is an interactive, chart-led workspace for planning V4 cash withdrawals while preserving final benchmark parity. It keeps independent Long-side and Short-side planning sessions, so a downside withdrawal plan never replaces your upside plan.
 
-Set a final target, then fine-tune checkpoints or choose an automated plan to see the cash you can extract while retaining equivalent benchmark exposure at that target.
+Choose the harvesting direction and a final target, then fine-tune checkpoints or choose an automated plan to see the cash you can extract while retaining equivalent benchmark exposure at that target.
 
 Use it to:
 
 - build a custom withdrawal schedule by adding, moving, and editing checkpoints directly on the chart;
 - compare it with **Max Harvest Rate**, **Max Equal Harvest**, and **Fastest Capital Recovery** plans;
+- maintain separate Long and Short schedules, targets, checkpoints, recovery settings, and undo history;
+- choose whether each withdrawal comes from both V4 legs proportionally, the Long leg first, or the Short leg first;
 - adjust the target, benchmark, interval, checkpoint count, and first checkpoint;
-- inspect each checkpoint's withdrawal and remaining V4 value; and
-- review total harvested cash, remaining active V4, initial Cashback, total wealth, benchmark parity, and capital recovery.
+- inspect each checkpoint's withdrawal, remaining V4 value, and component balance;
+- use **Complete** chart view to inspect both sides of entry at once, set Short and Long chart bounds, and preview the state before, through, or after selected cashout stages;
+- toggle individual chart series from the legend and use the detailed hover tooltip to inspect Long and Short component values; and
+- review a selected analysis point's harvested cash, remaining active V4, Cashback value, total wealth, benchmark surplus or shortfall, and capital coverage.
+
+Capital recovery can include or exclude initial Cashback. When Cashback is held as the spot asset, Harvester values it at the relevant price move and treats recovery as complete only when coverage remains durable through the final target.
 
 Harvester is a separate planning workspace: opening, editing, or closing it does not alter the calculator's underlying V4 configuration.
 
