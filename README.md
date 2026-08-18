@@ -19,10 +19,10 @@ V4 Speculator can:
 
 - combine independently selected Long V4 and Short V4 products;
 - allocate capital continuously between the Long and Short sides;
-- model the `50% LTV`, `75% LTV Cashback`, and `75% LTV` products on either side;
+- model the `2x`, `2x Cashback`, and `2.5x` products on either side;
 - route Cashback to fixed cash or a spot-asset holding;
 - let the optimiser exclude, require, or automatically assess Cashback products;
-- constrain Long and Short products independently to 50% or 75% LTV;
+- constrain Long and Short products independently to `2x` only or the complete product set through `2.5x`;
 - enforce maximum isolated-leg drawdown across a configurable analysis range;
 - optimise for bullish, bearish, parity, and full-range benchmark objectives;
 - compare V4 with spot, leveraged lending positions, and perpetual futures;
@@ -64,36 +64,79 @@ Harvester is a separate planning workspace: opening, editing, or closing it does
 
 ## V4 products
 
-Long and Short each have the same three user-facing product choices.
+Long and Short positions can each use the same three configurations. The simplest way to understand them is by looking at how much gross V4 exposure is created from the starting capital, and whether the additional `0.5x` is returned as Cashback or kept working inside V4.
 
-### 50% LTV
+At a high level, V4 combines the capital supplied by the user with borrowed capital to create the two sides of an LP position. The leverage factor compares that gross position with the user's starting capital.
 
-The base product. It keeps the full position inside V4 and does not create a Cashback partition.
+### 2x
 
-### 75% LTV Cashback
+`2x` is the standard V4 position. The user's starting capital supplies one side of the LP and the protocol effectively borrows the paired side needed to create the position. The full starting capital remains committed to V4 and no Cashback is taken out.
 
-The eligible curve is partitioned once:
+**Example:** `$10,000 starting capital → $20,000 gross V4 exposure`
 
-- 50% remains in the V4 product curve; and
-- the other 50% becomes Cashback routed either to cash or to the spot asset.
+The position therefore has a `2x` leverage factor: twice as much gross exposure as the capital supplied by the user.
 
-Cash routing remains fixed as the asset price changes. Spot-asset routing buys the underlying at entry and therefore moves with its price.
+### 2x Cashback
 
-### 75% LTV
+`2x Cashback` keeps the standard `2x` exposure working inside V4, while the additional value made available by the higher-leverage configuration is returned to the user as Cashback.
 
-The protocol-native retained product. No cash is released to the user; the same value remains inside the V4 position as additional deployed capital.
+In the calculator, that Cashback equals 50% of the starting deposit. It can remain as cash or be used to buy the underlying spot asset.
 
-This is a single product outcome. The retained amount is not multiplied again, recursively recycled, or counted simultaneously as external Cashback.
+**Example:** `$10,000 starting capital → $20,000 gross V4 exposure + $5,000 Cashback`
 
-### Accounting rule
+Cash routing keeps the Cashback value fixed after entry. Spot routing gives that Cashback continuing exposure to changes in the underlying asset price.
 
-The Cashback partition exists in exactly one place:
+We suspect `2x Cashback` is the configuration Peapods refers to as the **Super Strategy**: its public examples describe superlinear returns together with 50% Cashback on entry, and the published scenario values align with this calculator's model.
 
-- outside V4 as cash;
-- outside V4 as spot asset; or
-- retained inside the 75% LTV product.
+The Cashback is created once. It is not recursively reinvested, multiplied again, or counted both inside and outside V4.
 
-It is never counted in two places at once. The same product choices and partition rules are available to both Long and Short.
+### 2.5x
+
+`2.5x` uses the same additional `0.5x` inside the V4 position instead of returning it as Cashback. This increases the gross working position and leaves no external Cashback.
+
+**Example:** `$10,000 starting capital → $25,000 gross V4 exposure`
+
+The complete `2.5x` exposure remains working inside V4.
+
+### The key difference
+
+`2x Cashback` and `2.5x` are two different uses of the additional `0.5x`:
+
+- `2x Cashback` returns it to the user; and
+- `2.5x` keeps it working inside V4.
+
+It is never used in both places at once.
+
+### How the calculator models the result
+
+The exposure examples above explain how the positions are formed. The chart then uses normalised payoff equations to estimate how those positions respond after entry.
+
+Let:
+
+- `p = current asset price ÷ entry asset price`; and
+- `R(p) = 1` when Cashback remains cash, or `R(p) = p` when Cashback is routed to spot.
+
+The Long values are modelled as:
+
+- `2x: p`
+- `2x Cashback: 0.5p² + 0.5R(p)`
+- `2.5x: p²`
+
+The Short model uses the rebalanced curve:
+
+`Sₘ(p) = 0.5 + 0.5p + 0.5m ÷ p - 0.5m`
+
+The Short values are modelled as:
+
+- `2x: Sₘ₌₁(p)`
+- `2x Cashback: 0.5Sₘ₌₂(p) + 0.5R(p)`
+- `2.5x: Sₘ₌₂(p)`
+
+If `a` is the proportion of starting capital allocated to Long, the combined normalised position is:
+
+`V(p) = aL(p) + (1 - a)S(p)`
+
+The calculator reports `deposit × V(p)` as the total position value. Any Cashback component is tracked separately from the value still working inside V4, while remaining part of total wealth.
 
 ---
 
@@ -159,7 +202,7 @@ Optimise searches the permitted Long product, Short product, Cashback route, and
 
 Cashback product policy can be:
 
-- **Off:** exclude `75% LTV Cashback` from both sides;
+- **Off:** exclude `2x Cashback` from both sides;
 - **Forced:** require at least one active Cashback product; or
 - **Auto:** compare Cashback and non-Cashback products.
 
@@ -243,10 +286,10 @@ Defines the underlying-price interval used for isolated-leg drawdown and other f
 
 Long and Short limits are automatic by default and remain collapsed when unused. Each side can be independently restricted to:
 
-- **50% LTV** only; or
-- the complete product set through **75% LTV**.
+- **2x** only; or
+- the complete product set through **2.5x**.
 
-Restricting a side to 50% LTV removes both 75% products for that side. Cashback policy then determines whether `75% LTV Cashback` is allowed among otherwise eligible products.
+Restricting a side to `2x` removes both `2x Cashback` and `2.5x` for that side. Cashback policy then determines whether `2x Cashback` is allowed among otherwise eligible products.
 
 ### Adverse-side breakeven
 
@@ -296,9 +339,9 @@ Lending and perp rows display `RIP` once their supplied liquidation boundary has
 Shows:
 
 - Long and Short capital;
-- the selected LTV product for each side;
+- the selected product for each side;
 - external Cashback as cash or spot-asset quantity plus current dollar value; and
-- additional capital retained inside V4 by the 75% LTV product.
+- additional capital retained inside V4 by the `2.5x` product.
 
 ### Analytical panel
 
@@ -331,11 +374,11 @@ The model excludes:
 
 ### Long model
 
-The 50% LTV Long product tracks the underlying price in the current base model. The 75% products use the calibrated convex V4 curve, with Cashback partitioned once or retained fully inside V4 according to the selected product.
+The `2x` Long product tracks the underlying price in the current base model. `2x Cashback` and `2.5x` use the calibrated convex V4 curve, with Cashback partitioned once or retained fully inside V4 according to the selected product.
 
 ### Short model
 
-The Short curve models continuous rebalancing, including the convex downside response and its intermediate trough. The 50% and 75% products use their respective calibrated model exponents. The same one-time Cashback partition is available on Short.
+The Short curve models continuous rebalancing, including the convex downside response and its intermediate trough. The `2x` product uses the base exponent, while `2x Cashback` and `2.5x` use the calibrated 75%-configuration exponent. The same one-time Cashback partition is available through `2x Cashback` on Short.
 
 ### Risk and liquidation
 
