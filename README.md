@@ -64,9 +64,9 @@ Harvester is a separate planning workspace: opening, editing, or closing it does
 
 ## V4 products
 
-Long and Short positions can each use the same three configurations. The simplest way to understand them is by looking at how much gross V4 exposure is created from the starting capital, and whether the additional `0.5x` is returned as Cashback or kept working inside V4.
+Long and Short positions can each use the same three configurations. The simplest way to understand their formation is by looking at how much gross V4 exposure is created from the starting capital, and whether the additional gross `0.5x` is returned as Cashback or kept working inside V4.
 
-At a high level, V4 combines the capital supplied by the user with borrowed capital to create the two sides of an LP position. The leverage factor compares that gross position with the user's starting capital.
+At a high level, V4 combines the capital supplied by the user with borrowed capital to create the two sides of an LP position. The leverage factor compares that gross position with the user's starting capital. It describes position formation, not a direct multiplier applied to returns.
 
 ### 2x
 
@@ -78,7 +78,7 @@ The position therefore has a `2x` leverage factor: twice as much gross exposure 
 
 ### 2x Cashback
 
-`2x Cashback` keeps the standard `2x` exposure working inside V4, while the additional value made available by the higher-leverage configuration is returned to the user as Cashback.
+`2x Cashback` uses the higher-leverage configuration to keep a structural V4 position working while returning the additional value made available by that configuration to the user as Cashback. Its complete payoff curve is not identical to the standalone `2x` product.
 
 In the calculator, that Cashback equals 50% of the starting deposit. It can remain as cash or be used to buy the underlying spot asset.
 
@@ -92,15 +92,17 @@ The Cashback is created once. It is not recursively reinvested, multiplied again
 
 ### 2.5x
 
-`2.5x` uses the same additional `0.5x` inside the V4 position instead of returning it as Cashback. This increases the gross working position and leaves no external Cashback.
+`2.5x` uses the same additional gross `0.5x` inside the V4 position instead of returning it as Cashback. This increases the gross working position and leaves no external Cashback.
 
 **Example:** `$10,000 starting capital → $25,000 gross V4 exposure`
 
 The complete `2.5x` exposure remains working inside V4.
 
+Gross exposure is not additional net wealth. Borrowed financing and the position's internal liabilities offset its gross assets, and every modelled product is normalised to the original deposit at entry. In the `$10,000` Cashback example, total modelled wealth at entry remains `$10,000`: `$5,000` is external Cashback and `$5,000` is the net value still inside V4, even though the gross working exposure is larger. For `2.5x`, the complete `$10,000` of net entry value remains inside V4.
+
 ### The key difference
 
-`2x Cashback` and `2.5x` are two different uses of the additional `0.5x`:
+`2x Cashback` and `2.5x` are two different uses of the additional gross `0.5x` made available during position formation:
 
 - `2x Cashback` returns it to the user; and
 - `2.5x` keeps it working inside V4.
@@ -109,12 +111,18 @@ It is never used in both places at once.
 
 ### How the calculator models the result
 
-The exposure examples above explain how the positions are formed. The chart then uses normalised payoff equations to estimate how those positions respond after entry.
+The exposure examples above explain how the positions are formed. The chart then uses normalised payoff equations to estimate their gross structural value at each price ratio. This is a frictionless state model of the response attributed to ideal rebalancing; it does not simulate the path taken between entry and the selected price.
 
 Let:
 
 - `p = current asset price ÷ entry asset price`; and
 - `R(p) = 1` when Cashback remains cash, or `R(p) = p` when Cashback is routed to spot.
+
+The product formation leverage factor is:
+
+`LF = 1 + 2 × LTV`
+
+`LF` labels gross position formation and is not substituted into the payoff equations as a return multiplier.
 
 The Long values are modelled as:
 
@@ -122,9 +130,21 @@ The Long values are modelled as:
 - `2x Cashback: 0.5p² + 0.5R(p)`
 - `2.5x: p²`
 
+The Short model uses the inverse-exposure parameter:
+
+`m = 0.5 ÷ (1 - Short LTV)`
+
+This gives `m = 1` for the modelled `2x` Short and `m = 2` for the structural curve used by `2x Cashback` and `2.5x`. The parameter `m` is not an exponent: it scales the inverse-price sleeve in the Short equation.
+
 The Short model uses the rebalanced curve:
 
 `Sₘ(p) = 0.5 + 0.5p + 0.5m ÷ p - 0.5m`
+
+Equivalently:
+
+`Sₘ(p) = 0.5p + 0.5m ÷ p + 0.5(1 - m)`
+
+This decomposition shows the modelled positive-price sleeve, the inverse-price sleeve scaled by `m`, and the cash or borrowing adjustment that normalises the curve to `1.00` at entry.
 
 The Short values are modelled as:
 
@@ -132,11 +152,13 @@ The Short values are modelled as:
 - `2x Cashback: 0.5Sₘ₌₂(p) + 0.5R(p)`
 - `2.5x: Sₘ₌₂(p)`
 
+`Short` identifies the inverse/rebalanced product family rather than guaranteeing that the complete routed position has negative directional exposure at every price. In particular, converting Cashback to spot can offset part or all of the structural Short exposure.
+
 If `a` is the proportion of starting capital allocated to Long, the combined normalised position is:
 
 `V(p) = aL(p) + (1 - a)S(p)`
 
-The calculator reports `deposit × V(p)` as the total position value. Any Cashback component is tracked separately from the value still working inside V4, while remaining part of total wealth.
+The calculator reports `deposit × V(p)` as total modelled structural wealth before the excluded yield and costs. Any Cashback component is tracked separately from the net value still working inside V4 while remaining part of total wealth; gross borrowed exposure is not added again.
 
 ---
 
@@ -361,16 +383,19 @@ The in-app maths panel displays the normalised Long and Short product equations,
 
 ## Model scope and limitations
 
-This is a static, path-independent price model. All curves are normalised at entry.
+This is a gross, frictionless and path-independent state model. It evaluates structural value at each price ratio under the assumption that the selected product's target exposure is ideally maintained through rebalancing. It does not simulate individual rebalances or the realised journey to that price. All curves are normalised at entry.
 
 The model excludes:
 
 - LP fees and protocol yield;
 - borrowing costs;
 - perp funding and trading fees;
+- rebalancing execution costs;
 - slippage;
 - time-dependent changes; and
 - market-liquidity effects.
+
+Outputs are therefore not net realised returns. The calculator deliberately separates the structural price curve from the question of whether volatility-farming yield outweighs borrowing, funding and maintenance costs.
 
 ### Long model
 
@@ -378,17 +403,17 @@ The `2x` Long product tracks the underlying price in the current base model. `2x
 
 ### Short model
 
-The Short curve models continuous rebalancing, including the convex downside response and its intermediate trough. The `2x` product uses the base exponent, while `2x Cashback` and `2.5x` use the calibrated 75%-configuration exponent. The same one-time Cashback partition is available through `2x Cashback` on Short.
+The Short equation approximates the gross structural response attributed to ideal rebalancing. It combines a positive-price sleeve with an inverse-price sleeve controlled by `m`, producing a convex curve whose directional exposure and trough depend on the selected product and Cashback route. The `2x` product uses `m = 1`; `2x Cashback` partitions the modelled `m = 2` structural curve once; and `2.5x` retains the complete `m = 2` curve inside V4. The calculation does not simulate the rebalancing path or its associated yield and costs.
 
 ### Risk and liquidation
 
-V4 legs are modelled without a conventional user-entered liquidation price. Their individual worst points are still measured and constrained by max-leg drawdown.
+V4 legs are modelled without a conventional user-entered liquidation price. Max-leg drawdown measures the worst allocation-weighted loss contribution from each active structural leg, excluding external Cashback, so profit in the opposing leg or held Cashback cannot conceal structural loss.
 
 Lending and Perp comparators retain their supplied liquidation boundaries and are not scored beyond them in relative comparisons.
 
 ### Model uncertainty
 
-The model should be updated whenever authoritative V4 documentation contradicts an inferred mechanic. Higher-leverage and Short-side behaviour carry particular uncertainty until complete official formulas and implementation details are public.
+The model should be updated whenever authoritative V4 documentation contradicts an inferred mechanic. Higher-leverage and Short-side behaviour carry particular uncertainty until complete official formulas and implementation details are public. The Short equation contains an inverse-price term and therefore grows rapidly as `p` approaches zero; extreme-downside values are extrapolations of the idealised curve and do not include practical liquidity, borrowing-capacity or protocol limits.
 
 ---
 

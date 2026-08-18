@@ -2087,7 +2087,7 @@ export default function App() {
               <div>
                 <small>PAYOFF ENGINE</small>
                 <h2 id="maths-title">The maths behind the chart</h2>
-                <p>Normalised equations used for every plotted {assetLabelLower} price.</p>
+                <p>Normalised gross structural equations used for every plotted {assetLabelLower} price.</p>
               </div>
               <button
                 type="button"
@@ -2112,14 +2112,17 @@ export default function App() {
                   <code>LF<sub>L/S</sub> = 1 + 2 × LTV<sub>L/S</sub></code>
                   <code><var>m</var><sub>S</sub> = 0.5 ÷ (1 − LTV<sub>S</sub>)</code>
                   <code>S<sub>m</sub>(p) = 0.5 + 0.5p + 0.5m ÷ p − 0.5m</code>
+                  <code>S<sub>m</sub>(p) = 0.5p + 0.5m ÷ p + 0.5(1 − m)</code>
                   <code><var>V</var><sub>4</sub>(p) = <var>a</var>L<sub>product</sub>(p) + (1 − <var>a</var>)S<sub>product</sub>(p)</code>
                   <code>chart return = 100 × [<var>V</var><sub>4</sub>(p) − 1]</code>
                 </div>
                 <p>
                   <var>a</var> is the long allocation; the remainder is short.
                   Dollar value is deposit × <var>V</var><sub>4</sub>(p). The held-spot
-                  comparator is simply deposit × <var>p</var>. Long products are
-                  discrete; <var>m</var><sub>S</sub> is the Short model payoff exponent.
+                  comparator is simply deposit × <var>p</var>. Long and Short products
+                  are discrete. <var>LF</var> describes gross position formation, not a
+                  direct return multiplier; <var>m</var><sub>S</sub> scales the Short
+                  inverse-price sleeve.
                 </p>
               </section>
 
@@ -2145,7 +2148,7 @@ export default function App() {
                     <i>03</i>
                     <div>
                       <b>Short products</b>
-                      <span>The same Cashback partition is available on Short</span>
+                      <span>Cashback partitions the m = 2 Short curve once</span>
                     </div>
                   </div>
                   <div className="equation-stack">
@@ -2163,8 +2166,9 @@ export default function App() {
                   <strong>2x</strong>
                   <strong>2x Cashback</strong>
                   <strong>2.5x</strong>
-                  <small>MODEL PAYOFF EXPONENT</small>
+                  <small>SHORT CURVE PARAMETER</small>
                   <strong>2x → m = 1.00</strong>
+                  <strong>2x Cashback → m = 2.00, partitioned</strong>
                   <strong>2.5x → m = 2.00</strong>
                 </div>
                 <div>
@@ -2172,19 +2176,32 @@ export default function App() {
                   <ul>
                     <li>All curves start at 1.00 when <var>p</var> = 1.</li>
                     <li>
-                      Long and short LTVs are independently set and assumed to
-                      be maintained through rebalancing.
+                      Long and Short products are independently selected. Each closed-form curve
+                      assumes its target exposure is ideally maintained through rebalancing;
+                      the rebalancing path itself is not simulated.
                     </li>
                     <li>
                       On either side, Cashback partitions the eligible curve once;
                       the 2.5x product keeps the complete eligible curve in V4. Nothing is recursively layered.
                     </li>
-                    <li>Price-only, static and path-independent.</li>
                     <li>
-                      Base model excludes fees, yield, borrowing costs,
-                      liquidation effects and slippage.
+                      Gross, frictionless and path-independent: the equations show structural
+                      value at each price ratio, not the realised journey to that price.
                     </li>
-                    <li><var>p</var> is floored internally at 0.000001 because the short equation contains 1 ÷ <var>p</var>.</li>
+                    <li>
+                      Volatility-farming yield, borrowing and funding costs, fees, rebalancing
+                      execution, liquidation effects and slippage are excluded. The model does not
+                      determine whether yield outweighs those costs.
+                    </li>
+                    <li>
+                      “Short” identifies the inverse/rebalanced product family. Cashback routing
+                      can offset its directional exposure.
+                    </li>
+                    <li>
+                      <var>p</var> is floored internally at 0.000001 because the Short equation
+                      contains 1 ÷ <var>p</var>. Extreme downside values are idealised curve
+                      extrapolations without liquidity or capacity limits.
+                    </li>
                   </ul>
                 </div>
               </section>
