@@ -304,6 +304,13 @@ main:has(.cashback-control-help:focus-visible) .shell { overflow: visible; }
   grid-template-columns: .85fr 1.3fr .85fr;
 }
 .manual-position .product-mode-segments button { width: 100%; }
+.calculation-under-review {
+  display: block;
+  color: #e37b6b;
+  font: 700 9px/1.3 Atelier;
+  letter-spacing: .025em;
+}
+.manual-product-review-warning { margin-top: 6px; }
 .discrete-leverage-limits .field-label { display: block; margin: 10px 0 6px; }
 .discrete-leverage-limits .cashback-segments + .field-label { margin-top: 12px; }
 
@@ -427,6 +434,7 @@ main:has(.cashback-control-help:focus-visible) .shell { overflow: visible; }
 }
 .optimisation-result .optimised-config.previous { opacity: .65; }
 .optimisation-result .optimised-values { margin-top: 8px; padding-top: 8px; }
+.optimised-product-review-warning { margin-top: 7px; text-align: right; }
 .optimisation-result .send-manual {
   margin-top: 9px;
   border-top: 1px solid #ffffff0c;
@@ -838,6 +846,7 @@ select {
 .equation-stack var { color: #e69558; font-style: italic; }
 .maths-card > p { margin: 11px 2px 0; color: #a99e92; font-size: 11px; line-height: 1.45; }
 .maths-card > p var { color: #d9c1aa; font-family: var(--mono); }
+.maths-review-warning { margin-top: 9px; }
 .maths-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-top: 13px; }
 .maths-card.cash .maths-card-title i { color: #b9b2a9; background: #7f766b16; box-shadow: inset 0 0 0 1px #a99d902b; }
 .maths-card.spot { background: linear-gradient(145deg, #211c19, #151616); }
@@ -2852,6 +2861,10 @@ main.desktop-app .workspace { grid-template-rows: minmax(360px, 1fr) minmax(480p
   gap: 7px;
   white-space: nowrap;
 }
+.position-breakdown-grid > .position-product-review-warning {
+  grid-column: 1 / 4;
+  margin-top: -2px;
+}
 .position-breakdown-grid > .position-capital-value .degen-recycled-allocation {
   color: #dc9562;
   font: 600 12px var(--mono);
@@ -3490,6 +3503,7 @@ main.web-app .chart-panel .chart-series-legend {
 .harvester-chart-card-toggles button:hover { color: #d8b38e; background: #d4874c1c; }
 .harvester-chart-card-toggles button.on { border-color: #d4874c45; background: #d4874c18; color: #f1ddc9; }
 .harvester-chart-shell { min-height: 0; display: flex; flex-direction: column; padding: 6px 14px 0 7px; }
+.harvester-product-review-warning { flex: 0 0 auto; padding: 3px 0 5px 76px; }
 .harvester-plan-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

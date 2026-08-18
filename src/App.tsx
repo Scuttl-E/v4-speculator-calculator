@@ -83,6 +83,10 @@ import {
   saveCalculatorInputs,
 } from "./persistence";
 import { HarvesterOverlay } from "./components/HarvesterOverlay";
+import {
+  CalculationUnderReviewWarning,
+  isShortCashbackUnderReview,
+} from "./components/CalculationUnderReviewWarning";
 import { createHarvesterSnapshot, type HarvesterSnapshot } from "./model/harvester";
 
 const money = (n: number) =>
@@ -2156,6 +2160,7 @@ export default function App() {
                     <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5S<sub>m=2</sub>(p)</code>
                     <code>S<sub>cashback,spot</sub>(p) = 0.5p + 0.5S<sub>m=2</sub>(p)</code>
                     <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
+                    <CalculationUnderReviewWarning className="maths-review-warning" />
                   </div>
                 </section>
               </div>
@@ -2564,6 +2569,9 @@ export default function App() {
                 <div className="segments wide cashback-segments product-mode-segments">
                   {(["2x", "2.5x-cashback", "2.5x-looped"] as const).map((shortMode) => <button key={shortMode} className={config.shortMode === shortMode ? "on" : ""} onClick={() => update("shortMode", shortMode)}>{shortModeLabel(shortMode)}</button>)}
                 </div>
+                {isShortCashbackUnderReview(config.shortMode) && (
+                  <CalculationUnderReviewWarning className="manual-product-review-warning" />
+                )}
               </section>
             </div>
           )}
@@ -2894,6 +2902,9 @@ export default function App() {
                       <b>{shortModeLabel(lastRun.result.shortMode ?? "2x")}</b>
                     </span>}
                   </div>
+                  {isShortCashbackUnderReview(lastRun.result.shortMode) && (
+                    <CalculationUnderReviewWarning className="optimised-product-review-warning" />
+                  )}
                     </div>
                   )}
                   <button
@@ -2948,6 +2959,9 @@ export default function App() {
                   {money(positionBreakdown.shortCapital)}
                   {positionBreakdown.recycledShortCapital > 0 && <small className="degen-recycled-allocation">(+{money(positionBreakdown.recycledShortCapital)})</small>}
                 </b>
+                {isShortCashbackUnderReview(config.shortMode) && (
+                  <CalculationUnderReviewWarning className="position-product-review-warning" />
+                )}
                 {positionBreakdown.loopedShortCapital > 0 && <>
                   <span className="position-looped-capital-label">LEVERAGE ADDED</span>
                   <b className="position-looped-capital-value">+{money(positionBreakdown.loopedShortCapital)}</b>

@@ -47,6 +47,10 @@ import {
   type HarvesterPreviewThrough,
   type HarvesterSnapshot,
 } from "../model/harvester";
+import {
+  CalculationUnderReviewWarning,
+  isShortCashbackUnderReview,
+} from "./CalculationUnderReviewWarning";
 
 const money = (value: number) => new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -1000,6 +1004,9 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
             {chartComparisonReference !== null && <HarvesterLegendToggle label={`Reference - ${benchmarkLabels[chartComparisonReference]}`} seriesClass="comparison-reference" visible={chartSeriesVisibility.comparisonReference} onToggle={() => toggleChartSeriesVisibility("comparisonReference")} />}
           </aside>}
         </div>
+        {isShortCashbackUnderReview(snapshot.config.shortMode) && (
+          <CalculationUnderReviewWarning className="harvester-product-review-warning" />
+        )}
       </div>
 
       <div className="harvester-bottom">
