@@ -964,6 +964,7 @@ export default function App() {
     [liquidationLtv, setLiquidationLtv] = useState(DEFAULT_LENDING.liquidationLtv),
     [perpState, setPerpState] = useState<PerpPositionInput>({ ...DEFAULT_PERP }),
     [showPerp, setShowPerp] = useState(true),
+    [webChartWheelZoomEnabled, setWebChartWheelZoomEnabled] = useState(false),
     [showMaths, setShowMaths] = useState(false),
     [showSettings, setShowSettings] = useState(false),
     [showAssetName, setShowAssetName] = useState(false),
@@ -1082,13 +1083,32 @@ export default function App() {
   };
   const [persistenceLoaded, setPersistenceLoaded] = useState(false);
   const isDesktopApp = isDesktopShell();
+  const canZoomChartWithWheel = isDesktopApp || webChartWheelZoomEnabled;
   useEffect(() => {
     if (isDesktopApp) return;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const shortestScreenSide = Math.min(window.screen.width, window.screen.height);
+    const isPhysicalPhone = navigator.maxTouchPoints > 0 && (
+      shortestScreenSide <= 600 || shortestScreenSide / window.devicePixelRatio <= 600
+    );
+    const isPhone = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) || isPhysicalPhone;
     document.documentElement.classList.add("web-build");
     document.body.classList.add("web-build");
+    if (isPhone) {
+      document.documentElement.classList.add("phone-web");
+      document.body.classList.add("phone-web");
+    }
+    if (isAndroid) {
+      document.documentElement.classList.add("android-web");
+      document.body.classList.add("android-web");
+    }
     return () => {
       document.documentElement.classList.remove("web-build");
       document.body.classList.remove("web-build");
+      document.documentElement.classList.remove("phone-web");
+      document.body.classList.remove("phone-web");
+      document.documentElement.classList.remove("android-web");
+      document.body.classList.remove("android-web");
     };
   }, [isDesktopApp]);
   useEffect(() => {
@@ -1153,6 +1173,9 @@ export default function App() {
       }
       if (typeof saved.showDebt === "boolean") setShowDebt(saved.showDebt);
       if (typeof saved.showPerp === "boolean") setShowPerp(saved.showPerp);
+      if (typeof saved.webChartWheelZoomEnabled === "boolean") {
+        setWebChartWheelZoomEnabled(saved.webChartWheelZoomEnabled);
+      }
       if (typeof saved.assetName === "string") setAssetName(saved.assetName.trim().slice(0, 16) || DEFAULT_ASSET_NAME);
     }).finally(() => {
       if (!cancelled) setPersistenceLoaded(true);
@@ -1181,7 +1204,7 @@ export default function App() {
         comparisonMode, manualConfigsByMode, optimiserDeposit, optimiserControlsByMode,
         workspaceControlsByMode,
         degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
-        minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
+        minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
       });
@@ -1191,7 +1214,7 @@ export default function App() {
     assetAmount, assetName, assetPrice, baseAssetValue, chartSeriesVisibility, comparisonMode,
     defaultMaxDrawdown, degenSettingsByMode, liquidationLtv, manualConfigsByMode, maxDrawdownByMode,
     optimiserControlsByMode, optimiserDeposit, perpState, persistenceLoaded,
-    showDebt, showPerp, usdDebt, workspaceControlsByMode,
+    showDebt, showPerp, usdDebt, webChartWheelZoomEnabled, workspaceControlsByMode,
   ]);
   const pendingComparisonIsValid = comparisonMode === "base"
     ? true
@@ -1534,7 +1557,7 @@ export default function App() {
     comparisonMode, manualConfigsByMode, optimiserDeposit, optimiserControlsByMode,
     workspaceControlsByMode,
     degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
-    minMove, maxMove, chartSeriesVisibility, showDebt, showPerp,
+    minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
   });
@@ -1989,6 +2012,21 @@ export default function App() {
               </div>
               <button type="button" aria-label="Close settings" onClick={() => setShowSettings(false)}>×</button>
             </header>
+            {!isDesktopApp && (
+              <label className="settings-wheel-zoom-toggle">
+                <span>
+                  <b>CHART MOUSE-WHEEL ZOOM</b>
+                  <small>Zoom Strategy Response with the mouse wheel</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={webChartWheelZoomEnabled}
+                  onChange={(event) => setWebChartWheelZoomEnabled(event.target.checked)}
+                  aria-label="Enable chart mouse-wheel zoom"
+                />
+                <i aria-hidden="true" />
+              </label>
+            )}
             <div className="settings-grid">
               <label>
                 <span>BULLISH TARGET</span>
@@ -3136,7 +3174,7 @@ export default function App() {
               </div>
             </div>
             <div className="chart">
-              <div className="chart-plot" onWheel={handleChartWheel}>
+              <div className="chart-plot" onWheel={canZoomChartWithWheel ? handleChartWheel : undefined}>
               {stalePanelActive && (
                 <OptimisationRequiredBadge
                   className="chart-optimisation-required"

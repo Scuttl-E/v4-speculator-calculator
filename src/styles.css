@@ -736,6 +736,16 @@ select {
 .settings-panel header small { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .085em; }
 .settings-panel h2 { margin: 3px 0 0; color: var(--cream); font: 600 20px Atelier; }
 .settings-panel header button { width: 27px; height: 27px; border: 0; border-radius: 6px; background: #ffffff0a; color: #cdbda9; font-size: 20px; line-height: 1; cursor: pointer; }
+.settings-wheel-zoom-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid #ffffff10; cursor: pointer; }
+.settings-wheel-zoom-toggle > span { display: grid; gap: 3px; }
+.settings-wheel-zoom-toggle b { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .075em; }
+.settings-wheel-zoom-toggle small { color: #a99e93; font-size: 10px; }
+.settings-wheel-zoom-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.settings-wheel-zoom-toggle i { position: relative; flex: 0 0 36px; width: 36px; height: 20px; border: 1px solid #ffffff18; border-radius: 999px; background: #ffffff12; transition: background .15s ease, border-color .15s ease; }
+.settings-wheel-zoom-toggle i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #a99e93; transition: transform .15s ease, background .15s ease; }
+.settings-wheel-zoom-toggle input:checked + i { border-color: #d88a4b99; background: #8b4f2c; }
+.settings-wheel-zoom-toggle input:checked + i::after { transform: translateX(16px); background: var(--cream); }
+.settings-wheel-zoom-toggle:focus-within i { outline: 2px solid #e7a96888; outline-offset: 2px; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px 0 10px; }
 .settings-grid label { position: relative; display: grid; gap: 3px; min-width: 0; }
 .settings-grid label > span { color: #c3b5a7; font: 600 10px Atelier; letter-spacing: .075em; }
@@ -3253,10 +3263,10 @@ main.web-app {
   overflow: visible;
 }
 main.web-app .shell {
-  flex: 0 0 max(1046px, calc(100vh - 54px));
+  flex: 0 0 max(1040px, calc(100vh - 60px));
   min-width: 1630px;
-  min-height: 1046px;
-  height: max(1046px, calc(100vh - 54px));
+  min-height: 1040px;
+  height: max(1040px, calc(100vh - 60px));
   grid-template-columns: 368px minmax(1214px, 1fr);
   gap: 16px;
   padding: 16px;
@@ -3275,6 +3285,16 @@ main.web-app .shell.pea-nile-enhanced {
   grid-template-columns: 0 minmax(0, 1fr);
   gap: 0;
 }
+
+/* Phones use one normal document scroll rather than trapping swipes in Model
+   Controls. The rail can grow taller than the chart; desktop and tablets
+   retain their fixed workstation geometry and independent rail scroller. */
+body.web-build.phone-web main.web-app .shell { flex: 0 0 auto; height: auto; align-items: start; overflow: visible; }
+body.web-build.phone-web main.web-app .rail { height: auto; align-self: start; overflow: visible; }
+body.web-build.phone-web main.web-app .rail-scroll { flex: 0 0 auto; overflow: visible; overscroll-behavior: auto; }
+/* A phone swipe over the chart scrolls the page rather than opening a chart tooltip. */
+body.web-build.phone-web .chart-plot { touch-action: pan-y; }
+body.web-build.phone-web .chart-plot > .recharts-responsive-container { pointer-events: none; }
 
 /* Browser-only cascade locks: narrow viewports must not activate the compact
    desktop tracks inside the fixed-width web workstation. */
@@ -3312,6 +3332,33 @@ main.web-app .scenarios .scenario-row b {
 }
 main.web-app .scenarios.comparison-base .scenario-row {
   grid-template-columns: 86px minmax(82px, 1fr) 86px minmax(82px, 1.08fr) 92px;
+}
+
+/* When Spot ETH Value is visible beside Lending or Perp data, preserve the
+   measured table tracks and let the table—not the fixed position summary—own
+   horizontal overflow. The hidden-spot layout remains compact. */
+body.web-build main.web-app .scenarios.comparison-lending:not(.spot-hidden) > .scenario-table,
+body.web-build main.web-app .scenarios.comparison-perp:not(.spot-hidden) > .scenario-table {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+body.web-build main.web-app .scenarios.comparison-lending:not(.spot-hidden) > .scenario-table::-webkit-scrollbar,
+body.web-build main.web-app .scenarios.comparison-perp:not(.spot-hidden) > .scenario-table::-webkit-scrollbar { height: 0; }
+body.web-build main.web-app .scenarios.comparison-lending:not(.spot-hidden) .scenario-row,
+body.web-build main.web-app .scenarios.comparison-perp:not(.spot-hidden) .scenario-row {
+  grid-template-columns: 86px repeat(6, 104px);
+  min-width: 710px;
+  column-gap: 0;
+  justify-content: start;
+}
+body.web-build main.web-app .scenarios.comparison-lending.spot-hidden .scenario-row,
+body.web-build main.web-app .scenarios.comparison-perp.spot-hidden .scenario-row {
+  grid-template-columns: 86px repeat(4, 104px);
+  min-width: 502px;
+  column-gap: 0;
+  justify-content: start;
 }
 
 .scenario-row:not(.headings) > .v4-end.positive { color: var(--bright) !important; }
@@ -3412,6 +3459,10 @@ main.web-app .chart-panel .chart-series-legend {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+/* Browser Harvester owns the viewport directly; Android can otherwise retain
+   the desktop-sized layout canvas while showing a fixed overlay. */
+.harvester-browser-backdrop { inset: 0; width: 100vw; height: 100vh; min-width: 0; min-height: 0; max-width: none; max-height: none; place-items: stretch; }
+.harvester-browser-backdrop .harvester-workspace { width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: none; max-height: none; margin: 0; justify-self: stretch; align-self: stretch; box-sizing: border-box; border-radius: 0; }
 .harvester-workspace {
   --mono: "Geist Mono", "Cascadia Mono", "IBM Plex Mono", monospace;
   width: min(90vw, 1720px);
@@ -3429,6 +3480,69 @@ main.web-app .chart-panel .chart-series-legend {
     linear-gradient(150deg, #242524, #121313 70%);
   box-shadow: 0 32px 110px #000e, inset 0 1px #fff0df12;
   color: var(--cream);
+}
+/* Browser Harvester owns the viewport. */
+body.web-build .harvester-workspace {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  justify-self: stretch;
+  align-self: stretch;
+  box-sizing: border-box;
+  border-radius: 0;
+}
+
+body.web-build .harvester-backdrop {
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  place-items: stretch;
+}
+
+/* Desktop/tablet browsers keep Harvester at its full workstation width.
+   Smaller browser windows scroll around it rather than compressing it. */
+body.web-build:not(.phone-web) .harvester-backdrop {
+  display: block;
+  overflow: auto;
+  padding: 16px;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+
+body.web-build:not(.phone-web) .harvester-workspace {
+  width: 1630px;
+  min-width: 1630px;
+  max-width: 1630px;
+
+  height: max(800px, calc(100dvh - 32px));
+  min-height: 800px;
+  max-height: 1080px;
+
+  margin: 0 auto;
+  justify-self: auto;
+  align-self: auto;
+  box-sizing: border-box;
+  border-radius: 16px;
+}
+body.web-build.android-web .harvester-backdrop { top: 0; right: auto; bottom: auto; left: 0; width: 100vw; height: 100vh; min-width: 0; min-height: 0; transform: none; }
+body.web-build.android-web .harvester-workspace { width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: none; max-height: none; }
+/* On phones, the backdrop is the single scroll owner and Harvester keeps its natural height. */
+body.web-build.phone-web .harvester-backdrop { display: block; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+body.web-build.phone-web .harvester-workspace { height: auto !important; min-height: 100vh !important; overflow: visible !important; grid-template-rows: auto minmax(330px, 55vh) auto; }
+body.web-build.phone-web .harvester-bottom { height: auto; min-height: 307px; }
+body.web-build.phone-web .harvester-ledger-scroll { flex: 0 0 auto; overflow: visible; overscroll-behavior: auto; }
+.harvester-orientation-notice { display: none; }
+@media (orientation: portrait) {
+  body.web-build.phone-web .harvester-workspace { display: none; }
+  body.web-build.phone-web .harvester-orientation-notice { display: grid; place-items: center; gap: 10px; width: min(82vw, 360px); padding: 28px 24px; border: 1px solid #5c4b3e; border-radius: 14px; background: linear-gradient(150deg, #242524, #121313); box-shadow: 0 24px 70px #000c; color: var(--cream); text-align: center; }
+  body.web-build.phone-web .harvester-orientation-notice strong { color: var(--bright); font: 600 18px Atelier; }
+  body.web-build.phone-web .harvester-orientation-notice span { color: var(--warm); font: 14px Atelier; }
 }
 .harvester-head {
   display: grid;

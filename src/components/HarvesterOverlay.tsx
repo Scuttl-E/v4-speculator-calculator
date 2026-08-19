@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
+import { isDesktopShell } from "../persistence";
 import {
   CartesianGrid,
   ComposedChart,
@@ -239,6 +241,16 @@ function CheckpointDot({
 }
 
 export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
+  const isBrowserHarvester = !isDesktopShell();
+  const isPhoneBrowser = isBrowserHarvester && document.body.classList.contains("phone-web");
+  const isAndroidBrowser = /Android/i.test(navigator.userAgent);
+  const androidBackdropStyle = isAndroidBrowser ? {
+    position: "fixed" as const, top: 0, right: 0, bottom: 0, left: 0,
+    width: "100vw", height: "100vh", minWidth: 0, minHeight: 0, maxWidth: "none", maxHeight: "none",
+  } : undefined;
+  const androidWorkspaceStyle = isAndroidBrowser ? {
+    width: "100%", height: "100%", minWidth: 0, minHeight: 0, maxWidth: "none", maxHeight: "none", margin: 0, borderRadius: 0,
+  } : undefined;
   const availableBenchmarks = useMemo(() => availableHarvesterBenchmarks(snapshot), [snapshot]);
   const launchedBenchmark = benchmarkForComparisonMode(snapshot.comparisonMode);
   const initialBenchmark = availableBenchmarks.includes(launchedBenchmark) ? launchedBenchmark : "spot";
@@ -280,12 +292,11 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
   const [finalTargetDraft, setFinalTargetDraft] = useState("500");
   const [intervalDraft, setIntervalDraft] = useState("100");
   const [checkpointCountDraft, setCheckpointCountDraft] = useState("4");
-  const [firstCheckpointDraft, setFirstCheckpointDraft] = useState("");
   const [harvestRateDraft, setHarvestRateDraft] = useState("50");
   const [analysisMoveByDirection, setAnalysisMoveByDirection] = useState<ByDirection<number>>(() => byDirection(500, -80));
   const [analysisMoveDraft, setAnalysisMoveDraft] = useState("500");
   const [pointFieldDrafts, setPointFieldDrafts] = useState<Record<string, string>>({});
-  const [openSelector, setOpenSelector] = useState<"interval" | "checkpoints" | "firstCheckpoint" | "harvestRate" | null>(null);
+  const [openSelector, setOpenSelector] = useState<"interval" | "checkpoints" | "harvestRate" | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const undoHistoryRef = useRef<ByDirection<HarvesterUndoState[]>>(byDirection([], []));
@@ -460,6 +471,9 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
       ? chartView === "complete" ? 176 : 154
       : chartView === "complete" ? 142 : 118;
     const chartWidth = chartRef.current?.clientWidth ?? 0;
+    if (isPhoneBrowser && chartWidth) {
+      return { x: Math.max(0, (chartWidth - tooltipWidth) / 2), y: 62 };
+    }
     const rightX = harvestedTooltipAnchor.x + 18;
     const x = chartWidth && rightX + tooltipWidth > chartWidth
       ? Math.max(0, harvestedTooltipAnchor.x - tooltipWidth - 18)
@@ -467,7 +481,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     const aboveY = harvestedTooltipAnchor.y - 150 - tooltipHeight;
     const preferredY = aboveY >= 58 ? aboveY : harvestedTooltipAnchor.y + 150;
     return { x, y: Math.max(58, preferredY) };
-  }, [harvestedTooltipAnchor, showDetailedTooltip, chartView]);
+  }, [harvestedTooltipAnchor, isPhoneBrowser, showDetailedTooltip, chartView]);
   const activeHarvestRate = activePlan?.harvestRatePercent ?? sharedInputs.defaultHarvestPercent;
 
   useEffect(() => {
@@ -481,10 +495,6 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
   useEffect(() => {
     setCheckpointCountDraft(String(sharedInputs.pointCount));
   }, [sharedInputs.pointCount]);
-
-  useEffect(() => {
-    setFirstCheckpointDraft(sharedInputs.firstCheckpointPercent?.toString() ?? "");
-  }, [sharedInputs.firstCheckpointPercent]);
 
   useEffect(() => {
     setHarvestRateDraft(String(activeHarvestRate));
@@ -683,12 +693,6 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     if (entered !== null) setLiveHarvestRate(entered);
   };
 
-  const updateFirstCheckpointDraft = (draft: string) => {
-    setFirstCheckpointDraft(draft);
-    const entered = parseNumericDraft(draft, { min: 1, integer: true });
-    if (entered !== null && availableFirstCheckpoints.includes(entered)) setLiveFirstCheckpoint(entered);
-  };
-
   const commitFinalTarget = () => {
     if (parseNumericDraft(finalTargetDraft, sharedInputs.direction === "long" ? { min: 10, max: 2000 } : { min: -99, max: -1 }) === null) {
       setFinalTargetDraft(String(sharedInputs.finalTargetPercent));
@@ -714,13 +718,6 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     }
   };
 
-  const commitFirstCheckpoint = () => {
-    const entered = parseNumericDraft(firstCheckpointDraft, { min: 1, integer: true });
-    if (entered === null || !availableFirstCheckpoints.includes(entered)) {
-      setFirstCheckpointDraft(sharedInputs.firstCheckpointPercent?.toString() ?? "");
-    }
-  };
-
   const setAnalysisMove = (value: number) => {
     setAnalysisMoveByDirection((current) => ({ ...current, [activeDirection]: value }));
     setAnalysisMoveDraft(String(value));
@@ -737,7 +734,6 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     }
     setAnalysisMove(entered);
   };
-
   const beginPointFieldDraft = (id: string, value: number) => {
     setPointFieldDrafts((current) => ({ ...current, [id]: String(value) }));
   };
@@ -896,8 +892,12 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     window.addEventListener("pointercancel", onUp);
   };
 
-  return <div className="harvester-backdrop" role="presentation">
-    <section ref={dialogRef} className="harvester-workspace" role="dialog" aria-modal="true" aria-labelledby="harvester-title" tabIndex={-1}>
+  return createPortal(<div className={`harvester-backdrop${isBrowserHarvester ? " harvester-browser-backdrop" : ""}`} style={androidBackdropStyle} role="presentation">
+    <div className="harvester-orientation-notice" role="status">
+      <strong>Rotate your device</strong>
+      <span>Harvester is best viewed in landscape mode.</span>
+    </div>
+    <section ref={dialogRef} className="harvester-workspace" style={androidWorkspaceStyle} role="dialog" aria-modal="true" aria-labelledby="harvester-title" tabIndex={-1}>
       <header className="harvester-head">
         <div className="harvester-title-area">
           <div>
@@ -1023,7 +1023,7 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
             <label><span>INTERVAL</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Interval" inputMode="numeric" value={intervalDraft} onChange={(event) => updateIntervalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("interval", commitInterval)} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose interval" aria-expanded={openSelector === "interval"} onClick={() => setOpenSelector((current) => current === "interval" ? null : "interval")} />{openSelector === "interval" && <div className="harvester-selector-menu">{intervalOptions.map((value) => <button key={value} type="button" onClick={() => { setShared("intervalPercent", value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
             <label><span>CHECKPOINTS</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Checkpoints" inputMode="numeric" value={checkpointCountDraft} disabled={availableCheckpointCounts.length === 0} onChange={(event) => updateCheckpointCountDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("checkpoints", commitCheckpointCount)} /></div><button type="button" className="harvester-selector-button" disabled={availableCheckpointCounts.length === 0} aria-label="Choose checkpoints" aria-expanded={openSelector === "checkpoints"} onClick={() => setOpenSelector((current) => current === "checkpoints" ? null : "checkpoints")} />{openSelector === "checkpoints" && <div className="harvester-selector-menu">{availableCheckpointCounts.map((value) => <button key={value} type="button" onClick={() => { setShared("pointCount", value); setOpenSelector(null); }}>{value}</button>)}</div>}</div></label>
             <label className={(activeKind === "equalRate" || activeKind === "equalCash") ? "is-disabled" : ""}><span>HARVEST RATE</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="Harvest rate" inputMode="decimal" value={harvestRateDraft} disabled={activeKind === "equalRate" || activeKind === "equalCash"} onChange={(event) => updateHarvestRateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} {...numericAdjustmentTrigger("harvest-rate", commitHarvestRate)} /><em>%</em></div><button type="button" className="harvester-selector-button" disabled={activeKind === "equalRate" || activeKind === "equalCash"} aria-label="Choose harvest rate" aria-expanded={openSelector === "harvestRate"} onClick={() => setOpenSelector((current) => current === "harvestRate" ? null : "harvestRate")} />{openSelector === "harvestRate" && <div className="harvester-selector-menu">{DEFAULT_HARVEST_PRESETS.map((value) => <button key={value} type="button" onClick={() => { setLiveHarvestRate(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
-            <label><span>FIRST CHECKPOINT</span><div className="harvester-combo opens-up"><div className="harvester-unit-input"><input aria-label="First checkpoint" inputMode="numeric" placeholder="Auto" value={firstCheckpointDraft} onChange={(event) => updateFirstCheckpointDraft(event.target.value)} onBlur={commitFirstCheckpoint} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} /><em>%</em></div><button type="button" className="harvester-selector-button" aria-label="Choose first checkpoint" aria-expanded={openSelector === "firstCheckpoint"} onClick={() => setOpenSelector((current) => current === "firstCheckpoint" ? null : "firstCheckpoint")} />{openSelector === "firstCheckpoint" && <div className="harvester-selector-menu"><button type="button" onClick={() => { setLiveFirstCheckpoint(null); setOpenSelector(null); }}>Auto</button>{availableFirstCheckpoints.map((value) => <button key={value} type="button" onClick={() => { setLiveFirstCheckpoint(value); setOpenSelector(null); }}>{value}%</button>)}</div>}</div></label>
+            <label><span>FIRST CHECKPOINT</span><select aria-label="First checkpoint" value={sharedInputs.firstCheckpointPercent ?? "auto"} onChange={(event) => setLiveFirstCheckpoint(event.target.value === "auto" ? null : Number(event.target.value))}><option value="auto">Auto</option>{availableFirstCheckpoints.map((value) => <option key={value} value={value}>{value}%</option>)}</select></label>
             <fieldset className="harvester-cashback-toggle" aria-label="Include initial cashback in capital recovery"><div className="harvester-cashback-title"><span>INCLUDE INITIAL CASHBACK</span><span>IN CAPITAL RECOVERY</span></div><button type="button" className={accountInitialCashback ? "on" : ""} onClick={() => { if (!accountInitialCashback) { recordUndoState(); setAccountInitialCashback(true); } }}>On</button><button type="button" className={!accountInitialCashback ? "on" : ""} onClick={() => { if (accountInitialCashback) { recordUndoState(); setAccountInitialCashback(false); } }}>Off</button></fieldset>
             <fieldset className="harvester-drag-mode"><legend>CHECKPOINT DRAG MODE</legend>{(["vertical", "horizontal", "both"] as const).map((mode) => <button key={mode} type="button" className={dragMode === mode ? "on" : ""} onClick={() => setDragMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</fieldset>
           </div>
@@ -1104,5 +1104,5 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
         </div>
       </div>
     </section>
-  </div>;
+  </div>, document.body);
 }
