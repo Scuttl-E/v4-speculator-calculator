@@ -40,14 +40,20 @@ const shortRebalancedValue = (p: number, ltv: SupportedV4Ltv) => {
   p = validP(p); const m = 0.5 / (1 - ltv);
   return 0.5 + 0.5 * p + (0.5 * m) / p - 0.5 * m;
 };
+const shortCashbackPositionValue = (p: number) => {
+  p = validP(p);
+  return p + 1 / p ** 2 - 1;
+};
 export const shortValue = (p: number, mode: ShortV4Mode | SupportedV4Ltv, routing: CashbackMode = "cash") => {
   if (typeof mode === "number") return shortRebalancedValue(p, mode);
   if (mode === "2x") return shortRebalancedValue(p, .5);
+  if (mode === "2.5x-cashback") return .5 * shortCashbackPositionValue(p) + .5 * (routing === "spot" ? validP(p) : 1);
   const eligible = shortRebalancedValue(p, .75);
-  if (mode === "2.5x-cashback") return .5 * eligible + .5 * (routing === "spot" ? validP(p) : 1);
   return eligible;
 };
-export const shortPositionValue = (p: number, mode: ShortV4Mode) => shortRebalancedValue(p, shortLtvForMode(mode));
+export const shortPositionValue = (p: number, mode: ShortV4Mode) => mode === "2.5x-cashback"
+  ? shortCashbackPositionValue(p)
+  : shortRebalancedValue(p, shortLtvForMode(mode));
 export interface PortfolioComponents {
   long: number;
   short: number;
@@ -75,7 +81,8 @@ export const analysisRangeFromPercent = (minMovePercent: number, maxMovePercent:
 };
 export const analysisRangeToPercent=(range:AnalysisRange)=>({minMovePercent:(range.minPriceRatio-1)*100,maxMovePercent:(range.maxPriceRatio-1)*100});
 const assertAnalysisRange=(range:AnalysisRange)=>{if(!Number.isFinite(range.minPriceRatio)||!Number.isFinite(range.maxPriceRatio))throw new RangeError("Analysis range must be finite");if(range.minPriceRatio<=0)throw new RangeError("Analysis minimum must be greater than -100%");if(range.minPriceRatio>=1||range.maxPriceRatio<=1)throw new RangeError("Analysis range must include moves below and above entry");if(range.maxPriceRatio<=range.minPriceRatio)throw new RangeError("Analysis maximum must be greater than its minimum");};
-function findMinimumOnInterval(c:Config,minP:number,maxP:number):Trough { const samples:Array<{p:number;value:number}>=[];for(let i=0;i<=1200;i++){const p=minP+(maxP-minP)*i/1200;samples.push({p,value:portfolioValue(p,c)});}let best=samples.reduce((a,b)=>a.value<=b.value?a:b);for(let i=1;i<samples.length-1;i++){if(samples[i].value>samples[i-1].value||samples[i].value>samples[i+1].value)continue;let lo=samples[i-1].p,hi=samples[i+1].p;for(let j=0;j<45;j++){const a=(2*lo+hi)/3,b=(lo+2*hi)/3;if(portfolioValue(a,c)<portfolioValue(b,c))hi=b;else lo=a;}const p=(lo+hi)/2;const value=portfolioValue(p,c);if(value<best.value)best={p,value};}return {...best,drawdown:best.value-1}; }
+function findMinimumValueOnInterval(valueAt:(p:number)=>number,minP:number,maxP:number):Trough { const samples:Array<{p:number;value:number}>=[];for(let i=0;i<=1200;i++){const p=minP+(maxP-minP)*i/1200;samples.push({p,value:valueAt(p)});}let best=samples.reduce((a,b)=>a.value<=b.value?a:b);for(let i=1;i<samples.length-1;i++){if(samples[i].value>samples[i-1].value||samples[i].value>samples[i+1].value)continue;let lo=samples[i-1].p,hi=samples[i+1].p;for(let j=0;j<45;j++){const a=(2*lo+hi)/3,b=(lo+2*hi)/3;if(valueAt(a)<valueAt(b))hi=b;else lo=a;}const p=(lo+hi)/2;const value=valueAt(p);if(value<best.value)best={p,value};}return {...best,drawdown:best.value-1}; }
+function findMinimumOnInterval(c:Config,minP:number,maxP:number):Trough { return findMinimumValueOnInterval(p=>portfolioValue(p,c),minP,maxP); }
 export function findWorstDrawdown(c:Config,range:AnalysisRange):Trough {assertAnalysisRange(range);return findMinimumOnInterval(c,range.minPriceRatio,range.maxPriceRatio);}
 /**
  * Risk limit for isolated V4 legs. Each active leg is assessed on its own
@@ -92,8 +99,7 @@ export function findWorstComponentDrawdown(c:Config,range:AnalysisRange):Trough 
   }
   if(c.longAllocation<1-1e-12) {
     const mode=normaliseShortMode(c);
-    const positionMode:ShortV4Mode=mode === "2.5x-cashback" ? "2.5x-looped" : mode;
-    const shortTrough=findMinimumOnInterval({...c,longAllocation:0,shortMode:positionMode},range.minPriceRatio,range.maxPriceRatio);
+    const shortTrough=findMinimumValueOnInterval(p=>shortPositionValue(p,mode),range.minPriceRatio,range.maxPriceRatio);
     const drawdown=(1-c.longAllocation)*shortTrough.drawdown;
     troughs.push({p:shortTrough.p,value:1+drawdown,drawdown});
   }

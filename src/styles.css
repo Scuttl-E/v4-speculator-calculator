@@ -306,7 +306,7 @@ main:has(.cashback-control-help:focus-visible) .shell { overflow: visible; }
 .manual-position .product-mode-segments button { width: 100%; }
 .calculation-under-review {
   display: block;
-  color: #e37b6b;
+  color: #60A5FA;
   font: 700 9px/1.3 Atelier;
   letter-spacing: .025em;
 }

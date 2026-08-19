@@ -2152,13 +2152,13 @@ export default function App() {
                     <i>03</i>
                     <div>
                       <b>Short products</b>
-                      <span>Cashback partitions the m = 2 Short curve once</span>
+                      <span>Cashback combines asset-side value with inverse-squared Short exposure</span>
                     </div>
                   </div>
                   <div className="equation-stack">
                     <code>S<sub>2x</sub>(p) = S<sub>m=1</sub>(p)</code>
-                    <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5S<sub>m=2</sub>(p)</code>
-                    <code>S<sub>cashback,spot</sub>(p) = 0.5p + 0.5S<sub>m=2</sub>(p)</code>
+                    <code>S<sub>cashback,cash</sub>(p) = 0.5p + 0.5 / p<sup>2</sup></code>
+                    <code>S<sub>cashback,spot</sub>(p) = p + 0.5 / p<sup>2</sup> − 0.5</code>
                     <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
                     <CalculationUnderReviewWarning className="maths-review-warning" />
                   </div>
@@ -2171,9 +2171,9 @@ export default function App() {
                   <strong>2x</strong>
                   <strong>2x Cashback</strong>
                   <strong>2.5x</strong>
-                  <small>SHORT CURVE PARAMETER</small>
+                  <small>SHORT PRODUCT MODEL</small>
                   <strong>2x → m = 1.00</strong>
-                  <strong>2x Cashback → m = 2.00, partitioned</strong>
+                  <strong>2x Cashback → 0.5p + 0.5 / p²</strong>
                   <strong>2.5x → m = 2.00</strong>
                 </div>
                 <div>
@@ -2186,8 +2186,8 @@ export default function App() {
                       the rebalancing path itself is not simulated.
                     </li>
                     <li>
-                      On either side, Cashback partitions the eligible curve once;
-                      the 2.5x product keeps the complete eligible curve in V4. Nothing is recursively layered.
+                      Long Cashback partitions its eligible curve once. Short Cashback combines
+                      asset-side value with inverse-squared exposure. Nothing is recursively layered.
                     </li>
                     <li>
                       Gross, frictionless and path-independent: the equations show structural

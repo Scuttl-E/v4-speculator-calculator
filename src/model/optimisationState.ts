@@ -2,7 +2,7 @@ import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { ProductRoutingDecision } from "./productRoutingDecision";
 import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-08-11-short-cashback-routing-4";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-08-19-short-cashback-inverse-square-1";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {

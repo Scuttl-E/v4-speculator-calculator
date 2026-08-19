@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisRangeFromPercent, findWorstComponentDrawdown, findWorstDrawdown, longModeLabel, longValue, portfolioComponents, portfolioValue, shortModeLabel, shortValue } from "./v4Math";
+import { analysisRangeFromPercent, findWorstComponentDrawdown, findWorstDrawdown, longModeLabel, longValue, portfolioComponents, portfolioValue, shortModeLabel, shortPositionValue, shortValue } from "./v4Math";
 import type { Config } from "./types";
 
 const config = (longMode: Config["longMode"], longAllocation = 1): Config => ({
@@ -22,10 +22,13 @@ describe("V4 discrete Short products", () => {
     for (const mode of ["2x", "2.5x-cashback", "2.5x-looped"] as const)
       expect(shortValue(1, mode)).toBeCloseTo(1, 12);
   });
-  it("partitions the eligible 75% Short curve once for Cashback", () => {
-    const eligible = shortValue(2, "2.5x-looped");
-    expect(shortValue(2, "2.5x-cashback", "cash")).toBeCloseTo(.5 + .5 * eligible, 12);
-    expect(shortValue(2, "2.5x-cashback", "spot")).toBeCloseTo(1 + .5 * eligible, 12);
+  it("uses the inverse-squared Short Cashback equation", () => {
+    for (const p of [.2, .5, 1, 2, 4]) {
+      expect(shortValue(p, "2.5x-cashback", "cash")).toBeCloseTo(.5 * p + .5 / p ** 2, 12);
+      expect(shortValue(p, "2.5x-cashback", "spot")).toBeCloseTo(p + .5 / p ** 2 - .5, 12);
+      expect(.5 * shortPositionValue(p, "2.5x-cashback") + .5)
+        .toBeCloseTo(shortValue(p, "2.5x-cashback", "cash"), 12);
+    }
   });
   it("counts Cashback from both active legs and never from Looped", () => {
     const bothCashback = { ...config("2.5x-cashback", .4), shortMode: "2.5x-cashback" as const, shortLtv: .75 };
@@ -42,12 +45,13 @@ describe("V4 discrete Short products", () => {
     expect(cash.insideV4 + cash.cashbackValue).toBeCloseTo(cash.total, 12);
     expect(spot.insideV4 + spot.cashbackValue).toBeCloseTo(spot.total, 12);
   });
-  it("does not let external Short Cashback cushion isolated Short risk", () => {
+  it("assesses the retained inverse-squared Short Cashback position for isolated risk", () => {
     const shortCashback = { ...config("2x", 0), shortMode: "2.5x-cashback" as const, shortLtv: .75 };
-    const shortLooped = { ...shortCashback, shortMode: "2.5x-looped" as const };
     const range = analysisRangeFromPercent(-80, 200);
-    expect(findWorstComponentDrawdown(shortCashback, range).drawdown)
-      .toBeCloseTo(findWorstComponentDrawdown(shortLooped, range).drawdown, 12);
+    const trough = findWorstComponentDrawdown(shortCashback, range);
+    const expectedP = 2 ** (1 / 3);
+    expect(trough.p).toBeCloseTo(expectedP, 7);
+    expect(trough.drawdown).toBeCloseTo(1.5 * expectedP - 2, 10);
   });
 });
 
