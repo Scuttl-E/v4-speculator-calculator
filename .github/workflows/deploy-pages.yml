@@ -2,7 +2,7 @@ name: Deploy web calculator to GitHub Pages
 
 on:
   push:
-    branches: [web-version]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
