@@ -2174,7 +2174,7 @@ export default function App() {
                     <i>02</i>
                     <div>
                       <b>Long products</b>
-                      <span>Cashback routing is separate from product selection</span>
+                      <span>Long-side payoff structures</span>
                     </div>
                   </div>
                   <div className="equation-stack">
@@ -2186,68 +2186,71 @@ export default function App() {
                 </section>
 
                 <section className="maths-card spot">
-                  <div className="maths-card-title">
-                    <i>03</i>
-                    <div>
-                      <b>Short products</b>
-                      <span>Cashback combines asset-side value with inverse-squared Short exposure</span>
-                    </div>
-                  </div>
-                  <div className="equation-stack">
-                    <code>S<sub>2x</sub>(p) = S<sub>m=1</sub>(p)</code>
-                    <code>S<sub>cashback,cash</sub>(p) = 0.5p + 0.5 / p<sup>2</sup></code>
-                    <code>S<sub>cashback,spot</sub>(p) = p + 0.5 / p<sup>2</sup> − 0.5</code>
-                    <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
-                    <CalculationUnderReviewWarning className="maths-review-warning" />
-                  </div>
-                </section>
+  <div className="maths-card-title">
+    <i>03</i>
+    <div>
+      <b>Short products</b>
+      <span>Short-side payoff structures</span>
+    </div>
+  </div>
+
+  <div className="equation-stack">
+    <code>S<sub>2x</sub>(p) = S<sub>m=1</sub>(p)</code>
+    <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5 / p²</code>
+    <code>S<sub>cashback,spot</sub>(p) = 0.5p + 0.5 / p²</code>
+    <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
+    <CalculationUnderReviewWarning className="maths-review-warning" />
+  </div>
+</section>
               </div>
 
-              <section className="maths-assumptions">
-                <div>
-                  <small>USER-FACING PRODUCTS</small>
-                  <strong>2x</strong>
-                  <strong>2x Cashback</strong>
-                  <strong>2.5x</strong>
-                  <small>SHORT PRODUCT MODEL</small>
-                  <strong>2x → m = 1.00</strong>
-                  <strong>2x Cashback → 0.5p + 0.5 / p²</strong>
-                  <strong>2.5x → m = 2.00</strong>
-                </div>
-                <div>
-                  <small>MODEL ASSUMPTIONS</small>
-                  <ul>
-                    <li>All curves start at 1.00 when <var>p</var> = 1.</li>
-                    <li>
-                      Long and Short products are independently selected. Each closed-form curve
-                      assumes its target exposure is ideally maintained through rebalancing;
-                      the rebalancing path itself is not simulated.
-                    </li>
-                    <li>
-                      Long Cashback partitions its eligible curve once. Short Cashback combines
-                      asset-side value with inverse-squared exposure. Nothing is recursively layered.
-                    </li>
-                    <li>
-                      Gross, frictionless and path-independent: the equations show structural
-                      value at each price ratio, not the realised journey to that price.
-                    </li>
-                    <li>
-                      Volatility-farming yield, borrowing and funding costs, fees, rebalancing
-                      execution, liquidation effects and slippage are excluded. The model does not
-                      determine whether yield outweighs those costs.
-                    </li>
-                    <li>
-                      “Short” identifies the inverse/rebalanced product family. Cashback routing
-                      can offset its directional exposure.
-                    </li>
-                    <li>
-                      <var>p</var> is floored internally at 0.000001 because the Short equation
-                      contains 1 ÷ <var>p</var>. Extreme downside values are idealised curve
-                      extrapolations without liquidity or capacity limits.
-                    </li>
-                  </ul>
-                </div>
-              </section>
+             <section className="maths-assumptions">
+  <div style={{ gridColumn: "1 / -1" }}>
+    <small>MODEL ASSUMPTIONS</small>
+    <ul>
+      <li>
+        All curves are normalised to 1.00 at entry, where <var>p</var> = 1.
+      </li>
+
+      <li>
+        Long and Short products are independently selected. Each closed-form curve
+        assumes its target exposure is ideally maintained through rebalancing;
+        the rebalancing path itself is not simulated.
+      </li>
+
+      <li>
+    Cashback products model a 150% borrow of the paired asset against the initial
+    deposit: 100% is used with the supplied asset to form the LP, while the
+    additional 50% is paid out as Cashback. The resulting V4 sleeve follows
+    0.5<var>p</var>² on Long and 0.5 / <var>p</var>² on Short. Cashback held as
+    Cash remains fixed at 0.5; Cashback routed to Spot follows 0.5<var>p</var>.
+    
+  </li>
+
+      <li>
+        Gross, frictionless and path-independent: the equations show structural
+        value at each price ratio, not the realised journey to that price.
+      </li>
+
+      <li>
+        Volatility-farming yield, borrowing and funding costs, fees, rebalancing
+        execution, liquidation effects and slippage are excluded. The model does not
+        determine whether yield outweighs those costs.
+      </li>
+
+      <li>
+        “Short” identifies the inverse/rebalanced product family. Spot-routed Cashback
+        can partially offset its directional Short exposure.
+      </li>
+
+      <li>
+        <var>p</var> is floored internally at 0.000001 because the Short equations
+        contain inverse-price terms. Extreme downside values are idealised curve
+        extrapolations without liquidity or capacity limits.
+      </li>
+    </ul>
+  </div>
+</section> 
             </div>
             <footer>
               <span>V4 model equations · Normalised at entry</span>

@@ -43,7 +43,7 @@ describe("discrete V4 optimiser", () => {
   });
 
   it("can force Short Cashback when Long is limited to 2x", () => {
-    const config = optimisePortfolio({ ...options, cashbackPolicy: "forced", longMaxLtv: .5 });
+    const config = optimisePortfolio({ ...options, maxDrawdown: .5, cashbackPolicy: "forced", longMaxLtv: .5 });
     expect(config.shortMode).toBe("2.5x-cashback");
     expect(config.longAllocation).toBeLessThan(1);
   });

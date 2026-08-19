@@ -12,11 +12,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 10000,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -38,57 +38,21 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
     },
-    "productRoutingDecision": {
-      "targetPercent": 200,
-      "selected": {
-        "config": {
-          "deposit": 10000,
-          "longAllocation": 0.5,
-          "longMode": "2.5x-looped",
-          "shortMode": "2.5x-cashback",
-          "shortLtv": 0.75,
-          "longLtv": 0.75,
-          "cashbackMode": "spot",
-          "cashOutEnabled": true,
-          "degenEnabled": false,
-          "degenMode": "x1",
-          "customRecyclePct": 0
-        },
-        "routing": "spot",
-        "targetReturn": 477.77777777777777
-      },
-      "alternative": {
-        "config": {
-          "deposit": 10000,
-          "longAllocation": 0.5,
-          "longMode": "2.5x-looped",
-          "shortMode": "2.5x-cashback",
-          "shortLtv": 0.75,
-          "longLtv": 0.75,
-          "cashbackMode": "cash",
-          "cashOutEnabled": true,
-          "degenEnabled": false,
-          "degenMode": "x1",
-          "customRecyclePct": 0
-        },
-        "routing": "cash",
-        "targetReturn": 427.77777777777777
-      }
-    },
+    "productRoutingDecision": null,
     "objectiveAnalysis": null
   },
   {
@@ -98,11 +62,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "status": "optimal",
       "config": {
         "deposit": 10000,
-        "longAllocation": 0,
-        "longMode": "2x",
+        "longAllocation": 0.44,
+        "longMode": "2.5x-cashback",
         "shortMode": "2.5x-cashback",
         "shortLtv": 0.75,
-        "longLtv": 0.5,
+        "longLtv": 0.75,
         "cashbackMode": "cash",
         "cashOutEnabled": true,
         "degenEnabled": false,
@@ -126,16 +90,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -150,13 +114,13 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "status": "optimal",
       "config": {
         "deposit": 10000,
-        "longAllocation": 0.28,
+        "longAllocation": 0.36,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -173,7 +137,7 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "kind": "spot",
         "targetPercent": 50,
         "targetValue": 1.5,
-        "achievedValue": 1.5100000000000002,
+        "achievedValue": 1.5033333333333332,
         "shortfall": 0,
         "reached": true
       },
@@ -185,16 +149,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -203,13 +167,13 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
     "objectiveAnalysis": {
       "kind": "spot",
       "target": {
-        "v4Return": 51.00000000000002,
+        "v4Return": 50.33333333333332,
         "benchmarkReturn": 50,
-        "parityMargin": 1.0000000000000213
+        "parityMargin": 0.3333333333333215
       },
-      "v4MaxDrawdown": -27.997200000000007,
+      "v4MaxDrawdown": -35.9964,
       "spotMaxDrawdown": -99,
-      "protectionGained": 71.0028,
+      "protectionGained": 63.0036,
       "analysisMinMove": -99,
       "analysisMaxMove": 200
     }
@@ -223,11 +187,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 10000,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -249,16 +213,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -275,7 +239,7 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "worstEdgePts": 0,
         "worstMove": 0,
         "aheadPercent": 99.66666666666667,
-        "averageEdgePts": 1418.5060690813505,
+        "averageEdgePts": 90.23136566916253,
         "maxDrawdown": -0.49995
       }
     }
@@ -289,11 +253,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 25000,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -315,57 +279,21 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
     },
-    "productRoutingDecision": {
-      "targetPercent": 200,
-      "selected": {
-        "config": {
-          "deposit": 25000,
-          "longAllocation": 0.5,
-          "longMode": "2.5x-looped",
-          "shortMode": "2.5x-cashback",
-          "shortLtv": 0.75,
-          "longLtv": 0.75,
-          "cashbackMode": "spot",
-          "cashOutEnabled": true,
-          "degenEnabled": false,
-          "degenMode": "x1",
-          "customRecyclePct": 0
-        },
-        "routing": "spot",
-        "targetReturn": 477.77777777777777
-      },
-      "alternative": {
-        "config": {
-          "deposit": 25000,
-          "longAllocation": 0.5,
-          "longMode": "2.5x-looped",
-          "shortMode": "2.5x-cashback",
-          "shortLtv": 0.75,
-          "longLtv": 0.75,
-          "cashbackMode": "cash",
-          "cashOutEnabled": true,
-          "degenEnabled": false,
-          "degenMode": "x1",
-          "customRecyclePct": 0
-        },
-        "routing": "cash",
-        "targetReturn": 427.77777777777777
-      }
-    },
+    "productRoutingDecision": null,
     "objectiveAnalysis": null
   },
   {
@@ -375,11 +303,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "status": "optimal",
       "config": {
         "deposit": 25000,
-        "longAllocation": 0,
-        "longMode": "2x",
+        "longAllocation": 0.44,
+        "longMode": "2.5x-cashback",
         "shortMode": "2.5x-cashback",
         "shortLtv": 0.75,
-        "longLtv": 0.5,
+        "longLtv": 0.75,
         "cashbackMode": "cash",
         "cashOutEnabled": true,
         "degenEnabled": false,
@@ -403,16 +331,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -427,13 +355,13 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "status": "optimal",
       "config": {
         "deposit": 25000,
-        "longAllocation": 0.28,
+        "longAllocation": 0.36,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -450,7 +378,7 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "kind": "spot",
         "targetPercent": 50,
         "targetValue": 1.5,
-        "achievedValue": 1.5100000000000002,
+        "achievedValue": 1.5033333333333332,
         "shortfall": 0,
         "reached": true
       },
@@ -462,16 +390,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -480,13 +408,13 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
     "objectiveAnalysis": {
       "kind": "spot",
       "target": {
-        "v4Return": 51.00000000000002,
+        "v4Return": 50.33333333333332,
         "benchmarkReturn": 50,
-        "parityMargin": 1.0000000000000213
+        "parityMargin": 0.3333333333333215
       },
-      "v4MaxDrawdown": -27.997200000000007,
+      "v4MaxDrawdown": -35.9964,
       "spotMaxDrawdown": -99,
-      "protectionGained": 71.0028,
+      "protectionGained": 63.0036,
       "analysisMinMove": -99,
       "analysisMaxMove": 200
     }
@@ -500,11 +428,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 25000,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -518,7 +446,7 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "debtParity": {
         "targetPercent": 50,
         "debtValue": 45000,
-        "v4Value": 43402.77777777778,
+        "v4Value": 41666.666666666664,
         "secured": false
       },
       "perpParity": null,
@@ -526,8 +454,8 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "kind": "lending",
         "targetPercent": 50,
         "targetValue": 45000,
-        "achievedValue": 43402.77777777778,
-        "shortfall": 1597.222222222219,
+        "achievedValue": 41666.666666666664,
+        "shortfall": 3333.3333333333358,
         "reached": false
       },
       "failure": null,
@@ -538,16 +466,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -556,15 +484,15 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
     "objectiveAnalysis": {
       "kind": "lending",
       "target": {
-        "v4Return": 73.61111111111111,
+        "v4Return": 66.66666666666666,
         "benchmarkReturn": 80,
-        "parityMargin": -6.388888888888886
+        "parityMargin": -13.333333333333343
       },
       "liquidation": {
         "assetMove": -55.88235294117647,
         "assetPrice": 882.3529411764706,
-        "v4Return": 35.23510188389083,
-        "v4Value": 33808.77547097271
+        "v4Return": -22.572087658592842,
+        "v4Value": 19356.978085351788
       }
     }
   },
@@ -577,11 +505,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 25000,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -603,16 +531,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -626,10 +554,10 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "requestedMaxMove": 200,
         "effectiveMinMove": -55.88235294117647,
         "effectiveMaxMove": 200,
-        "worstEdgePts": -8.73220137035342,
-        "worstMove": 31.825752459533117,
-        "aheadPercent": 73.25581395348837,
-        "averageEdgePts": 40.220836879636,
+        "worstEdgePts": -13.398998547854802,
+        "worstMove": 46.62802796854767,
+        "aheadPercent": 62.4031007751938,
+        "averageEdgePts": 21.975130774246633,
         "maxDrawdown": -0.49995
       }
     }
@@ -643,11 +571,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 17500,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -669,57 +597,21 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
     },
-    "productRoutingDecision": {
-      "targetPercent": 200,
-      "selected": {
-        "config": {
-          "deposit": 17500,
-          "longAllocation": 0.5,
-          "longMode": "2.5x-looped",
-          "shortMode": "2.5x-cashback",
-          "shortLtv": 0.75,
-          "longLtv": 0.75,
-          "cashbackMode": "spot",
-          "cashOutEnabled": true,
-          "degenEnabled": false,
-          "degenMode": "x1",
-          "customRecyclePct": 0
-        },
-        "routing": "spot",
-        "targetReturn": 477.77777777777777
-      },
-      "alternative": {
-        "config": {
-          "deposit": 17500,
-          "longAllocation": 0.5,
-          "longMode": "2.5x-looped",
-          "shortMode": "2.5x-cashback",
-          "shortLtv": 0.75,
-          "longLtv": 0.75,
-          "cashbackMode": "cash",
-          "cashOutEnabled": true,
-          "degenEnabled": false,
-          "degenMode": "x1",
-          "customRecyclePct": 0
-        },
-        "routing": "cash",
-        "targetReturn": 427.77777777777777
-      }
-    },
+    "productRoutingDecision": null,
     "objectiveAnalysis": null
   },
   {
@@ -729,11 +621,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "status": "optimal",
       "config": {
         "deposit": 17500,
-        "longAllocation": 0,
-        "longMode": "2x",
+        "longAllocation": 0.44,
+        "longMode": "2.5x-cashback",
         "shortMode": "2.5x-cashback",
         "shortLtv": 0.75,
-        "longLtv": 0.5,
+        "longLtv": 0.75,
         "cashbackMode": "cash",
         "cashOutEnabled": true,
         "degenEnabled": false,
@@ -757,16 +649,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -781,13 +673,13 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "status": "optimal",
       "config": {
         "deposit": 17500,
-        "longAllocation": 0.28,
+        "longAllocation": 0.36,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -804,7 +696,7 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "kind": "spot",
         "targetPercent": 50,
         "targetValue": 1.5,
-        "achievedValue": 1.5100000000000002,
+        "achievedValue": 1.5033333333333332,
         "shortfall": 0,
         "reached": true
       },
@@ -816,16 +708,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -834,13 +726,13 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
     "objectiveAnalysis": {
       "kind": "spot",
       "target": {
-        "v4Return": 51.00000000000002,
+        "v4Return": 50.33333333333332,
         "benchmarkReturn": 50,
-        "parityMargin": 1.0000000000000213
+        "parityMargin": 0.3333333333333215
       },
-      "v4MaxDrawdown": -27.997200000000007,
+      "v4MaxDrawdown": -35.9964,
       "spotMaxDrawdown": -99,
-      "protectionGained": 71.0028,
+      "protectionGained": 63.0036,
       "analysisMinMove": -99,
       "analysisMaxMove": 200
     }
@@ -854,11 +746,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 17500,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -873,15 +765,15 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
       "perpParity": {
         "targetPercent": 50,
         "perpValue": 32500,
-        "v4Value": 30381.944444444445,
+        "v4Value": 29166.666666666664,
         "secured": false
       },
       "parity": {
         "kind": "perp",
         "targetPercent": 50,
         "targetValue": 32500,
-        "achievedValue": 30381.944444444445,
-        "shortfall": 2118.0555555555547,
+        "achievedValue": 29166.666666666664,
+        "shortfall": 3333.3333333333358,
         "reached": false
       },
       "failure": null,
@@ -892,16 +784,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -910,15 +802,15 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
     "objectiveAnalysis": {
       "kind": "perp",
       "target": {
-        "v4Return": 73.61111111111111,
+        "v4Return": 66.66666666666666,
         "benchmarkReturn": 85.71428571428572,
-        "parityMargin": -12.103174603174608
+        "parityMargin": -19.047619047619065
       },
       "liquidation": {
         "assetMove": -40,
         "assetPrice": 1200,
-        "v4Return": -7.55555555555556,
-        "v4Value": 16177.777777777777
+        "v4Return": -25.333333333333343,
+        "v4Value": 13066.666666666666
       }
     }
   },
@@ -931,11 +823,11 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "deposit": 17500,
         "longAllocation": 0.5,
         "longMode": "2.5x-looped",
-        "shortMode": "2.5x-cashback",
-        "shortLtv": 0.75,
+        "shortMode": "2x",
+        "shortLtv": 0.5,
         "longLtv": 0.75,
-        "cashbackMode": "spot",
-        "cashOutEnabled": true,
+        "cashbackMode": "cash",
+        "cashOutEnabled": false,
         "degenEnabled": false,
         "degenMode": "x1",
         "customRecyclePct": 0
@@ -957,16 +849,16 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
             "resolutionPercent": 1,
             "candidatesConsidered": 1818,
             "candidatesEvaluated": 1818,
-            "candidatesRejected": 900,
+            "candidatesRejected": 1164,
             "regionsAvailable": 1818,
-            "regionsRetained": 918,
+            "regionsRetained": 654,
             "regionsPruned": 0,
             "durationMs": 0
           }
         ],
         "candidatesConsidered": 1818,
         "candidatesEvaluated": 1818,
-        "candidatesRejected": 900,
+        "candidatesRejected": 1164,
         "regionsPruned": 0,
         "durationMs": 0
       }
@@ -980,10 +872,10 @@ export const GENERATED_DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[]
         "requestedMaxMove": 200,
         "effectiveMinMove": -40,
         "effectiveMaxMove": 200,
-        "worstEdgePts": -12.816766368342613,
-        "worstMove": 39.74864386243097,
-        "aheadPercent": 64.73029045643153,
-        "averageEdgePts": 28.039034109250554,
+        "worstEdgePts": -19.29653363629418,
+        "worstMove": 56.620218415911836,
+        "aheadPercent": 51.45228215767634,
+        "averageEdgePts": 10.856521840695061,
         "maxDrawdown": -0.49995
       }
     }

@@ -42,7 +42,7 @@ const shortRebalancedValue = (p: number, ltv: SupportedV4Ltv) => {
 };
 const shortCashbackPositionValue = (p: number) => {
   p = validP(p);
-  return p + 1 / p ** 2 - 1;
+  return 1 / p ** 2;
 };
 export const shortValue = (p: number, mode: ShortV4Mode | SupportedV4Ltv, routing: CashbackMode = "cash") => {
   if (typeof mode === "number") return shortRebalancedValue(p, mode);
