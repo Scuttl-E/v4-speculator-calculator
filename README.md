@@ -64,9 +64,9 @@ Harvester is a separate planning workspace: opening, editing, or closing it does
 
 ## V4 products
 
-Long and Short positions can each use the same three configurations. The simplest way to understand their formation is by looking at how much gross V4 exposure is created from the starting capital, and whether the additional gross `0.5x` is returned as Cashback or kept working inside V4.
+Long and Short positions can each use the same three configurations. The products differ in how much paired-asset borrowing is used and whether the additional 50% borrow remains outside the V4 position as Cashback or is kept working inside V4.
 
-At a high level, V4 combines the capital supplied by the user with borrowed capital to create the two sides of an LP position. The leverage factor compares that gross position with the user's starting capital. It describes position formation, not a direct multiplier applied to returns.
+At a high level, the Cashback model starts with 100% of the user's capital supplied as one side of the LP and 150% of that value borrowed in the paired asset. 100% of the borrowed asset is paired with the supplied asset to form the LP, while the additional 50% is paid out as Cashback. The same entry accounting is used for both Long and Short Cashback products; their payoff curves differ after entry.
 
 ### 2x
 
@@ -78,15 +78,13 @@ The position therefore has a `2x` leverage factor: twice as much gross exposure 
 
 ### 2x Cashback
 
-`2x Cashback` uses the higher-leverage configuration to keep a structural V4 position working while returning the additional value made available by that configuration to the user as Cashback. Its complete payoff curve is not identical to the standalone `2x` product.
+`2x Cashback` models the user supplying 100% of the starting capital as one side of the LP and borrowing 150% of its value in the paired asset. 100% of the borrowed asset is used to complete the LP, while the additional 50% borrow is paid out to the user as Cashback.
 
-In the calculator, that Cashback equals 50% of the starting deposit. It can remain as cash or be used to buy the underlying spot asset.
+In the calculator, that Cashback therefore equals 50% of the starting deposit. At entry, 50% of the original net value remains inside V4 and 50% sits outside as Cashback, while total net wealth remains equal to the original deposit.
 
-**Example:** `$10,000 starting capital → $20,000 gross V4 exposure + $5,000 Cashback`
+**Example:** `$10,000 starting capital → $20,000 gross LP assets + $5,000 Cashback, financed by $15,000 of paired-asset borrowing`
 
 Cash routing keeps the Cashback value fixed after entry. Spot routing gives that Cashback continuing exposure to changes in the underlying asset price.
-
-We suspect `2x Cashback` is the configuration Peapods refers to as the **Super Strategy**: its public examples describe superlinear returns together with 50% Cashback on entry, and the published scenario values align with this calculator's model.
 
 The Cashback is created once. It is not recursively reinvested, multiplied again, or counted both inside and outside V4.
 
@@ -111,7 +109,7 @@ It is never used in both places at once.
 
 ### How the calculator models the result
 
-The exposure examples above explain how the positions are formed. The chart then uses normalised payoff equations to estimate their gross structural value at each price ratio. This is a frictionless state model of the response attributed to ideal rebalancing; it does not simulate the path taken between entry and the selected price.
+The exposure examples above explain how the positions are formed. The chart then uses normalised payoff equations to estimate their modelled structural value at each price ratio. This is a frictionless state model of the response attributed to ideal rebalancing; it does not simulate the path taken between entry and the selected price.
 
 Let:
 
@@ -134,7 +132,7 @@ The Short model uses the inverse-exposure parameter:
 
 `m = 0.5 ÷ (1 - Short LTV)`
 
-This gives `m = 1` for the modelled `2x` Short and `m = 2` for the structural curve used by `2x Cashback` and `2.5x`. The parameter `m` is not an exponent: it scales the inverse-price sleeve in the Short equation.
+This gives `m = 1` for the modelled `2x` Short and `m = 2` for the modelled `2.5x` Short. The parameter `m` is not an exponent: it scales the inverse-price sleeve in the Short equation. `2x Cashback` is modelled separately using an inverse-square retained V4 sleeve.
 
 The Short model uses the rebalanced curve:
 
@@ -149,10 +147,15 @@ This decomposition shows the modelled positive-price sleeve, the inverse-price s
 The Short values are modelled as:
 
 - `2x: Sₘ₌₁(p)`
-- `2x Cashback: 0.5Sₘ₌₂(p) + 0.5R(p)`
+- `2x Cashback: 0.5 / p² + 0.5R(p)`
 - `2.5x: Sₘ₌₂(p)`
 
-`Short` identifies the inverse/rebalanced product family rather than guaranteeing that the complete routed position has negative directional exposure at every price. In particular, converting Cashback to spot can offset part or all of the structural Short exposure.
+This means Short Cashback resolves to:
+
+- `Cash: 0.5 + 0.5 / p²`
+- `Spot: 0.5p + 0.5 / p²`
+
+`Short` identifies the inverse/rebalanced product family rather than guaranteeing that the complete routed position has negative directional exposure at every price. In particular, routing Cashback to spot can offset part or all of the retained Short exposure.
 
 If `a` is the proportion of starting capital allocated to Long, the combined normalised position is:
 
