@@ -2108,8 +2108,19 @@ export default function App() {
                 aria-label="Asset name or symbol"
               />
             </label>
+            <div className="asset-name-presets" role="group" aria-label="Asset name presets">
+              {(["ETH", "BTC", "PEAS"] as const).map((preset) => (
+                <button
+                  type="button"
+                  key={preset}
+                  className={assetName.trim().toUpperCase() === preset ? "on" : ""}
+                  onClick={() => setAssetName(preset)}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
             <div className="asset-name-actions">
-              <button type="button" onClick={() => setAssetName(DEFAULT_ASSET_NAME)}>RESET TO {DEFAULT_ASSET_NAME}</button>
               <button type="button" onClick={() => setShowAssetName(false)}>DONE</button>
             </div>
           </section>
