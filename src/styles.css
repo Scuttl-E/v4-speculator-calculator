@@ -299,11 +299,13 @@ main:has(.cashback-control-help:focus-visible) .shell { overflow: visible; }
 .manual-position .field-label { display: block; margin: 12px 0 6px; }
 .manual-position .section-label + .field-label { margin-top: 10px; }
 .manual-position .cashback-segments + .field-label { margin-top: 14px; }
-.manual-position .product-mode-segments {
+.manual-position .product-mode-segments,
+.discrete-leverage-limits .product-mode-segments {
   display: grid;
   grid-template-columns: .85fr 1.3fr .85fr;
 }
-.manual-position .product-mode-segments button { width: 100%; }
+.manual-position .product-mode-segments button,
+.discrete-leverage-limits .product-mode-segments button { width: 100%; }
 .calculation-under-review {
   display: block;
   color: #60A5FA;

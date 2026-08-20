@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { optimisePortfolio, optimisePortfolioWithOutcome, targetPercentToPrice } from "./optimiser";
+import { optimisePortfolio, optimisePortfolioWithOutcome, permittedProductModes, targetPercentToPrice } from "./optimiser";
 import { analysisRangeFromPercent, findWorstComponentDrawdown, portfolioValue } from "./v4Math";
 import type { OptimiseOptions } from "./types";
 
@@ -23,6 +23,17 @@ const options: OptimiseOptions = {
 };
 
 describe("discrete V4 optimiser", () => {
+  it("maps leverage caps to the permitted product set", () => {
+    expect(permittedProductModes(.5)).toEqual(["2x"]);
+    expect(permittedProductModes(.625)).toEqual(["2x", "2.5x-cashback"]);
+    expect(permittedProductModes(.75)).toEqual(["2x", "2.5x-cashback", "2.5x-looped"]);
+  });
+
+  it("does not choose 2.5x when the cap is 2x cashback", () => {
+    const result = optimisePortfolio({ ...options, maxDrawdown: .8, longMaxLtv: .625, shortMaxLtv: .625 });
+    expect(["2x", "2.5x-cashback"]).toContain(result.longMode);
+    expect(["2x", "2.5x-cashback"]).toContain(result.shortMode);
+  });
   it("considers only protocol products", () => {
     const result = optimisePortfolio(options);
     expect(["2x", "2.5x-cashback", "2.5x-looped"]).toContain(result.longMode);

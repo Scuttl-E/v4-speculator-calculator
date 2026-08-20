@@ -20,6 +20,8 @@ import {
   findDownsideBreakeven,
   findWorstComponentDrawdown,
   MAX_V4_LTV,
+  MIN_V4_LTV,
+  CASHBACK_V4_LTV_LIMIT,
   longLtvForMode,
   longModeLabel,
   shortModeLabel,
@@ -1291,6 +1293,8 @@ export default function App() {
   const lastRun = displayedResult;
   const optimising = runState.kind === "running";
   const maxLtv = MAX_V4_LTV * 100;
+  const twoXLtvLimit = MIN_V4_LTV * 100;
+  const cashbackLtvLimit = CASHBACK_V4_LTV_LIMIT * 100;
   const pendingAnalysisRange = useMemo(
     () => analysisRangeFromPercent(analysisMinPercent, analysisMaxPercent),
     [analysisMinPercent, analysisMaxPercent],
@@ -2642,13 +2646,15 @@ export default function App() {
                     </div>
                     {leverageLimitsExpanded && <div className="leverage-limit-editor">
                       <label className="field-label">LONG</label>
-                      <div className="segments wide cashback-segments">
-                        <button className={longLtvLimit < maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(50)}>2x</button>
+                      <div className="segments wide cashback-segments product-mode-segments">
+                        <button className={longLtvLimit < cashbackLtvLimit ? "on" : ""} onClick={() => setLongLtvLimit(twoXLtvLimit)}>2x</button>
+                        <button className={longLtvLimit >= cashbackLtvLimit && longLtvLimit < maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(cashbackLtvLimit)}>{longModeLabel("2.5x-cashback")}</button>
                         <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>2.5x</button>
                       </div>
                       <label className="field-label">SHORT</label>
-                      <div className="segments wide cashback-segments">
-                        <button className={shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(50)}>2x</button>
+                      <div className="segments wide cashback-segments product-mode-segments">
+                        <button className={shortLtvLimit < cashbackLtvLimit ? "on" : ""} onClick={() => setShortLtvLimit(twoXLtvLimit)}>2x</button>
+                        <button className={shortLtvLimit >= cashbackLtvLimit && shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(cashbackLtvLimit)}>{longModeLabel("2.5x-cashback")}</button>
                         <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>2.5x</button>
                       </div>
                       <button type="button" className="reset-leverage-limits" onClick={() => { setLongLtvLimit(maxLtv); setShortLtvLimit(maxLtv); setLeverageLimitsExpanded(false); }}>RESET TO AUTO</button>

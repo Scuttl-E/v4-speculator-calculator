@@ -4,6 +4,7 @@ import {
   findUpsideBreakeven,
   findWorstComponentDrawdown,
   MAX_V4_LTV,
+  CASHBACK_V4_LTV_LIMIT,
   portfolioValue,
 } from "./v4Math";
 import { debtPositionValue } from "./debtPosition";
@@ -27,6 +28,7 @@ import type {
   ParityOutcome,
   ShortV4Mode,
   Trough,
+  V4ProductMode,
 } from "./types";
 
 const EPSILON = 1e-9;
@@ -109,15 +111,17 @@ function validateOptions(options: OptimiseOptions) {
     throw new RangeError("Search step must be between 0% and 100%");
 }
 
+export function permittedProductModes(limit: number): readonly V4ProductMode[] {
+  if (limit < CASHBACK_V4_LTV_LIMIT) return ["2x"];
+  if (limit < MAX_V4_LTV) return ["2x", "2.5x-cashback"];
+  return ["2x", "2.5x-cashback", "2.5x-looped"];
+}
+
 function permittedProducts(options: OptimiseOptions) {
   const longLimit = options.longMaxLtv ?? options.maxLtv;
   const shortLimit = options.shortMaxLtv ?? options.maxLtv;
-  let longModes: readonly LongV4Mode[] = longLimit < 0.75
-    ? ["2x"]
-    : ["2x", "2.5x-cashback", "2.5x-looped"];
-  let shortModes: readonly ShortV4Mode[] = shortLimit < 0.75
-    ? ["2x"]
-    : ["2x", "2.5x-cashback", "2.5x-looped"];
+  let longModes = [...permittedProductModes(longLimit)];
+  let shortModes = [...permittedProductModes(shortLimit)];
   if ((options.cashbackPolicy ?? "auto") === "off") {
     longModes = longModes.filter((mode) => mode !== "2.5x-cashback");
     shortModes = shortModes.filter((mode) => mode !== "2.5x-cashback");

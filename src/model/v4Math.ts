@@ -1,6 +1,8 @@
 import type { AnalysisRange, CashbackMode, Config, LongV4Mode, ShortV4Mode, SupportedV4Ltv, Trough, V4ProductMode } from "./types";
 export const MIN_V4_LTV = 0.5;
 export const MAX_V4_LTV = 0.75;
+/** Sentinel between 2x and 2.5x used as an optimiser product cap for 2x Cashback. */
+export const CASHBACK_V4_LTV_LIMIT = 0.625;
 export const peapodsLeverageFactor = (ltv: number) => 1 + 2 * ltv;
 export const longLtvForMode = (mode: LongV4Mode): SupportedV4Ltv => mode === "2x" ? 0.5 : 0.75;
 export const shortLtvForMode = (mode: ShortV4Mode): SupportedV4Ltv => mode === "2x" ? 0.5 : 0.75;
