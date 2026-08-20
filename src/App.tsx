@@ -1051,6 +1051,12 @@ function ChartTooltip({
   );
 }
 export default function App() {
+  const isDesktopApp = isDesktopShell();
+  const isTouchBrowser = !isDesktopApp && navigator.maxTouchPoints > 0;
+  const shortestScreenSide = Math.min(window.screen.width, window.screen.height);
+  const isPhoneBrowser = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) || (
+    isTouchBrowser && shortestScreenSide <= 600
+  );
   const [optimisationCache] = useState(createDefaultOptimisationCache);
   const [defaultPresetSignatures] = useState(
     () => new Set(createDefaultOptimisationCache().keys()),
@@ -1091,6 +1097,7 @@ export default function App() {
     [perpState, setPerpState] = useState<PerpPositionInput>({ ...DEFAULT_PERP }),
     [showPerp, setShowPerp] = useState(true),
     [webChartWheelZoomEnabled, setWebChartWheelZoomEnabled] = useState(false),
+    [chartTouchHoverEnabled, setChartTouchHoverEnabled] = useState(() => isTouchBrowser),
     [showMaths, setShowMaths] = useState(false),
     [showSettings, setShowSettings] = useState(false),
     [showAssetName, setShowAssetName] = useState(false),
@@ -1211,19 +1218,13 @@ export default function App() {
     setRailCanScrollDown(rail.scrollTop + rail.clientHeight < rail.scrollHeight - 1);
   };
   const [persistenceLoaded, setPersistenceLoaded] = useState(false);
-  const isDesktopApp = isDesktopShell();
   const canZoomChartWithWheel = isDesktopApp || webChartWheelZoomEnabled;
   useEffect(() => {
     if (isDesktopApp) return;
     const isAndroid = /Android/i.test(navigator.userAgent);
-    const shortestScreenSide = Math.min(window.screen.width, window.screen.height);
-    const isPhysicalPhone = navigator.maxTouchPoints > 0 && (
-      shortestScreenSide <= 600 || shortestScreenSide / window.devicePixelRatio <= 600
-    );
-    const isPhone = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) || isPhysicalPhone;
     document.documentElement.classList.add("web-build");
     document.body.classList.add("web-build");
-    if (isPhone) {
+    if (isPhoneBrowser) {
       document.documentElement.classList.add("phone-web");
       document.body.classList.add("phone-web");
     }
@@ -1239,7 +1240,7 @@ export default function App() {
       document.documentElement.classList.remove("android-web");
       document.body.classList.remove("android-web");
     };
-  }, [isDesktopApp]);
+  }, [isDesktopApp, isPhoneBrowser]);
   useEffect(() => {
     if (!showMaths) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -1305,12 +1306,15 @@ export default function App() {
       if (typeof saved.webChartWheelZoomEnabled === "boolean") {
         setWebChartWheelZoomEnabled(saved.webChartWheelZoomEnabled);
       }
+      if (isTouchBrowser && typeof saved.chartTouchHoverEnabled === "boolean") {
+        setChartTouchHoverEnabled(saved.chartTouchHoverEnabled);
+      }
       if (typeof saved.assetName === "string") setAssetName(saved.assetName.trim().slice(0, 16) || DEFAULT_ASSET_NAME);
     }).finally(() => {
       if (!cancelled) setPersistenceLoaded(true);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [isTouchBrowser]);
   const debtPosition = useMemo<DebtPositionInput>(
     () => ({ assetPrice, assetAmount, usdDebt, liquidationLtv: liquidationLtv / 100 }),
     [assetPrice, assetAmount, usdDebt, liquidationLtv],
@@ -1333,7 +1337,7 @@ export default function App() {
         comparisonMode, manualConfigsByMode, optimiserDeposit, optimiserControlsByMode,
         workspaceControlsByMode,
         degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
-        minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled,
+        minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled, chartTouchHoverEnabled,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
         usdDebt, liquidationLtv, perpState, assetName,
       });
@@ -1343,7 +1347,7 @@ export default function App() {
     assetAmount, assetName, assetPrice, baseAssetValue, chartSeriesVisibility, comparisonMode,
     defaultMaxDrawdown, degenSettingsByMode, liquidationLtv, manualConfigsByMode, maxDrawdownByMode,
     optimiserControlsByMode, optimiserDeposit, perpState, persistenceLoaded,
-    showDebt, showPerp, usdDebt, webChartWheelZoomEnabled, workspaceControlsByMode,
+    showDebt, showPerp, usdDebt, webChartWheelZoomEnabled, chartTouchHoverEnabled, workspaceControlsByMode,
   ]);
   const pendingComparisonIsValid = comparisonMode === "base"
     ? true
@@ -1699,7 +1703,7 @@ export default function App() {
     comparisonMode, manualConfigsByMode, optimiserDeposit, optimiserControlsByMode,
     workspaceControlsByMode,
     degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
-    minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled,
+    minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled, chartTouchHoverEnabled,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
     usdDebt, liquidationLtv, perpState, assetName,
   });
@@ -2151,19 +2155,36 @@ export default function App() {
               <button type="button" aria-label="Close settings" onClick={() => setShowSettings(false)}>×</button>
             </header>
             {!isDesktopApp && (
-              <label className="settings-wheel-zoom-toggle">
-                <span>
-                  <b>CHART MOUSE-WHEEL ZOOM</b>
-                  <small>Zoom Strategy Response with the mouse wheel</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={webChartWheelZoomEnabled}
-                  onChange={(event) => setWebChartWheelZoomEnabled(event.target.checked)}
-                  aria-label="Enable chart mouse-wheel zoom"
-                />
-                <i aria-hidden="true" />
-              </label>
+              <>
+                <label className="settings-wheel-zoom-toggle">
+                  <span>
+                    <b>CHART MOUSE-WHEEL ZOOM</b>
+                    <small>Zoom Strategy Response with the mouse wheel</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={webChartWheelZoomEnabled}
+                    onChange={(event) => setWebChartWheelZoomEnabled(event.target.checked)}
+                    aria-label="Enable chart mouse-wheel zoom"
+                  />
+                  <i aria-hidden="true" />
+                </label>
+                {isTouchBrowser && (
+                  <label className="settings-wheel-zoom-toggle">
+                    <span>
+                      <b>CHART TOUCH HOVER</b>
+                      <small>{isPhoneBrowser ? "Enable the tooltip instead of swipe-through chart scrolling" : "Show the chart tooltip when touching the plot"}</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={chartTouchHoverEnabled}
+                      onChange={(event) => setChartTouchHoverEnabled(event.target.checked)}
+                      aria-label="Enable chart touch hover"
+                    />
+                    <i aria-hidden="true" />
+                  </label>
+                )}
+              </>
             )}
             <div className="settings-grid">
               <label>
@@ -3359,7 +3380,7 @@ export default function App() {
               </div>
             </div>
             <div className="chart">
-              <div className="chart-plot" onWheel={canZoomChartWithWheel ? handleChartWheel : undefined}>
+              <div className={`chart-plot${isTouchBrowser ? chartTouchHoverEnabled ? " chart-touch-hover-enabled" : " chart-touch-hover-disabled" : ""}`} onWheel={canZoomChartWithWheel ? handleChartWheel : undefined}>
               {stalePanelActive && (
                 <OptimisationRequiredBadge
                   className="chart-optimisation-required"

@@ -3407,9 +3407,11 @@ main.web-app .shell.pea-nile-enhanced {
 body.web-build.phone-web main.web-app .shell { flex: 0 0 auto; height: auto; align-items: start; overflow: visible; }
 body.web-build.phone-web main.web-app .rail { height: auto; align-self: start; overflow: visible; }
 body.web-build.phone-web main.web-app .rail-scroll { flex: 0 0 auto; overflow: visible; overscroll-behavior: auto; }
-/* A phone swipe over the chart scrolls the page rather than opening a chart tooltip. */
+/* Phones normally pass swipes through to the page. Touch hover can be enabled
+   explicitly in Settings when inspecting the chart is more important. */
 body.web-build.phone-web .chart-plot { touch-action: pan-y; }
-body.web-build.phone-web .chart-plot > .recharts-responsive-container { pointer-events: none; }
+body.web-build.phone-web .chart-plot.chart-touch-hover-enabled { touch-action: manipulation; }
+body.web-build.phone-web .chart-plot.chart-touch-hover-disabled > .recharts-responsive-container { pointer-events: none; }
 
 /* Browser-only cascade locks: narrow viewports must not activate the compact
    desktop tracks inside the fixed-width web workstation. */
