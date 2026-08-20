@@ -862,13 +862,14 @@ function ChartTooltip({
     metrics.push({ key: "perp", label: "PERP POSITION", edgeLabel: "PERP", icon: "perp", returnValue: perpLiquidated ? null : perpReturn, dollarValue: perpLiquidated ? null : perpPositionValue(p, perpPosition), liquidated: perpLiquidated });
   }
   if (showSpot) {
-    metrics.push({ key: "spot", label: `SPOT ${assetLabel}`, edgeLabel: assetLabel, icon: "slate", returnValue: p - 1, dollarValue: config.deposit * p });
+    metrics.push({ key: "spot", label: `SPOT ${assetLabel}`, edgeLabel: "SPOT", icon: "slate", returnValue: p - 1, dollarValue: config.deposit * p });
   }
-  if (showLong) {
+  const oneSidedPosition = config.longAllocation <= 1e-12 || config.longAllocation >= 1 - 1e-12;
+  if (showLong && !oneSidedPosition) {
     const value = portfolioReturn(p, { ...config, longAllocation: 1 }) + 1;
     metrics.push({ key: "long", label: "LONG COMPONENT", edgeLabel: "LONG", icon: "long", returnValue: config.longAllocation * (value - 1), dollarValue: config.deposit * config.longAllocation * value });
   }
-  if (showShort) {
+  if (showShort && !oneSidedPosition) {
     const value = portfolioReturn(p, { ...config, longAllocation: 0 }) + 1;
     metrics.push({ key: "short", label: "SHORT COMPONENT", edgeLabel: "SHORT", icon: "short", returnValue: (1 - config.longAllocation) * (value - 1), dollarValue: config.deposit * (1 - config.longAllocation) * value });
   }
@@ -1268,10 +1269,8 @@ export default function App() {
     : pendingConfig;
   const hasLong = config.longAllocation > 1e-12;
   const hasShort = config.longAllocation < 1 - 1e-12;
-  const isLongOnly = hasLong && !hasShort;
-  const isShortOnly = hasShort && !hasLong;
-  const showLong = hasLong && (showLongSeries || isLongOnly);
-  const showShort = hasShort && (showShortSeries || isShortOnly);
+  const showLong = hasLong && showLongSeries;
+  const showShort = hasShort && showShortSeries;
   const displayObjective = mode === "optimise" && displayedResult
     ? displayedResult.options.objective
     : objective;
@@ -3115,7 +3114,7 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={showLong}
-                      disabled={!hasLong || isLongOnly}
+                      disabled={!hasLong}
                       onChange={(e) => setChartSeriesVisible("long", e.target.checked)}
                     />{" "}
                     Long component
@@ -3124,7 +3123,7 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={showShort}
-                      disabled={!hasShort || isShortOnly}
+                      disabled={!hasShort}
                       onChange={(e) => setChartSeriesVisible("short", e.target.checked)}
                     />{" "}
                     Short component
