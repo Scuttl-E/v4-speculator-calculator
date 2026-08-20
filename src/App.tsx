@@ -88,6 +88,7 @@ import {
   isShortCashbackUnderReview,
 } from "./components/CalculationUnderReviewWarning";
 import { createHarvesterSnapshot, type HarvesterSnapshot } from "./model/harvester";
+import { scenarioPriceRatios } from "./model/scenarioMoves";
 
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", {
@@ -1264,6 +1265,11 @@ export default function App() {
   const displayBaseAssetValue = mode === "optimise" && displayedResult
     ? displayedResult.baseAssetValue
     : baseAssetValue;
+  const displayAssetPrice = displayComparisonMode === "base"
+    ? displayBaseAssetValue
+    : displayComparisonMode === "lending"
+      ? displayDebtPosition.assetPrice
+      : displayPerpState.assetPrice;
   const config = mode === "optimise" && displayedResult
     ? displayedResult.result
     : pendingConfig;
@@ -1886,11 +1892,7 @@ export default function App() {
     setMinMove(DEFAULT_CHART_MIN_MOVE);
     setMaxMove(DEFAULT_CHART_MAX_MOVE);
   };
-  const scenarios = useMemo(() => {
-    const negativeMoves = Array.from({ length: 4 }, (_, index) => minMove + ((-minMove) * index) / 4);
-    const positiveMoves = Array.from({ length: 4 }, (_, index) => (maxMove * (index + 1)) / 4);
-    return [...negativeMoves, 0, ...positiveMoves].map((move) => 1 + move / 100);
-  }, [minMove, maxMove]);
+  const scenarios = useMemo(() => scenarioPriceRatios(minMove, maxMove), [minMove, maxMove]);
   const assetLabel = assetName.trim() || DEFAULT_ASSET_NAME;
   const assetLabelLower = assetLabel.toLowerCase();
   const assetLabelUpper = assetLabel.toUpperCase();
@@ -3485,11 +3487,11 @@ export default function App() {
                 return (
                   <div
                     className={`scenario-row ${p < 1 ? "down" : "up"}${p === 1 ? " zero" : ""}`}
-                    key={p}
+                    key={`scenario-${(p - 1).toFixed(8)}`}
                   >
                     <span className="scenario-asset-move">
                       <strong>{pct(p - 1)}</strong>
-                      {displayComparisonMode === "base" && displayBaseAssetValue > 0 && <small>{money(displayBaseAssetValue * p)}</small>}
+                      {displayAssetPrice > 0 && <small>{money(displayAssetPrice * p)}</small>}
                     </span>
                     <b className="v4-start">{money(v)}</b>
                     {displayComparisonMode === "base" ? <>
