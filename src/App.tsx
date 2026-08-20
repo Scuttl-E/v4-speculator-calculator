@@ -298,6 +298,14 @@ const objectives: Record<Objective, string> = {
   perpParity: "Maximise protection at perp parity",
   benchmarkDominance: "Benchmark dominance",
 };
+const objectiveParameterNotes: Record<Objective, string> = {
+  bullish: "Maximise V4 return at the selected upside target, then contain drawdown across the analysis range.",
+  bearish: "Maximise V4 return at the selected downside target, then contain drawdown across the analysis range.",
+  spotParity: "Match or outperform held spot at the selected target, then maximise downside protection.",
+  debtParity: "Match the lending position at the selected target, then maximise downside protection.",
+  perpParity: "Match the perp position at the selected target, then maximise downside protection.",
+  benchmarkDominance: "Maximise the worst V4 edge versus the comparison benchmark across the analysis range.",
+};
 const INITIAL_CONFIG: Config = {
   deposit: 10000,
   longAllocation: 0.5,
@@ -357,6 +365,7 @@ type OptimiserControlsByMode = Record<ComparisonMode, OptimiserControls>;
 interface WorkspaceControls {
   mode: "manual" | "optimise";
   leverageLimitsExpanded: boolean;
+  objectiveParametersExpanded: boolean;
   minMove: number;
   maxMove: number;
   showLiquidationLine: boolean;
@@ -367,6 +376,7 @@ type WorkspaceControlsByMode = Record<ComparisonMode, WorkspaceControls>;
 const createDefaultWorkspaceControls = (): WorkspaceControls => ({
   mode: "optimise",
   leverageLimitsExpanded: false,
+  objectiveParametersExpanded: false,
   minMove: DEFAULT_CHART_MIN_MOVE,
   maxMove: DEFAULT_CHART_MAX_MOVE,
   showLiquidationLine: true,
@@ -726,6 +736,7 @@ function HorizonInput({
   max,
   sign,
   onChange,
+  className,
 }: {
   label: string;
   detail: string;
@@ -734,11 +745,12 @@ function HorizonInput({
   max: number;
   sign: "+" | "−";
   onChange: (value: number) => void;
+  className?: string;
 }) {
   const commitValue = (next: number) =>
     onChange(Math.min(max, Math.max(min, Math.round(next))));
   return (
-    <div className="horizon-input">
+    <div className={className ? `horizon-input ${className}` : "horizon-input"}>
       <div>
         <b>{label}</b>
         <small>{detail}</small>
@@ -767,6 +779,116 @@ function HorizonInput({
         >
           <span className="step-chevron down" />
         </button>
+      </div>
+    </div>
+  );
+}
+function wheelDeltaPixels(event: globalThis.WheelEvent) {
+  if (event.deltaMode === 1) return event.deltaY * 16;
+  if (event.deltaMode === 2) return event.deltaY * window.innerHeight;
+  return event.deltaY;
+}
+function chainPaneWheelToPage(pane: HTMLElement | null) {
+  if (!pane) return () => undefined;
+  let pageTarget = 0;
+  let pageCurrent = 0;
+  let frame = 0;
+  const pageElement = () => document.scrollingElement ?? document.documentElement;
+  const animatePage = () => {
+    const page = pageElement();
+    pageCurrent += (pageTarget - pageCurrent) * 0.28;
+    if (Math.abs(pageTarget - pageCurrent) < 0.4) {
+      page.scrollTop = pageTarget;
+      frame = 0;
+      return;
+    }
+    page.scrollTop = pageCurrent;
+    frame = window.requestAnimationFrame(animatePage);
+  };
+  const onWheel = (event: globalThis.WheelEvent) => {
+    const delta = wheelDeltaPixels(event);
+    if (delta === 0) return;
+    const paneMax = Math.max(0, pane.scrollHeight - pane.clientHeight);
+    const paneBefore = pane.scrollTop;
+    const paneNext = Math.max(0, Math.min(paneMax, paneBefore + delta));
+    const leftover = delta - (paneNext - paneBefore);
+    if (leftover === 0) return;
+    const page = pageElement();
+    const pageMax = Math.max(0, page.scrollHeight - page.clientHeight);
+    if (pageMax <= 0) return;
+    event.preventDefault();
+    pane.scrollTop = paneNext;
+    if (!frame) {
+      pageCurrent = page.scrollTop;
+      pageTarget = page.scrollTop;
+    }
+    pageTarget = Math.max(0, Math.min(pageMax, pageTarget + leftover));
+    if (!frame) frame = window.requestAnimationFrame(animatePage);
+  };
+  pane.addEventListener("wheel", onWheel, { passive: false });
+  return () => {
+    pane.removeEventListener("wheel", onWheel);
+    if (frame) window.cancelAnimationFrame(frame);
+  };
+}
+function AnalysisRangeFields({
+  minPercent,
+  maxPercent,
+  onMinChange,
+  onMaxChange,
+}: {
+  minPercent: number;
+  maxPercent: number;
+  onMinChange: (value: number) => void;
+  onMaxChange: (value: number) => void;
+}) {
+  const commitMin = (next: number) => onMinChange(-Math.min(99, Math.max(1, Math.round(next))));
+  const commitMax = (next: number) => onMaxChange(Math.min(2000, Math.max(1, Math.round(next))));
+  const minMagnitude = Math.abs(minPercent);
+  return (
+    <div className="horizon-input objective-analysis-range">
+      <div>
+        <b>ANALYSIS RANGE</b>
+        <small>Bounds for drawdown and full-range scoring</small>
+      </div>
+      <div className="objective-range-pair">
+        <div className="horizon-step">
+          <span>−</span>
+          <NumericInput
+            min={1}
+            max={99}
+            step="1"
+            value={minMagnitude}
+            aria-label="Analysis range minimum"
+            onValueChange={commitMin}
+          />
+          <em>%</em>
+          <button type="button" aria-label="Increase analysis range minimum" onClick={() => commitMin(minMagnitude + 1)}>
+            <span className="step-chevron" />
+          </button>
+          <button type="button" aria-label="Decrease analysis range minimum" onClick={() => commitMin(minMagnitude - 1)}>
+            <span className="step-chevron down" />
+          </button>
+        </div>
+        <i>to</i>
+        <div className="horizon-step">
+          <span>+</span>
+          <NumericInput
+            min={1}
+            max={2000}
+            step="1"
+            value={maxPercent}
+            aria-label="Analysis range maximum"
+            onValueChange={commitMax}
+          />
+          <em>%</em>
+          <button type="button" aria-label="Increase analysis range maximum" onClick={() => commitMax(maxPercent + 1)}>
+            <span className="step-chevron" />
+          </button>
+          <button type="button" aria-label="Decrease analysis range maximum" onClick={() => commitMax(maxPercent - 1)}>
+            <span className="step-chevron down" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -982,6 +1104,7 @@ export default function App() {
   const {
     mode,
     leverageLimitsExpanded,
+    objectiveParametersExpanded,
     minMove,
     maxMove,
     showLiquidationLine,
@@ -1001,6 +1124,7 @@ export default function App() {
   });
   const setMode = (value: SetStateAction<WorkspaceControls["mode"]>) => setWorkspaceControl("mode", value);
   const setLeverageLimitsExpanded = (value: SetStateAction<boolean>) => setWorkspaceControl("leverageLimitsExpanded", value);
+  const setObjectiveParametersExpanded = (value: SetStateAction<boolean>) => setWorkspaceControl("objectiveParametersExpanded", value);
   const setMinMove = (value: SetStateAction<number>) => setWorkspaceControl("minMove", value);
   const setMaxMove = (value: SetStateAction<number>) => setWorkspaceControl("maxMove", value);
   const setShowLiquidationLine = (value: SetStateAction<boolean>) => setWorkspaceControl("showLiquidationLine", value);
@@ -1069,6 +1193,7 @@ export default function App() {
     [comparisonMode]: value,
   }));
   const railScrollRef = useRef<HTMLDivElement>(null);
+  const analysisScrollRef = useRef<HTMLDivElement>(null);
   const peaNileButtonRef = useRef<HTMLButtonElement>(null);
   const optimiserWorkerRef = useRef<Worker | null>(null);
   const degenSelectorRef = useRef<HTMLDivElement>(null);
@@ -1153,7 +1278,7 @@ export default function App() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateRailScrollIndicators);
     };
-  }, [comparisonMode, mode, leverageLimitsExpanded, requireBreakeven, displayedResult]);
+  }, [comparisonMode, mode, leverageLimitsExpanded, objectiveParametersExpanded, requireBreakeven, displayedResult]);
   useEffect(() => {
     let cancelled = false;
     const isChartSeriesVisibility = (value: unknown): value is ChartSeriesVisibilityByMode => {
@@ -1290,6 +1415,14 @@ export default function App() {
   const displayComparisonIsValid = mode === "optimise" && displayedResult
     ? true
     : pendingComparisonIsValid;
+  useEffect(() => {
+    const releaseRail = chainPaneWheelToPage(railScrollRef.current);
+    const releaseAnalysis = chainPaneWheelToPage(analysisScrollRef.current);
+    return () => {
+      releaseRail();
+      releaseAnalysis();
+    };
+  }, [comparisonMode, displayComparisonIsValid, mode]);
   const lastRun = displayedResult;
   const optimising = runState.kind === "running";
   const maxLtv = MAX_V4_LTV * 100;
@@ -2732,66 +2865,97 @@ export default function App() {
                       </option>
                       ))}
                   </select>
-                  {objective === "spotParity" && (
-                    <div className="spot-parity-control">
-                      <div className="spot-parity-note">
-                        <i>≋</i>
-                        <span>
-                          Match or outperform held spot at the selected target,
-                          then maximise downside protection.
-                        </span>
+                  <div className="objective-parameters">
+                    <span
+                      className={`objective-parameters-toggle${objectiveParametersExpanded ? " expanded" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={objectiveParametersExpanded}
+                      onClick={() => setObjectiveParametersExpanded((open) => !open)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        setObjectiveParametersExpanded((open) => !open);
+                      }}
+                    >
+                      Objective parameters
+                      <i aria-hidden="true" />
+                    </span>
+                    {objectiveParametersExpanded && (
+                      <div className="objective-parameters-body">
+                        <div className="spot-parity-note">
+                          <i>≋</i>
+                          <span>{objectiveParameterNotes[objective]}</span>
+                        </div>
+                        {objective === "bullish" && (
+                          <HorizonInput
+                            className="objective-target-field"
+                            label="BULLISH TARGET"
+                            detail={`Maximise V4 if the ${assetLabelLower} rises`}
+                            value={bullishTarget}
+                            min={1}
+                            max={2000}
+                            sign="+"
+                            onChange={setBullishTarget}
+                          />
+                        )}
+                        {objective === "bearish" && (
+                          <HorizonInput
+                            className="objective-target-field"
+                            label="BEARISH TARGET"
+                            detail={`Maximise V4 if the ${assetLabelLower} falls`}
+                            value={Math.abs(bearishTarget)}
+                            min={1}
+                            max={99}
+                            sign="−"
+                            onChange={(value) => setBearishTarget(-value)}
+                          />
+                        )}
+                        {objective === "spotParity" && (
+                          <HorizonInput
+                            className="objective-target-field"
+                            label="SPOT PARITY TARGET"
+                            detail={`Match spot if the ${assetLabelLower} rises`}
+                            value={spotParityMagnitude}
+                            min={1}
+                            max={2000}
+                            sign="+"
+                            onChange={setSpotParityMagnitude}
+                          />
+                        )}
+                        {objective === "debtParity" && (
+                          <HorizonInput
+                            className="objective-target-field"
+                            label="LENDING PARITY TARGET"
+                            detail={`Match the lending position if the ${assetLabelLower} rises`}
+                            value={debtParityMagnitude}
+                            min={1}
+                            max={2000}
+                            sign="+"
+                            onChange={setDebtParityMagnitude}
+                          />
+                        )}
+                        {objective === "perpParity" && (
+                          <HorizonInput
+                            className="objective-target-field"
+                            label="PERP PARITY TARGET"
+                            detail={`Match the perp position if the ${assetLabelLower} rises`}
+                            value={perpParityMagnitude}
+                            min={1}
+                            max={2000}
+                            sign="+"
+                            onChange={setPerpParityMagnitude}
+                          />
+                        )}
+                        <AnalysisRangeFields
+                          minPercent={analysisMinPercent}
+                          maxPercent={analysisMaxPercent}
+                          onMinChange={setAnalysisMinPercent}
+                          onMaxChange={setAnalysisMaxPercent}
+                        />
                       </div>
-                      <HorizonInput
-                        label="SPOT PARITY TARGET"
-                        detail={`Match spot if the ${assetLabelLower} rises`}
-                        value={spotParityMagnitude}
-                        min={1}
-                        max={2000}
-                        sign="+"
-                        onChange={setSpotParityMagnitude}
-                      />
-                    </div>
-                  )}
-                  {objective === "debtParity" && (
-                    <div className="spot-parity-control">
-                      <div className="spot-parity-note">
-                        <i>≋</i>
-                        <span>
-                          Match the lending position at the selected target,
-                          then maximise downside protection.
-                        </span>
-                      </div>
-                      <HorizonInput
-                        label="LENDING PARITY TARGET"
-                        detail={`Match the lending position if the ${assetLabelLower} rises`}
-                        value={debtParityMagnitude}
-                        min={1}
-                        max={2000}
-                        sign="+"
-                        onChange={setDebtParityMagnitude}
-                      />
-                    </div>
-                  )}
-                  {objective === "perpParity" && (
-                    <div className="spot-parity-control">
-                      <div className="spot-parity-note">
-                        <i>≋</i>
-                        <span>
-                          Match the perp position at the selected target,
-                          then maximise downside protection.
-                        </span>
-                      </div>
-                      <HorizonInput
-                        label="PERP PARITY TARGET"
-                        detail={`Match the perp position if the ${assetLabelLower} rises`}
-                        value={perpParityMagnitude}
-                        min={1}
-                        max={2000}
-                        sign="+"
-                        onChange={setPerpParityMagnitude}
-                      />
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </section>
               </div>
 
@@ -2997,7 +3161,7 @@ export default function App() {
                 compact
               />
             )}
-            <div className="analytical-panel-scroll">
+            <div className="analytical-panel-scroll" ref={analysisScrollRef}>
             <section className="analytical-section summary-position">
               <h3>POSITION BREAKDOWN</h3>
               <div className="position-breakdown-grid">
