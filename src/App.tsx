@@ -85,12 +85,14 @@ import {
   saveCalculatorInputs,
 } from "./persistence";
 import { HarvesterOverlay } from "./components/HarvesterOverlay";
+import { PositionTrackerOverlay } from "./components/PositionTrackerOverlay";
 import {
   CalculationUnderReviewWarning,
   isShortCashbackUnderReview,
 } from "./components/CalculationUnderReviewWarning";
 import { createHarvesterSnapshot, type HarvesterSnapshot } from "./model/harvester";
 import { scenarioPriceRatios } from "./model/scenarioMoves";
+import { createEmptyTrackerState, normaliseAssetSymbol, normaliseTrackerState, type TrackerState } from "./model/tracker";
 
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", {
@@ -1108,6 +1110,8 @@ export default function App() {
     ),
     [runState, setRunState] = useState<OptimiserRunState>({ kind: "idle" });
   const [harvesterSnapshot, setHarvesterSnapshot] = useState<HarvesterSnapshot | null>(null);
+  const [trackerState, setTrackerState] = useState<TrackerState>(createEmptyTrackerState);
+  const [trackerOpen, setTrackerOpen] = useState(false);
   const {
     mode,
     leverageLimitsExpanded,
@@ -1309,6 +1313,7 @@ export default function App() {
       if (isTouchBrowser && typeof saved.chartTouchHoverEnabled === "boolean") {
         setChartTouchHoverEnabled(saved.chartTouchHoverEnabled);
       }
+      setTrackerState(normaliseTrackerState(saved.trackerState, typeof saved.assetName === "string" ? saved.assetName : DEFAULT_ASSET_NAME));
       if (typeof saved.assetName === "string") setAssetName(saved.assetName.trim().slice(0, 16) || DEFAULT_ASSET_NAME);
     }).finally(() => {
       if (!cancelled) setPersistenceLoaded(true);
@@ -1339,7 +1344,7 @@ export default function App() {
         degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
         minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled, chartTouchHoverEnabled,
         showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
-        usdDebt, liquidationLtv, perpState, assetName,
+        usdDebt, liquidationLtv, perpState, assetName, trackerState,
       });
     }, 250);
     return () => window.clearTimeout(timer);
@@ -1347,16 +1352,20 @@ export default function App() {
     assetAmount, assetName, assetPrice, baseAssetValue, chartSeriesVisibility, comparisonMode,
     defaultMaxDrawdown, degenSettingsByMode, liquidationLtv, manualConfigsByMode, maxDrawdownByMode,
     optimiserControlsByMode, optimiserDeposit, perpState, persistenceLoaded,
-    showDebt, showPerp, usdDebt, webChartWheelZoomEnabled, chartTouchHoverEnabled, workspaceControlsByMode,
+    showDebt, showPerp, usdDebt, webChartWheelZoomEnabled, chartTouchHoverEnabled, workspaceControlsByMode, trackerState,
   ]);
   const pendingComparisonIsValid = comparisonMode === "base"
     ? true
     : comparisonMode === "lending"
       ? debtSummary.netEquity > 0
       : perpInputsAreValid && perpSummary.currentEquity > 0;
-  const pendingBaseConfig = mode === "manual"
-    ? manualConfig
-    : { ...optimisedConfigsByMode[comparisonMode], deposit: optimiserDeposit };
+  const pendingOptimisedConfig = optimisedConfigsByMode[comparisonMode];
+  const pendingBaseConfig = useMemo(
+    () => mode === "manual"
+      ? manualConfig
+      : { ...pendingOptimisedConfig, deposit: optimiserDeposit },
+    [mode, manualConfig, pendingOptimisedConfig, optimiserDeposit],
+  );
   const pendingConfig = useMemo(
     () => ({
       ...pendingBaseConfig,
@@ -1705,7 +1714,7 @@ export default function App() {
     degenSettingsByMode, defaultMaxDrawdown, maxDrawdownByMode,
     minMove, maxMove, chartSeriesVisibility, showDebt, showPerp, webChartWheelZoomEnabled, chartTouchHoverEnabled,
     showLiquidationLine, showDrawdownLine, baseAssetValue, assetPrice, assetAmount,
-    usdDebt, liquidationLtv, perpState, assetName,
+    usdDebt, liquidationLtv, perpState, assetName, trackerState,
   });
   const closeApplication = () => {
     if (!isDesktopApp) return;
@@ -2092,6 +2101,20 @@ export default function App() {
               }}
             >
               {isPeaNileEnhanced ? "DISENGAGE PEA-NILE ENHANCEMENT" : "ENGAGE PEA-NILE ENHANCEMENT"}
+            </button>
+            <button
+              type="button"
+              className="comparison-settings position-tracker-entry"
+              onClick={() => {
+                setShowSettings(false);
+                setShowAssetName(false);
+                setTrackerState((current) => current.positions.length === 0
+                  ? { ...current, selectedAsset: normaliseAssetSymbol(assetLabel) }
+                  : current);
+                setTrackerOpen(true);
+              }}
+            >
+              POSITION TRACKER
             </button>
           </div>
         </div>
@@ -3766,6 +3789,13 @@ export default function App() {
         <HarvesterOverlay
           snapshot={harvesterSnapshot}
           onClose={() => setHarvesterSnapshot(null)}
+        />
+      )}
+      {trackerOpen && (
+        <PositionTrackerOverlay
+          state={trackerState}
+          onChange={setTrackerState}
+          onClose={() => setTrackerOpen(false)}
         />
       )}
     </main>
