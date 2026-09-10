@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { isDesktopShell } from "../persistence";
+import { portfolioComponents } from "../model/v4Math";
 import {
   CartesianGrid,
   ComposedChart,
@@ -396,17 +397,19 @@ export function HarvesterOverlay({ snapshot, onClose }: HarvesterOverlayProps) {
     && snapshot.spotAssetPrice > 0;
   const analysisCashbackLabel = useMemo(() => {
     const targetLabel = signedMove(analysisMove);
-    if (snapshot.config.cashbackMode !== "spot") return `Cashback value at ${targetLabel} (Cash)`;
+    const components = portfolioComponents(1, snapshot.config);
+    if (components.cashbackSpot <= 0) return `Cashback value at ${targetLabel} (Cash)`;
     const assetName = snapshot.assetName.trim();
     const assetPrice = snapshot.spotAssetPrice;
-    const initialCashbackValue = originalExternalValue(snapshot, 1);
+    const initialCashbackValue = snapshot.config.deposit * components.cashbackSpot;
     const spotAmount = assetPrice !== null && Number.isFinite(assetPrice) && assetPrice > 0
       ? initialCashbackValue / assetPrice
       : null;
     const spotDescription = spotAmount !== null && assetName
       ? `${spotAmount.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${assetName}`
       : "Spot";
-    return `Cashback value at ${targetLabel} (${spotDescription})`;
+    const cashDescription = components.cashbackCash > 0 ? `${money(snapshot.config.deposit * components.cashbackCash)} Cash + ` : "";
+    return `Cashback value at ${targetLabel} (${cashDescription}${spotDescription})`;
   }, [snapshot, analysisMove]);
   const earliestRecoverySummary = useMemo(() => {
     const plan = plans.earliestRecovery;

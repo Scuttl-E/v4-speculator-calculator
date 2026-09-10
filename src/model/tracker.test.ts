@@ -33,6 +33,57 @@ const makePosition = (overrides: Partial<Parameters<typeof createTrackedPosition
 });
 
 describe("position tracker accounting", () => {
+  it("defaults to Native and preserves cash and asset tranches when saved and loaded", () => {
+    let state = createEmptyTrackerState();
+    for (const side of ["long", "short"] as const) {
+      state = addTrackedPosition(state, {
+        id: side, assetSymbol: "ETH", side, product: "2.5x-cashback", entryDateTime: "2026-01-01T12:00",
+        entryAssetPrice: 2_000, amount: side === "long" ? 5 : 10_000, timestamp: "2026-01-01T12:00:00.000Z",
+      }).state;
+    }
+    const loaded = normaliseTrackerState(JSON.parse(JSON.stringify(state)));
+    expect(loaded.positions.map((p) => p.cashbackRouting)).toEqual(["native", "native"]);
+    expect(loaded.cashbackTranches.map((t) => [t.routing, t.denomination, t.originalNativeAmount]))
+      .toEqual([["native", "usd", 5_000], ["native", "asset", 2.5]]);
+    const point = buildTrackerCurve(loaded.positions, 2_000, "total", 100, 100, 1, loaded.cashbackTranches)[0];
+    expect(point.positions.long.baselineWealth).toBe(25_000);
+    expect(point.positions.short.baselineV4).toBe(2_500);
+    expect(point.positions.short.cashback).toBe(10_000);
+    expect(point.positions.short.baselineWealth).toBe(12_500);
+    expect(point.combinedBaseline).toBe(37_500);
+  });
+
+  it("projects and partially withdraws the reciprocal Short sleeve without reducing Native asset cashback", () => {
+    const short = makePosition({ side: "short", product: "2.5x-cashback", amount: 10_000 });
+    expect(trackerBaselineV4AtPrice(short, 1_000)).toBe(10_000);
+    expect(trackerCashbackAtPrice(short, 1_000)).toBe(2_500);
+    const observed = setTrackerActualObservation(short, 6_000, 2_000, "2026-02-01T12:00:00.000Z");
+    expect(trackerProjectedActualV4AtPrice(observed, 4_000, 2_000)).toBe(3_000);
+    const reduced = reduceTrackedPosition(observed, 1_200, 2_000, "r1", "2026-03-01T12:00:00.000Z");
+    const values = trackerPositionCurveValues(reduced, 4_000, 2_000, "total");
+    expect(values.baselineV4).toBe(2_000);
+    expect(values.actualV4).toBe(2_400);
+    expect(values.cashback).toBe(10_000);
+    expect(values.withdrawnCash).toBe(1_200);
+    expect(values.actualWealth).toBe(13_600);
+  });
+
+  it("spends Native Short asset cashback at its sale price and refunds the asset units on deletion", () => {
+    const parent = addTrackedPosition(createEmptyTrackerState(), {
+      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback", entryDateTime: "2026-01-01T12:00",
+      entryAssetPrice: 2_000, amount: 10_000, timestamp: "2026-01-01T12:00:00.000Z",
+    });
+    const input = {
+      id: "child", assetSymbol: "ETH" as const, side: "long" as const, product: "2x" as const, entryDateTime: "2026-02-01T12:00",
+      entryAssetPrice: 4_000, amount: 1, timestamp: "2026-02-01T12:00:00.000Z",
+    };
+    expect(() => addTrackedPosition(parent.state, input, [{ sourcePositionId: "parent" }])).toThrow();
+    const child = addTrackedPosition(parent.state, input, [{ sourcePositionId: "parent", spotAssetPrice: 4_000 }]);
+    expect(child.cashbackConsumed).toBe(4_000);
+    expect(child.state.cashbackTranches[0].remainingNativeAmount).toBe(1.5);
+    const refunded = deleteTrackedPosition(child.state, "child");
+    expect(refunded.cashbackTranches[0].remainingNativeAmount).toBe(2.5);
+  });
   it("derives Long entry capital from supplied asset and keeps Short quote capital direct", () => {
     const long = makePosition();
     const short = makePosition({ side: "short", amount: 12_000 });
@@ -40,6 +91,30 @@ describe("position tracker accounting", () => {
     expect(long.originalEntryCapital).toBe(10_000);
     expect(short.originalAssetQuantity).toBeNull();
     expect(short.originalEntryCapital).toBe(12_000);
+  });
+
+  it("keeps funding history when changing between Native and the equivalent held form", () => {
+    for (const side of ["long", "short"] as const) {
+      const amount = side === "long" ? 5 : 10_000;
+      const heldRoute = side === "long" ? "cash" : "spot";
+      const parent = addTrackedPosition(createEmptyTrackerState(), {
+        id: "parent", assetSymbol: "ETH", side, product: "2.5x-cashback", cashbackRouting: heldRoute,
+        entryDateTime: "2026-01-01T12:00", entryAssetPrice: 2_000, amount, timestamp: "2026-01-01T12:00:00.000Z",
+      });
+      const child = addTrackedPosition(parent.state, {
+        id: "child", assetSymbol: "ETH", side: "short", product: "2x", entryDateTime: "2026-02-01T12:00",
+        entryAssetPrice: 4_000, amount: 2_000, timestamp: "2026-02-01T12:00:00.000Z",
+      }, [{ sourcePositionId: "parent", spotAssetPrice: 4_000 }]);
+      for (const cashbackRouting of ["native", heldRoute] as const) {
+        const updated = correctTrackedPosition(child.state, "parent", {
+          side, product: "2.5x-cashback", cashbackRouting, entryDateTime: "2026-01-01T12:00", entryAssetPrice: 2_000, amount,
+        }, "2026-03-01T12:00:00.000Z");
+        expect(updated.fundingTransactions).toEqual(child.state.fundingTransactions);
+        expect(updated.positions[1].funding).toEqual(child.state.positions[1].funding);
+        expect(updated.cashbackTranches[0]).toEqual({ ...child.state.cashbackTranches[0], routing: cashbackRouting });
+        child.state = updated;
+      }
+    }
   });
 
   it("keeps Cashback outside displayed Baseline and Actual V4 values", () => {
@@ -258,13 +333,13 @@ describe("position tracker accounting", () => {
 
   it("supports recursive Cashback funding but never lets a position fund itself", () => {
     let state = addTrackedPosition(createEmptyTrackerState(), {
-      id: "a", assetSymbol: "ETH", side: "short", product: "2.5x-cashback",
+      id: "a", assetSymbol: "ETH", side: "short", product: "2.5x-cashback", cashbackRouting: "cash",
       entryDateTime: "2026-01-01T00:00", entryAssetPrice: 2_000, amount: 10_000, timestamp: "2026-01-01T00:00:00.000Z",
     }).state;
     expect(state.positions[0].funding.freshExternalCapital).toBe(10_000);
     expect(state.cashbackTranches[0].remainingNativeAmount).toBe(5_000);
     state = addTrackedPosition(state, {
-      id: "b", assetSymbol: "ETH", side: "short", product: "2.5x-cashback",
+      id: "b", assetSymbol: "ETH", side: "short", product: "2.5x-cashback", cashbackRouting: "cash",
       entryDateTime: "2026-02-01T00:00", entryAssetPrice: 2_000, amount: 5_000, timestamp: "2026-02-01T00:00:00.000Z",
     }, [{ sourcePositionId: "a" }]).state;
     const result = addTrackedPosition(state, {
@@ -364,7 +439,7 @@ describe("position tracker accounting", () => {
 
   it("returns consumed Cashback to the source when a funded position is deleted", () => {
     let state = addTrackedPosition(createEmptyTrackerState(), {
-      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback",
+      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback", cashbackRouting: "cash",
       entryDateTime: "2026-01-01T00:00", entryAssetPrice: 2_000, amount: 10_000, timestamp: "2026-01-01T00:00:00.000Z",
     }).state;
     state = addTrackedPosition(state, {
@@ -380,7 +455,7 @@ describe("position tracker accounting", () => {
 
   it("keeps a funded position valid by replacing deleted source Cashback with fresh capital", () => {
     let state = addTrackedPosition(createEmptyTrackerState(), {
-      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback",
+      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback", cashbackRouting: "cash",
       entryDateTime: "2026-01-01T00:00", entryAssetPrice: 2_000, amount: 10_000, timestamp: "2026-01-01T00:00:00.000Z",
     }).state;
     state = addTrackedPosition(state, {
@@ -411,7 +486,7 @@ describe("position tracker accounting", () => {
 
   it("detaches Cashback links before an economic correction", () => {
     let state = addTrackedPosition(createEmptyTrackerState(), {
-      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback",
+      id: "parent", assetSymbol: "ETH", side: "short", product: "2.5x-cashback", cashbackRouting: "cash",
       entryDateTime: "2026-01-01T00:00", entryAssetPrice: 2_000, amount: 10_000, timestamp: "2026-01-01T00:00:00.000Z",
     }).state;
     state = addTrackedPosition(state, {

@@ -34,19 +34,20 @@ export function createProductRoutingDecision(
   if (options.objective !== "bullish" || !outcome.config || !hasActiveCashback(outcome.config))
     return null;
 
-  const selectedRouting = outcome.config.cashbackMode;
-  const opposingRouting: CashbackMode = selectedRouting === "cash" ? "spot" : "cash";
-  const alternativeOutcome = optimisePortfolioWithOutcome({
-    ...options,
-    cashbackPolicy: "forced",
-    cashbackRouting: opposingRouting,
-  });
-  if (!alternativeOutcome.config || !hasActiveCashback(alternativeOutcome.config)) return null;
-
   const targetPercent = options.bullishTargetPercent ?? 200;
+  const alternatives = (["native", "cash", "spot"] as const)
+    .filter((routing) => routing !== outcome.config!.cashbackMode)
+    .flatMap((routing) => {
+      const alternative = optimisePortfolioWithOutcome({ ...options, cashbackPolicy: "forced", cashbackRouting: routing });
+      return alternative.config && hasActiveCashback(alternative.config)
+        ? [optionFor(alternative.config, targetPercent)] : [];
+    });
+  const alternative = alternatives.sort((a, b) => b.targetReturn - a.targetReturn)[0];
+  if (!alternative) return null;
+
   return {
     targetPercent,
     selected: optionFor(outcome.config, targetPercent),
-    alternative: optionFor(alternativeOutcome.config, targetPercent),
+    alternative,
   };
 }

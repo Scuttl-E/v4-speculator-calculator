@@ -184,7 +184,7 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
   const [amountDraft, setAmountDraft] = useState("");
   const [amountUnit, setAmountUnit] = useState<"asset" | "usd">("asset");
   const [entryPriceDraft, setEntryPriceDraft] = useState("");
-  const [cashbackRouting, setCashbackRouting] = useState<"cash" | "spot">("cash");
+  const [cashbackRouting, setCashbackRouting] = useState<"native" | "cash" | "spot">("native");
   const [useCashback, setUseCashback] = useState(false);
   const [cashbackSourceDrafts, setCashbackSourceDrafts] = useState<CashbackSourceDraft[]>([]);
   const [entryDateTime, setEntryDateTime] = useState(nowLocalDateTime);
@@ -196,7 +196,7 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
   const [editMode, setEditMode] = useState(false);
   const [editSide, setEditSide] = useState<TrackerSide>("long");
   const [editProduct, setEditProduct] = useState<TrackerProduct>("2x");
-  const [editRouting, setEditRouting] = useState<"cash" | "spot">("cash");
+  const [editRouting, setEditRouting] = useState<"native" | "cash" | "spot">("native");
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [editEntryPriceDraft, setEditEntryPriceDraft] = useState("");
   const [editDateTime, setEditDateTime] = useState("");
@@ -493,7 +493,7 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
               <label className="tracker-entry-price"><span>ENTRY PRICE</span><div className="tracker-money-input"><em>$</em><input inputMode="decimal" value={entryPriceDraft} onChange={(event) => setEntryPriceDraft(event.target.value)} placeholder="2000" /></div></label>
             </div>
             <div className="tracker-entry-row tracker-entry-actions-row">
-              <fieldset className={`tracker-routing tracker-entry-routing${isCashbackProduct(product) ? "" : " disabled"}`} disabled={!isCashbackProduct(product)}><legend>ROUTING</legend>{(["cash", "spot"] as const).map((value) => <button type="button" key={value} className={cashbackRouting === value ? "on" : ""} onClick={() => setCashbackRouting(value)}>{value.toUpperCase()}</button>)}</fieldset>
+              <fieldset className={`tracker-routing tracker-entry-routing${isCashbackProduct(product) ? "" : " disabled"}`} disabled={!isCashbackProduct(product)}><legend>ROUTING</legend>{(["native", "cash", "spot"] as const).map((value) => <button type="button" key={value} className={cashbackRouting === value ? "on" : ""} onClick={() => setCashbackRouting(value)}>{value.toUpperCase()}</button>)}</fieldset>
               <label className={`tracker-use-cashback${cashbackSources.some(({ tranche }) => tranche.remainingNativeAmount > 0) ? " available" : ""}`}><span className="tracker-use-cashback-box"><input type="checkbox" checked={useCashback} disabled={!cashbackSources.some(({ tranche }) => tranche.remainingNativeAmount > 0)} onChange={(event) => { setUseCashback(event.target.checked); if (!event.target.checked) setCashbackSourceDrafts([]); }} /><span>USE CASHBACK</span></span>{cashbackSources.length > 0 && <small>{useCashback ? `${cashbackSourceDrafts.length} SELECTED · ${money(selectedCashbackValue)}` : `${cashbackSources.filter(({ tranche }) => tranche.remainingNativeAmount > 0).length} SOURCES`}</small>}</label>
               <button type="button" className="tracker-add-action" onClick={addPosition}>ADD</button>
             </div>
@@ -549,7 +549,7 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
                     <label><span>PRODUCT</span><select className={editSide} value={`${editSide}:${editProduct}`} onChange={(event) => selectEditProduct(event.target.value)}><optgroup label="LONG">{productOptions("long")}</optgroup><optgroup label="SHORT">{productOptions("short")}</optgroup></select></label>
                     <label><span>{editSide === "long" ? "ORIGINAL AMOUNT" : "ORIGINAL CAPITAL"}</span><input inputMode="decimal" value={editAmountDraft} onChange={(event) => setEditAmountDraft(event.target.value)} /></label>
                     <label><span>ENTRY PRICE</span><div className="tracker-money-input"><em>$</em><input inputMode="decimal" value={editEntryPriceDraft} onChange={(event) => setEditEntryPriceDraft(event.target.value)} /></div></label>
-                    {isCashbackProduct(editProduct) && <fieldset className="tracker-routing"><legend>CASHBACK ROUTING</legend>{(["cash", "spot"] as const).map((value) => <button type="button" key={value} className={editRouting === value ? "on" : ""} onClick={() => setEditRouting(value)}>{value.toUpperCase()}</button>)}</fieldset>}
+                    {isCashbackProduct(editProduct) && <fieldset className="tracker-routing"><legend>CASHBACK ROUTING</legend>{(["native", "cash", "spot"] as const).map((value) => <button type="button" key={value} className={editRouting === value ? "on" : ""} onClick={() => setEditRouting(value)}>{value.toUpperCase()}</button>)}</fieldset>}
                     <label className="tracker-edit-date"><span>ENTRY DATE / TIME</span><input type="datetime-local" value={editDateTime} onChange={(event) => setEditDateTime(event.target.value)} /></label>
                     <div className="tracker-card-actions"><button type="button" onClick={savePositionEdit}>SAVE CHANGES</button><button type="button" className="secondary" onClick={() => setEditMode(false)}>CANCEL</button></div>
                   </div> : <>

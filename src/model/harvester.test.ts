@@ -48,6 +48,14 @@ const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
 const point = (id: string, movePercent: number, activeAfter: number): HarvestPoint => ({ id, movePercent, activeAfter });
 
 describe("Harvester accounting", () => {
+  it("values mixed Native cashback separately from reciprocal Short exposure", () => {
+    const snap = snapshot({ deposit: 10_000, longAllocation: .4, longMode: "2.5x-cashback", shortMode: "2.5x-cashback", cashbackMode: "native" });
+    expect(originalActiveV4LegValues(snap, 2)).toMatchObject({ long: 8_000, short: 1_500 });
+    expect(originalExternalValue(snap, 2)).toBe(8_000);
+    const result = evaluateHarvestPlan(snap, "spot", 100, []);
+    expect(result.recovery.externalCashbackKind).toBe("mixed");
+    expect(result.recovery.cashbackValueAtTarget).toBe(8_000);
+  });
   it("preserves no-harvest identity and includes external cashback exactly once", () => {
     const snap = snapshot({ longMode: "2.5x-cashback", cashbackMode: "cash" });
     const result = evaluateHarvestPlan(snap, "spot", 300, []);
@@ -61,7 +69,7 @@ describe("Harvester accounting", () => {
 
   it("matches portfolioComponents.insideV4 across every Long/Short product pairing", () => {
     const modes = ["2x", "2.5x-cashback", "2.5x-looped"] as const;
-    for (const longMode of modes) for (const shortMode of modes) for (const cashbackMode of ["cash", "spot"] as const) {
+    for (const longMode of modes) for (const shortMode of modes) for (const cashbackMode of ["native", "cash", "spot"] as const) {
       const snap = snapshot({ longAllocation: .37, longMode, shortMode, cashbackMode });
       for (const priceRatio of [.4, 1, 2.75, 6]) {
         expect(originalActiveV4Value(snap, priceRatio), `${longMode}/${shortMode}/${cashbackMode}@${priceRatio}`)

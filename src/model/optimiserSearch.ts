@@ -19,7 +19,7 @@ function run(input:SearchInput, reference:boolean):OptimiserSearchDiagnostics {
   for(const longAllocation of allocationGrid(input.finalResolutionPercent))
     for(const longMode of input.longModes ?? modes)
       for(const shortMode of input.shortModes ?? shorts)
-        for(const cashbackMode of input.cashbackModes ?? ["cash"] as const){
+        for(const cashbackMode of input.cashbackModes ?? ["native"] as const){
           considered++;
           if(!input.assess({longAllocation,longMode,shortMode,cashbackMode}).eligible)rejected++;
         }

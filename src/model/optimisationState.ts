@@ -2,7 +2,7 @@ import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { ProductRoutingDecision } from "./productRoutingDecision";
 import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-08-19-short-cashback-inverse-square-1";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-09-10-short-cashback-reciprocal-native-1";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {
@@ -36,7 +36,7 @@ export function createOptimisationSignature(options: OptimiseOptions) {
     cashbackPolicy: options.cashbackPolicy ?? "auto",
     cashbackRouting: (options.cashbackPolicy ?? "auto") === "off"
       ? null
-      : options.cashbackRouting ?? "auto",
+      : options.cashbackRouting ?? "native",
     requireBreakeven: options.requireBreakeven,
     adverseBreakevenPercent: !options.requireBreakeven
       ? null

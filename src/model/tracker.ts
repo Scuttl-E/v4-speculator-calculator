@@ -1,4 +1,4 @@
-import { longPositionValue, productCashOutRate, shortPositionValue } from "./v4Math";
+import { longPositionValue, productCashOutRate, resolveCashbackRouting, shortPositionValue } from "./v4Math";
 import type { CashbackMode, LongV4Mode, ShortV4Mode } from "./types";
 
 export const TRACKER_ASSETS = ["ETH", "BTC", "PEAS"] as const;
@@ -230,7 +230,7 @@ function normaliseCashbackTranche(value: unknown): TrackerCashbackTranche | null
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
   if (!(typeof item.id === "string" && typeof item.sourcePositionId === "string" && typeof item.createdAt === "string" &&
-    TRACKER_ASSETS.includes(item.assetSymbol as TrackerAsset) && (item.routing === "cash" || item.routing === "spot") &&
+    TRACKER_ASSETS.includes(item.assetSymbol as TrackerAsset) && (item.routing === "native" || item.routing === "cash" || item.routing === "spot") &&
     (item.denomination === "usd" || item.denomination === "asset") && finiteNonNegative(item.originalUsdAmount) &&
     finiteNonNegative(item.originalNativeAmount) && finiteNonNegative(item.remainingNativeAmount) &&
     finiteNonNegative(item.deployedNativeAmount) && finiteNonNegative(item.deployedUsdAmount))) return null;
@@ -279,7 +279,7 @@ function normalisePosition(value: unknown): TrackedPosition | null {
     finitePositive(item.entryAssetPrice) && finitePositive(item.originalInputAmount) &&
     (item.originalInputUnit === "asset" || item.originalInputUnit === "usd") &&
     (item.originalAssetQuantity === null || finitePositive(item.originalAssetQuantity)) &&
-    finitePositive(item.originalEntryCapital) && (item.cashbackRouting === "cash" || item.cashbackRouting === "spot") &&
+    finitePositive(item.originalEntryCapital) && (item.cashbackRouting === "native" || item.cashbackRouting === "cash" || item.cashbackRouting === "spot") &&
     finiteNonNegative(item.remainingFraction) && item.remainingFraction <= 1 &&
     (item.actualCurrentValue === null || finiteNonNegative(item.actualCurrentValue)) &&
     (item.actualObservedAt === undefined || item.actualObservedAt === null || typeof item.actualObservedAt === "string") &&
@@ -360,7 +360,7 @@ export function createTrackedPosition(input: CreateTrackedPositionInput): Tracke
     originalInputUnit: isLong ? "asset" : "usd",
     originalAssetQuantity: isLong ? input.amount : null,
     originalEntryCapital,
-    cashbackRouting: input.cashbackRouting ?? "cash",
+    cashbackRouting: input.cashbackRouting ?? "native",
     remainingFraction: 1,
     chartVisible: false,
     actualCurrentValue: input.actualCurrentValue ?? null,
@@ -379,7 +379,7 @@ export function createTrackedPosition(input: CreateTrackedPositionInput): Tracke
 
 export function createCashbackTrancheForPosition(position: TrackedPosition): TrackerCashbackTranche {
   const originalUsdAmount = position.originalEntryCapital * productCashOutRate(position.product);
-  const denomination = position.cashbackRouting === "spot" ? "asset" : "usd";
+  const denomination = resolveCashbackRouting(position.cashbackRouting, position.side) === "spot" ? "asset" : "usd";
   const originalNativeAmount = denomination === "asset" ? originalUsdAmount / position.entryAssetPrice : originalUsdAmount;
   return {
     id: `${position.id}:cashback`,
@@ -544,7 +544,7 @@ export function correctTrackedPosition(state: TrackerState, positionId: string, 
   if (!finitePositive(changes.entryAssetPrice) || !finitePositive(changes.amount) || !changes.entryDateTime) throw new RangeError("Enter a valid original amount, entry price, and date/time");
   const nextCapital = changes.side === "long" ? changes.amount * changes.entryAssetPrice : changes.amount;
   const isEconomicCorrection = changes.side !== position.side || changes.product !== position.product ||
-    changes.cashbackRouting !== position.cashbackRouting || changes.entryAssetPrice !== position.entryAssetPrice ||
+    resolveCashbackRouting(changes.cashbackRouting, changes.side) !== resolveCashbackRouting(position.cashbackRouting, position.side) || changes.entryAssetPrice !== position.entryAssetPrice ||
     changes.amount !== position.originalInputAmount;
   const accountingState = isEconomicCorrection ? detachPositionFundingLinks(state, positionId) : state;
   const accountingPosition = accountingState.positions.find((candidate) => candidate.id === positionId) ?? position;
@@ -568,6 +568,9 @@ export function correctTrackedPosition(state: TrackerState, positionId: string, 
   if (isEconomicCorrection) {
     cashbackTranches = cashbackTranches.filter((tranche) => tranche.sourcePositionId !== positionId);
     if (isCashbackProduct(corrected.product)) cashbackTranches = [...cashbackTranches, createCashbackTrancheForPosition(corrected)];
+  } else if (changes.cashbackRouting !== position.cashbackRouting) {
+    cashbackTranches = cashbackTranches.map((tranche) => tranche.sourcePositionId === positionId
+      ? { ...tranche, routing: changes.cashbackRouting } : tranche);
   }
   return { ...accountingState, positions: accountingState.positions.map((candidate) => candidate.id === positionId ? corrected : candidate), cashbackTranches };
 }

@@ -66,10 +66,12 @@ describe("discrete V4 optimiser", () => {
     expect(outcome.failure).toContain("Cashback Long or Short");
   });
 
-  it("honours fixed Cashback routing and searches both routes in Auto", () => {
+  it("honours fixed Cashback routing and searches all three routes in Auto", () => {
+    expect(optimisePortfolio({ ...options, cashbackPolicy: "forced" }).cashbackMode).toBe("native");
+    expect(optimisePortfolio({ ...options, cashbackPolicy: "forced", cashbackRouting: "native" }).cashbackMode).toBe("native");
     expect(optimisePortfolio({ ...options, cashbackPolicy: "forced", cashbackRouting: "cash" }).cashbackMode).toBe("cash");
     expect(optimisePortfolio({ ...options, cashbackPolicy: "forced", cashbackRouting: "spot" }).cashbackMode).toBe("spot");
-    expect(["cash", "spot"]).toContain(optimisePortfolio({ ...options, cashbackPolicy: "forced", cashbackRouting: "auto" }).cashbackMode);
+    expect(["native", "cash", "spot"]).toContain(optimisePortfolio({ ...options, cashbackPolicy: "forced", cashbackRouting: "auto" }).cashbackMode);
   });
 
   it("never worsens the bullish objective when the risk limit is loosened", () => {

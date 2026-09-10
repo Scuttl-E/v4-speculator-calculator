@@ -2097,6 +2097,7 @@ body {
 .tracker-compact-form input, .tracker-compact-form select, .tracker-current-price input { width: 100%; height: 29px; min-width: 0; padding: 4px 7px; border: 1px solid #ffffff10; border-radius: 5px; outline: 0; background: #101111; color: #e6d7c9; font: 600 11px var(--tracker-mono); box-shadow: inset 0 2px 5px #0008; }
 .tracker-compact-form input:focus, .tracker-compact-form select:focus, .tracker-current-price input:focus { border-color: #b96f3f8c; }
 .tracker-side-toggle, .tracker-routing { display: grid; grid-template-columns: 1fr 1fr; align-content: end; margin: 0; padding: 0; border: 0; }
+.tracker-routing { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tracker-side-toggle legend, .tracker-routing legend { grid-column: 1 / -1; }
 .tracker-side-toggle button, .tracker-routing button { height: 29px; padding: 0; border: 1px solid #ffffff10; background: #111212; color: #8e8378; font: 600 9px Atelier; cursor: pointer; }
 .tracker-side-toggle button:first-of-type, .tracker-routing button:first-of-type { border-radius: 5px 0 0 5px; }

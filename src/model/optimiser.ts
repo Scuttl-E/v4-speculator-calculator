@@ -127,10 +127,10 @@ function permittedProducts(options: OptimiseOptions) {
     shortModes = shortModes.filter((mode) => mode !== "2.5x-cashback");
   }
   const policy = options.cashbackPolicy ?? "auto";
-  const routing = options.cashbackRouting ?? "auto";
+  const routing = options.cashbackRouting ?? "native";
   const cashbackModes: readonly CashbackMode[] = policy === "off"
-    ? ["cash"]
-    : routing === "auto" ? ["cash", "spot"] : [routing];
+    ? ["native"]
+    : routing === "auto" ? ["native", "cash", "spot"] : [routing];
   return { longModes, shortModes, cashbackModes };
 }
 

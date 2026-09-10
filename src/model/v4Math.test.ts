@@ -18,17 +18,38 @@ describe("V4 product labels", () => {
 });
 
 describe("V4 discrete Short products", () => {
+  it("matches the supplied Native Short Cashback curve at half and double price", () => {
+    expect(shortValue(.5, "2.5x-cashback")).toBe(1.25);
+    expect(shortValue(2, "2.5x-cashback")).toBe(1.25);
+    expect(shortValue(.2, "2.5x-cashback")).toBe(2.6);
+    expect(shortValue(2, "2.5x-cashback", "cash")).toBe(.75);
+  });
+  it("holds Native Long cashback in cash and Native Short cashback in asset", () => {
+    const native = { ...config("2.5x-cashback", .4), shortMode: "2.5x-cashback" as const, cashbackMode: "native" as const };
+    for (const p of [.5, 1, 2]) {
+      const parts = portfolioComponents(p, native);
+      expect(parts.cashbackCash).toBeCloseTo(.2, 12);
+      expect(parts.cashbackSpot).toBeCloseTo(.3 * p, 12);
+      expect(parts.cashbackValue).toBeCloseTo(.2 + .3 * p, 12);
+      expect(parts.insideV4).toBeCloseTo(.2 * p ** 2 + .3 / p, 12);
+      expect(parts.total).toBeCloseTo(parts.insideV4 + parts.cashbackValue, 12);
+      for (const cashbackMode of ["cash", "spot"] as const)
+        expect(portfolioComponents(p, { ...native, cashbackMode }).insideV4).toBeCloseTo(parts.insideV4, 12);
+      expect(longValue(p, "2.5x-cashback")).toBe(longValue(p, "2.5x-cashback", "cash"));
+      expect(shortValue(p, "2.5x-cashback")).toBe(shortValue(p, "2.5x-cashback", "spot"));
+    }
+  });
   it("normalises every Short product at entry", () => {
     for (const mode of ["2x", "2.5x-cashback", "2.5x-looped"] as const)
       expect(shortValue(1, mode)).toBeCloseTo(1, 12);
   });
-  it("uses the inverse-squared Short Cashback equation", () => {
+  it("uses the reciprocal Short Cashback equation", () => {
   for (const p of [.2, .5, 1, 2, 4]) {
     expect(shortValue(p, "2.5x-cashback", "cash"))
-      .toBeCloseTo(.5 + .5 / p ** 2, 12);
+      .toBeCloseTo(.5 + .5 / p, 12);
 
     expect(shortValue(p, "2.5x-cashback", "spot"))
-      .toBeCloseTo(.5 * p + .5 / p ** 2, 12);
+      .toBeCloseTo(.5 * p + .5 / p, 12);
 
     expect(.5 * shortPositionValue(p, "2.5x-cashback") + .5)
       .toBeCloseTo(shortValue(p, "2.5x-cashback", "cash"), 12);
@@ -49,13 +70,13 @@ describe("V4 discrete Short products", () => {
     expect(cash.insideV4 + cash.cashbackValue).toBeCloseTo(cash.total, 12);
     expect(spot.insideV4 + spot.cashbackValue).toBeCloseTo(spot.total, 12);
   });
-  it("assesses the retained inverse-squared Short Cashback position for isolated risk", () => {
+  it("assesses the retained reciprocal Short Cashback position for isolated risk", () => {
   const shortCashback = { ...config("2x", 0), shortMode: "2.5x-cashback" as const, shortLtv: .75 };
   const range = analysisRangeFromPercent(-80, 200);
   const trough = findWorstComponentDrawdown(shortCashback, range);
 
   expect(trough.p).toBeCloseTo(3, 12);
-  expect(trough.drawdown).toBeCloseTo(1 / 9 - 1, 12);
+  expect(trough.drawdown).toBeCloseTo(1 / 3 - 1, 12);
 });
 });
 

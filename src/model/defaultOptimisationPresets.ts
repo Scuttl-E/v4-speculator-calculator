@@ -69,7 +69,7 @@ export function createDefaultOptimisationOptions(
     debtPosition: { ...DEFAULT_DEBT_POSITION },
     perpPosition: { ...DEFAULT_PERP_POSITION },
     cashbackPolicy: "auto",
-    cashbackRouting: "auto",
+    cashbackRouting: "native",
     degenEnabled: false,
     degenMode: "x1",
     customRecyclePct: 50,

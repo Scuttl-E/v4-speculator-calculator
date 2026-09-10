@@ -129,7 +129,7 @@ export interface HarvesterRecovery {
   cashbackValueAtTarget: number;
   countedCashbackValueAtTarget: number;
   excludedCashbackValueAtTarget: number;
-  externalCashbackKind: "cash" | "spot";
+  externalCashbackKind: "cash" | "spot" | "mixed";
   initialRecoveryTarget: number;
 }
 
@@ -501,7 +501,9 @@ export const evaluateHarvestPlan = (
       cashbackValueAtTarget: final.originalExternalCapital,
       countedCashbackValueAtTarget,
       excludedCashbackValueAtTarget: accountInitialCashback ? 0 : final.originalExternalCapital,
-      externalCashbackKind: snapshot.config.cashbackMode === "spot" ? "spot" : "cash",
+      externalCashbackKind: portfolioComponents(1, snapshot.config).cashbackSpot > 0
+        ? portfolioComponents(1, snapshot.config).cashbackCash > 0 ? "mixed" : "spot"
+        : "cash",
       initialRecoveryTarget: recoveryTarget,
     },
   };

@@ -6,7 +6,7 @@ export type SupportedV4Ltv = 0.5 | 0.75;
 export type V4ProductMode = "2x" | "2.5x-cashback" | "2.5x-looped";
 export type LongV4Mode = V4ProductMode;
 export type ShortV4Mode = V4ProductMode;
-export type CashbackMode = "cash" | "spot";
+export type CashbackMode = "native" | "cash" | "spot";
 export type CashbackPolicy = "off" | "forced" | "auto";
 export type CashbackRoutingPreference = CashbackMode | "auto";
 /** @deprecated retired Degen settings are not used by production calculations. */

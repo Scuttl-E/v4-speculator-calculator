@@ -251,7 +251,7 @@ function ObjectiveAnalysisBlock({ analysis }: { analysis: ObjectiveAnalysis }) {
   );
 }
 
-const routingLabel = (routing: CashbackMode) => routing === "cash" ? "Cash" : "Spot asset";
+const routingLabel = (routing: CashbackMode) => routing === "native" ? "Native" : routing === "cash" ? "Cash" : "Spot asset";
 
 function CashbackControlLabel({ label, help, className = "" }: { label: string; help: string; className?: string }) {
   return <div className={`section-label cashback-control-label ${className}`.trim()}>
@@ -276,7 +276,7 @@ function ProductRoutingDecisionBlock({ decision }: { decision: ProductRoutingDec
       <b className="routing-decision-route">{routingLabel(decision.selected.routing)}</b>
       <span>Return at {signedFixed(decision.targetPercent)}%</span>
       <b>{signedFixed(decision.selected.targetReturn)}%</b>
-      <span className="routing-decision-opposing">Best opposing route</span>
+      <span className="routing-decision-opposing">Best alternative route</span>
       <b className="routing-decision-route routing-decision-opposing">{routingLabel(decision.alternative.routing)}</b>
       <span>Return at {signedFixed(decision.targetPercent)}%</span>
       <b>{signedFixed(decision.alternative.targetReturn)}%</b>
@@ -315,7 +315,7 @@ const INITIAL_CONFIG: Config = {
   longMode: "2x",
   shortMode: "2x",
   shortLtv: 0.5,
-  cashbackMode: "cash",
+  cashbackMode: "native",
   cashOutEnabled: true,
   degenEnabled: false,
   degenMode: "x1",
@@ -398,7 +398,7 @@ const createDefaultOptimiserControls = (): OptimiserControls => ({
   downsideBreakevenMagnitude: 80,
   upsideBreakevenMagnitude: 200,
   cashbackPolicy: "auto",
-  cashbackRouting: "auto",
+  cashbackRouting: "native",
   requireBreakeven: false,
   longLtvLimit: MAX_V4_LTV * 100,
   shortLtvLimit: MAX_V4_LTV * 100,
@@ -474,7 +474,7 @@ const defaultOptimisationInputs = (options: OptimiseOptions): Record<string, unk
     debtParityPercent: options.objective === "debtParity" ? options.debtParityPercent : null,
     perpParityPercent: options.objective === "perpParity" ? options.perpParityPercent : null,
     cashbackPolicy: options.cashbackPolicy ?? "auto",
-    cashbackRouting: options.cashbackRouting ?? "auto",
+    cashbackRouting: options.cashbackRouting ?? "native",
     degenEnabled: options.degenEnabled,
     degenMode: options.degenMode,
     customRecyclePct: options.degenMode === "custom" ? options.customRecyclePct : null,
@@ -1038,7 +1038,7 @@ function ChartTooltip({
           <small>P/L {signedMoney(insideV4Value - insideV4InitialValue)}</small>
         </span>
         <span className="v4">
-          CASHBACK · {config.cashbackMode === "cash" ? "CASH" : "SPOT"}
+          CASHBACK · {routingLabel(config.cashbackMode).toUpperCase()}
           <b>{money(cashbackValue)}</b>
           <small>P/L {signedMoney(cashbackValue - cashbackInitialValue)}</small>
         </span>
@@ -1454,11 +1454,12 @@ export default function App() {
     breakeven: findDownsideBreakeven(config),
   }), [config, displayAnalysisRange]);
   const positionBreakdown = useMemo(() => {
-    const longCashback = config.longMode === "2.5x-cashback" ? config.longAllocation * .5 : 0;
-    const shortCashback = config.shortMode === "2.5x-cashback" ? (1 - config.longAllocation) * .5 : 0;
+    const components = portfolioComponents(1, config);
     const longLooped = config.longMode === "2.5x-looped" ? config.longAllocation * .5 : 0;
     const shortLooped = config.shortMode === "2.5x-looped" ? (1 - config.longAllocation) * .5 : 0;
-    const cashOutAmount = config.deposit * (longCashback + shortCashback);
+    const cashOutAmount = config.deposit * components.cashOut;
+    const cashAmount = config.deposit * components.cashbackCash;
+    const spotAmount = config.deposit * components.cashbackSpot;
     const currentAssetPrice = displayComparisonMode === "base"
       ? displayBaseAssetValue > 0 ? displayBaseAssetValue : null
       : displayComparisonMode === "lending"
@@ -1474,8 +1475,10 @@ export default function App() {
       recycledLongCapital: 0,
       recycledShortCapital: 0,
       cashOutAmount,
-      spotUnits: config.cashbackMode === "spot" && currentAssetPrice && currentAssetPrice > 0
-        ? cashOutAmount / currentAssetPrice
+      cashAmount,
+      spotAmount,
+      spotUnits: spotAmount > 0 && currentAssetPrice && currentAssetPrice > 0
+        ? spotAmount / currentAssetPrice
         : null,
       recycledIntoV4: 0,
     };
@@ -1597,12 +1600,12 @@ export default function App() {
   const manualPositionIsDefault = manualConfig.longAllocation === 0.5 &&
     manualConfig.longLtv === 0.5 && manualConfig.shortLtv === 0.5 &&
     manualConfig.longMode === "2x" && manualConfig.shortMode === "2x" &&
-    manualConfig.cashbackMode === "cash";
+    manualConfig.cashbackMode === "native";
   const resetOptimisationOptions = createDefaultOptimisationOptions(comparisonMode, objective);
   const resetAnalysisMoves = analysisRangeToPercent(resetOptimisationOptions.analysisRange);
   const optimiserControlsAreResetDefaults =
     cashbackPolicy === (resetOptimisationOptions.cashbackPolicy ?? "auto") &&
-    cashbackRouting === (resetOptimisationOptions.cashbackRouting ?? "auto") &&
+    cashbackRouting === (resetOptimisationOptions.cashbackRouting ?? "native") &&
     longLtvLimit === (resetOptimisationOptions.longMaxLtv ?? resetOptimisationOptions.maxLtv) * 100 &&
     shortLtvLimit === (resetOptimisationOptions.shortMaxLtv ?? resetOptimisationOptions.maxLtv) * 100 &&
     bullishTarget === (resetOptimisationOptions.bullishTargetPercent ?? 200) &&
@@ -1668,7 +1671,7 @@ export default function App() {
         longMode: "2x",
         shortLtv: 0.5,
         shortMode: "2x",
-        cashbackMode: "cash",
+        cashbackMode: "native",
         degenEnabled: false,
         degenMode: "x1",
         customRecyclePct: 50,
@@ -1679,7 +1682,7 @@ export default function App() {
         [comparisonMode]: { ...DEFAULT_DEGEN_SETTINGS },
       }));
       setCashbackPolicy(resetOptimisationOptions.cashbackPolicy ?? "auto");
-      setCashbackRouting(resetOptimisationOptions.cashbackRouting ?? "auto");
+      setCashbackRouting(resetOptimisationOptions.cashbackRouting ?? "native");
       setLongLtvLimit((resetOptimisationOptions.longMaxLtv ?? resetOptimisationOptions.maxLtv) * 100);
       setShortLtvLimit((resetOptimisationOptions.shortMaxLtv ?? resetOptimisationOptions.maxLtv) * 100);
       setBullishTarget(resetOptimisationOptions.bullishTargetPercent ?? 200);
@@ -2372,7 +2375,7 @@ export default function App() {
                   </div>
                   <div className="equation-stack">
                     <code>L<sub>2x</sub>(p) = p</code>
-                    <code>L<sub>cashback,cash</sub>(p) = 0.5 + 0.5p<sup>2</sup></code>
+                    <code>L<sub>cashback,native/cash</sub>(p) = 0.5 + 0.5p<sup>2</sup></code>
                     <code>L<sub>cashback,spot</sub>(p) = 0.5p + 0.5p<sup>2</sup></code>
                     <code>L<sub>2.5x</sub>(p) = p<sup>2</sup></code>
                   </div>
@@ -2389,8 +2392,8 @@ export default function App() {
 
   <div className="equation-stack">
     <code>S<sub>2x</sub>(p) = S<sub>m=1</sub>(p)</code>
-    <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5 / p²</code>
-    <code>S<sub>cashback,spot</sub>(p) = 0.5p + 0.5 / p²</code>
+    <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5 / p</code>
+    <code>S<sub>cashback,native/spot</sub>(p) = 0.5p + 0.5 / p</code>
     <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
     <CalculationUnderReviewWarning className="maths-review-warning" />
   </div>
@@ -2415,7 +2418,7 @@ export default function App() {
     Cashback products model a 150% borrow of the paired asset against the initial
     deposit: 100% is used with the supplied asset to form the LP, while the
     additional 50% is paid out as Cashback. The resulting V4 sleeve follows
-    0.5<var>p</var>² on Long and 0.5 / <var>p</var>² on Short. Cashback held as
+    0.5<var>p</var>² on Long and 0.5 / <var>p</var> on Short. Native Cashback is Cash for Long and Spot asset for Short. Cashback held as
     Cash remains fixed at 0.5; Cashback routed to Spot follows 0.5<var>p</var>.
     
   </li>
@@ -2575,10 +2578,11 @@ export default function App() {
               <CashbackControlLabel
                 label={mode === "manual" ? "CASHBACK ROUTING" : "CASHBACK"}
                 help={mode === "manual"
-                  ? "Choose how Cashback is held. Cash keeps it uninvested, while Spot asset converts it to spot exposure."
+                  ? "Native keeps Long Cashback as Cash and Short Cashback as Spot asset. Cash and Spot asset show the outcome of holding all Cashback in that form."
                   : "Controls whether Cashback is excluded, required, or left for the optimizer to decide."}
               />
               {mode === "manual" ? <div className="segments wide cashback-segments">
+                <button className={manualConfig.cashbackMode === "native" ? "on" : ""} onClick={() => update("cashbackMode", "native")}>Native</button>
                 <button className={manualConfig.cashbackMode === "cash" ? "on" : ""} onClick={() => update("cashbackMode", "cash")}>Cash</button>
                 <button className={manualConfig.cashbackMode === "spot" ? "on" : ""} onClick={() => update("cashbackMode", "spot")}>Spot asset</button>
               </div> : <div className="cashback-policy-controls">
@@ -2590,9 +2594,10 @@ export default function App() {
                 <CashbackControlLabel
                   className="cashback-routing-label"
                   label="CASHBACK ROUTING"
-                  help="Choose how Cashback is held. Cash keeps it uninvested, Spot asset converts it to spot exposure, and Auto lets the optimizer choose."
+                  help="Native keeps Long Cashback as Cash and Short Cashback as Spot asset. Cash and Spot asset hold all Cashback in that form; Auto lets the optimizer choose among all three."
                 />
                 <div className={`segments wide cashback-segments ${cashbackPolicy === "off" ? "cashout-disabled" : ""}`}>
+                  <button className={cashbackRouting === "native" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("native")}>Native</button>
                   <button className={cashbackRouting === "cash" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("cash")}>Cash</button>
                   <button className={cashbackRouting === "spot" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("spot")}>Spot asset</button>
                   <button className={cashbackRouting === "auto" ? "on" : ""} disabled={cashbackPolicy === "off"} onClick={() => setCashbackRouting("auto")}>Auto</button>
@@ -3238,16 +3243,16 @@ export default function App() {
                   <span>RECYCLED INTO V4</span>
                   <b className="degen-recycled-value">+{money(positionBreakdown.recycledIntoV4)}</b>
                 </>}
-                {positionBreakdown.cashOutAmount > 0 && <>
-                  <span>{config.cashbackMode === "spot" ? <>CASHBACK CONVERTED<br />TO {assetLabelUpper}</> : "CASHBACK"}</span>
-                  {config.cashbackMode === "cash" ? (
-                    <b className="cashback-cash-value">{money(positionBreakdown.cashOutAmount)}</b>
-                  ) : (
+                {positionBreakdown.cashAmount > 0 && <>
+                  <span>CASHBACK · CASH</span>
+                  <b className="cashback-cash-value">{money(positionBreakdown.cashAmount)}</b>
+                </>}
+                {positionBreakdown.spotAmount > 0 && <>
+                  <span>CASHBACK · {assetLabelUpper}</span>
                     <span className="cashback-spot-value">
                       <b>{positionBreakdown.spotUnits === null ? "SPOT" : `${positionBreakdown.spotUnits.toFixed(2)} ${assetLabel}`}</b>
-                      <small>({money(positionBreakdown.cashOutAmount)})</small>
+                      <small>({money(positionBreakdown.spotAmount)})</small>
                     </span>
-                  )}
                 </>}
               </div>
             </section>

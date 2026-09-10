@@ -13,6 +13,8 @@ export const MAX_V4_LEVERAGE_FACTOR = peapodsLeverageFactor(MAX_V4_LTV);
 export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "2x" : mode === "2.5x-cashback" ? "2x Cashback" : "2.5x";
 export const shortModeLabel = (mode: ShortV4Mode) => longModeLabel(mode);
 export const validP = (p: number) => Math.max(0.000001, p);
+export const resolveCashbackRouting = (routing: CashbackMode, side: "long" | "short"): "cash" | "spot" =>
+  routing === "native" ? (side === "long" ? "cash" : "spot") : routing;
 
 /**
  * A 2.5× long makes one 50% cash-out option. Cashback holds half outside the
@@ -20,11 +22,11 @@ export const validP = (p: number) => Math.max(0.000001, p);
  * the complete eligible Long follows the p² payoff. No fixed liability or
  * additional leverage layer is applied.
  */
-export const longValue = (p: number, mode: LongV4Mode | number, routing: CashbackMode = "cash") => {
+export const longValue = (p: number, mode: LongV4Mode | number, routing: CashbackMode = "native") => {
   if (typeof mode === "number") mode = mode >= .625 ? (routing === "spot" ? "2.5x-looped" : "2.5x-cashback") : "2x";
   p = validP(p);
   if (mode === "2x") return p;
-  if (mode === "2.5x-cashback") return 0.5 * p ** 2 + 0.5 * (routing === "spot" ? p : 1);
+  if (mode === "2.5x-cashback") return 0.5 * p ** 2 + 0.5 * (resolveCashbackRouting(routing, "long") === "spot" ? p : 1);
   return p ** 2;
 };
 export const normaliseLongMode = (c: Config): LongV4Mode => c.longMode ?? (c.longLtv && c.longLtv >= .625 ? (c.cashOutEnabled === false || c.degenEnabled ? "2.5x-looped" : "2.5x-cashback") : "2x");
@@ -44,12 +46,12 @@ const shortRebalancedValue = (p: number, ltv: SupportedV4Ltv) => {
 };
 const shortCashbackPositionValue = (p: number) => {
   p = validP(p);
-  return 1 / p ** 2;
+  return 1 / p;
 };
-export const shortValue = (p: number, mode: ShortV4Mode | SupportedV4Ltv, routing: CashbackMode = "cash") => {
+export const shortValue = (p: number, mode: ShortV4Mode | SupportedV4Ltv, routing: CashbackMode = "native") => {
   if (typeof mode === "number") return shortRebalancedValue(p, mode);
   if (mode === "2x") return shortRebalancedValue(p, .5);
-  if (mode === "2.5x-cashback") return .5 * shortCashbackPositionValue(p) + .5 * (routing === "spot" ? validP(p) : 1);
+  if (mode === "2.5x-cashback") return .5 * shortCashbackPositionValue(p) + .5 * (resolveCashbackRouting(routing, "short") === "spot" ? validP(p) : 1);
   const eligible = shortRebalancedValue(p, .75);
   return eligible;
 };
@@ -60,6 +62,8 @@ export interface PortfolioComponents {
   long: number;
   short: number;
   cashOut: number;
+  cashbackCash: number;
+  cashbackSpot: number;
   cashbackValue: number;
   insideV4: number;
   total: number;
@@ -70,10 +74,16 @@ export const portfolioComponents = (p: number, c: Config): PortfolioComponents =
   const shortMode = normaliseShortMode(c);
   const long = c.longAllocation * longValue(p, longMode, c.cashbackMode);
   const short = (1 - c.longAllocation) * shortValue(p, shortMode, c.cashbackMode);
-  const cashOut = c.longAllocation * productCashOutRate(longMode) + (1 - c.longAllocation) * productCashOutRate(shortMode);
+  const longCashback = c.longAllocation * productCashOutRate(longMode);
+  const shortCashback = (1 - c.longAllocation) * productCashOutRate(shortMode);
+  const cashOut = longCashback + shortCashback;
+  const spotCashOut = (resolveCashbackRouting(c.cashbackMode, "long") === "spot" ? longCashback : 0)
+    + (resolveCashbackRouting(c.cashbackMode, "short") === "spot" ? shortCashback : 0);
+  const cashbackCash = cashOut - spotCashOut;
+  const cashbackSpot = spotCashOut * p;
   const total = long + short;
-  const cashbackValue = cashOut * (c.cashbackMode === "spot" ? p : 1);
-  return { long, short, cashOut, cashbackValue, insideV4: total - cashbackValue, total };
+  const cashbackValue = cashbackCash + cashbackSpot;
+  return { long, short, cashOut, cashbackCash, cashbackSpot, cashbackValue, insideV4: total - cashbackValue, total };
 };
 export const portfolioValue = (p: number, c: Config) => portfolioComponents(p, c).total;
 export const portfolioReturn = (p: number, c: Config) => portfolioValue(p, c) - 1;
