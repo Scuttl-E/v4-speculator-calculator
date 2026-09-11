@@ -48,6 +48,14 @@ const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
 const point = (id: string, movePercent: number, activeAfter: number): HarvestPoint => ({ id, movePercent, activeAfter });
 
 describe("Harvester accounting", () => {
+  it("uses reciprocal LoopedUSDC value in no-harvest projections", () => {
+    const snap = snapshot({ longAllocation: 0, shortMode: "2.5x-looped", shortLtv: .75, deposit: 10_000 });
+    for (const p of [.5, 1, 2]) {
+      expect(originalActiveV4Value(snap, p)).toBe(10_000 / p);
+      expect(originalExternalValue(snap, p)).toBe(0);
+      expect(evaluateHarvestPlan(snap, "spot", (p - 1) * 100, []).final.remainingActiveV4).toBe(10_000 / p);
+    }
+  });
   it("keeps USDC+ active equity and no-harvest wealth flat across price moves", () => {
     const snap = snapshot({ longAllocation: 0, shortMode: "2x", deposit: 10_000 });
     for (const p of [.5, 1, 2]) {
@@ -110,11 +118,11 @@ describe("Harvester accounting", () => {
 
   it("scales a mixed Long/Short active position by one identical surviving fraction", () => {
     const snap = snapshot({ longAllocation: .45, longMode: "2.5x-cashback", shortMode: "2.5x-looped" });
-    const after = originalActiveV4Value(snap, 2) * .7;
+    const after = originalActiveV4Value(snap, 2) * .8;
     const result = evaluateHarvestPlan(snap, "spot", 500, [point("a", 100, after)]);
-    expect(result.points[0].longFractionAfter).toBeCloseTo(.7, 10);
-    expect(result.points[0].shortFractionAfter).toBeCloseTo(.7, 10);
-    expect(result.final.remainingActiveV4).toBeCloseTo(originalActiveV4Value(snap, 6) * .7, 10);
+    expect(result.points[0].longFractionAfter).toBeCloseTo(.8, 10);
+    expect(result.points[0].shortFractionAfter).toBeCloseTo(.8, 10);
+    expect(result.final.remainingActiveV4).toBeCloseTo(originalActiveV4Value(snap, 6) * .8, 10);
     const targetLegs = originalActiveV4LegValues(snap, 6);
     expect(targetLegs.long * result.points[0].longFractionAfter + targetLegs.short * result.points[0].shortFractionAfter)
       .toBeCloseTo(result.final.remainingActiveV4, 10);

@@ -2,7 +2,7 @@ import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { ProductRoutingDecision } from "./productRoutingDecision";
 import type { ComparisonMode, Config, OptimiseOptions, OptimiseOutcome } from "./types";
 
-export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-09-11-usdc-plus-price-neutral-1";
+export const OPTIMISER_STATE_MODEL_VERSION = "v4-discrete-products-exhaustive-2026-09-12-looped-usdc-reciprocal-75-ltv-1";
 
 const canonicalise = (value: unknown): unknown => {
   if (typeof value === "number") {

@@ -17,6 +17,15 @@ describe("V4 product labels", () => {
 });
 
 describe("V4 discrete Short products", () => {
+  it("values LoopedUSDC portfolios and isolated risk with maintained 75% LTV", () => {
+    const looped = { ...config("2x", 0), shortMode: "2.5x-looped" as const, shortLtv: .75 };
+    for (const p of [.5, 1, 2]) {
+      expect(dollarValue(p, looped)).toBe(looped.deposit / p);
+      expect(portfolioValue(p, { ...looped, shortMode: undefined })).toBe(1 / p);
+      expect(portfolioComponents(p, looped).cashbackValue).toBe(0);
+    }
+    expect(findWorstComponentDrawdown(looped, analysisRangeFromPercent(-50, 100)).drawdown).toBe(-.5);
+  });
   it.each([.5, 1, 2])("keeps USDC+ price-neutral through named, numeric and retained valuations at p=%s", (p) => {
     const usdc = config("2x", 0);
     expect(shortValue(p, "2x")).toBe(1);
@@ -35,8 +44,8 @@ describe("V4 discrete Short products", () => {
     expect(findDownsideBreakeven(usdc)).toBeNull();
     expect(findUpsideBreakeven(usdc)).toBeNull();
   });
-  it.each([.5, 1, 2])("preserves every other product and numeric looped equation at p=%s", (p) => {
-    const loopedShort = .5 * p + 1 / p - .5;
+  it.each([.5, 1, 2])("uses the maintained-75%-LTV looped equations and preserves other products at p=%s", (p) => {
+    const loopedShort = 1 / p;
     expect(longValue(p, "2x")).toBe(p);
     expect(longPositionValue(p, "2x")).toBe(p);
     expect(longPositionValue(p, "2.5x-cashback")).toBe(p ** 2);

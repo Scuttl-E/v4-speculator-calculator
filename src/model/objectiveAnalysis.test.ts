@@ -94,7 +94,7 @@ describe("objective-specific analysis", () => {
   });
 
   it("reports a downside trough and percentage-point recovery before the bearish target", () => {
-    const result = createObjectiveAnalysis({ ...common, config: { ...config, shortMode: "2.5x-looped", shortLtv: .75 }, objective: "bearish" });
+    const result = createObjectiveAnalysis({ ...common, config: { ...config, longAllocation: .6, shortMode: "2.5x-looped", shortLtv: .75 }, objective: "bearish" });
     expect(result?.kind).toBe("bearish");
     if (!result || result.kind !== "bearish") return;
     expect(result.troughMove).toBeGreaterThan(result.targetMove);

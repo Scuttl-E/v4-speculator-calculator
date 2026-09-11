@@ -128,34 +128,20 @@ The Long values are modelled as:
 - `SuperTKN: 0.5p² + 0.5R(p)`
 - `LoopedTKN: p²`
 
-LoopedUSDC retains the inverse-exposure parameter:
-
-`m = 0.5 ÷ (1 - Short LTV)`
-
-LoopedUSDC continues to use `m = 2`. This parameter scales its inverse-price sleeve; it is not an exponent and does not apply to USDC+. SuperUSDC retains its existing reciprocal-price V4 sleeve.
-
-The LoopedUSDC model uses the rebalanced curve:
-
-`Sₘ(p) = 0.5 + 0.5p + 0.5m ÷ p - 0.5m`
-
-Equivalently:
-
-`Sₘ(p) = 0.5p + 0.5m ÷ p + 0.5(1 - m)`
-
-This decomposition shows the modelled positive-price sleeve, the inverse-price sleeve scaled by `m`, and the cash or borrowing adjustment that normalises the curve to `1.00` at entry.
+The looped equations assume maintained 75% LTV: LoopedTKN follows `p²` and LoopedUSDC follows `1 / p`. Values are normalized to starting net equity, before yield and costs. The actual products' LTV remains unconfirmed.
 
 The Short values are modelled as:
 
 - `USDC+: 1` (price-only return: `0`)
 - `SuperUSDC: 0.5 / p + 0.5R(p)`
-- `LoopedUSDC: Sₘ₌₂(p)`
+- `LoopedUSDC: 1 / p`
 
 The existing SuperUSDC cashback routes resolve to:
 
 - `Cash: 0.5 + 0.5 / p`
 - `Spot: 0.5p + 0.5 / p`
 
-`Short` groups USDC+, SuperUSDC and LoopedUSDC. USDC+ is price-neutral; the other two retain their existing inverse/rebalanced curves. In particular, routing Cashback to spot can offset part or all of the retained Short exposure.
+`Short` groups USDC+, SuperUSDC and LoopedUSDC. USDC+ is price-neutral; SuperUSDC includes its reciprocal V4 sleeve and separate Cashback, while LoopedUSDC follows `1 / p`. In particular, routing Cashback to spot can offset part or all of the retained Short exposure.
 
 If `a` is the proportion of starting capital allocated to Long, the combined normalised position is:
 
@@ -407,7 +393,7 @@ TKN+ tracks the underlying price. SuperTKN and LoopedTKN retain their existing c
 
 ### Short model
 
-USDC+ has constant price-only value equal to its starting net equity, before yield and costs. SuperUSDC retains its reciprocal-price V4 sleeve and separate Cashback. LoopedUSDC retains the complete `m = 2` rebalanced curve. The calculation does not simulate the rebalancing path or its associated yield and costs.
+USDC+ has constant price-only value equal to its starting net equity, before yield and costs. SuperUSDC retains its reciprocal-price V4 sleeve and separate Cashback. LoopedUSDC follows `1 / p` under the assumed maintained-75%-LTV model; actual product LTV is unconfirmed. The calculation does not simulate the rebalancing path or its associated yield and costs.
 
 ### Risk and liquidation
 

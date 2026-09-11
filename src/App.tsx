@@ -2348,9 +2348,6 @@ export default function App() {
                 <div className="equation-stack">
                   <code><var>p</var> = 1 + {assetLabelLower} move ÷ 100</code>
                   <code>LF<sub>L/S</sub> = 1 + 2 × LTV<sub>L/S</sub></code>
-                  <code><var>m</var><sub>S</sub> = 0.5 ÷ (1 − LTV<sub>S</sub>)</code>
-                  <code>S<sub>m</sub>(p) = 0.5 + 0.5p + 0.5m ÷ p − 0.5m</code>
-                  <code>S<sub>m</sub>(p) = 0.5p + 0.5m ÷ p + 0.5(1 − m)</code>
                   <code><var>V</var><sub>4</sub>(p) = <var>a</var>L<sub>product</sub>(p) + (1 − <var>a</var>)S<sub>product</sub>(p)</code>
                   <code>chart return = 100 × [<var>V</var><sub>4</sub>(p) − 1]</code>
                 </div>
@@ -2359,8 +2356,7 @@ export default function App() {
                   Dollar value is deposit × <var>V</var><sub>4</sub>(p). The held-spot
                   comparator is simply deposit × <var>p</var>. Long and Short products
                   are discrete. <var>LF</var> describes gross position formation, not a
-                  direct return multiplier; <var>m</var><sub>S</sub> scales the Short
-                  inverse-price sleeve for LoopedUSDC only.
+                  direct return multiplier. LoopedTKN and LoopedUSDC assume maintained 75% LTV; actual product LTV is unconfirmed.
                 </p>
               </section>
 
@@ -2394,7 +2390,7 @@ export default function App() {
     <code>S<sub>USDC+</sub>(p) = 1</code>
     <code>S<sub>SuperUSDC,cash</sub>(p) = 0.5 + 0.5 / p</code>
     <code>S<sub>SuperUSDC,native/spot</sub>(p) = 0.5p + 0.5 / p</code>
-    <code>S<sub>LoopedUSDC</sub>(p) = S<sub>m=2</sub>(p)</code>
+    <code>S<sub>LoopedUSDC</sub>(p) = 1 / p</code>
     <CalculationUnderReviewWarning className="maths-review-warning" />
   </div>
 </section>
@@ -2435,7 +2431,7 @@ export default function App() {
       </li>
 
       <li>
-        USDC+ is price-neutral before yield and costs: its TKN holdings and TKN debt cancel at 50% debt-to-total-LP value. SuperUSDC and LoopedUSDC retain their inverse/rebalanced curves. Spot-routed Cashback
+        USDC+ is price-neutral before yield and costs: its TKN holdings and TKN debt cancel at 50% debt-to-total-LP value. SuperUSDC retains its reciprocal V4 sleeve and separate Cashback. LoopedUSDC follows 1 / p under the maintained-75%-LTV assumption. Spot-routed Cashback
         can partially offset its directional Short exposure.
       </li>
 

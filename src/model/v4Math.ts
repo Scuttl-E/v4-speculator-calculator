@@ -44,8 +44,8 @@ const shortRebalancedValue = (p: number, ltv: SupportedV4Ltv) => {
   // USDC+: at 50% debt-to-total-LP value, TKN holdings and TKN debt cancel
   // directional price exposure. Yield and costs are accounted for separately.
   if (ltv === .5) return 1;
-  p = validP(p); const m = 0.5 / (1 - ltv);
-  return 0.5 + 0.5 * p + (0.5 * m) / p - 0.5 * m;
+  // LoopedUSDC assumes maintained 75% LTV; actual product LTV is unconfirmed.
+  return 1 / validP(p);
 };
 const shortCashbackPositionValue = (p: number) => {
   p = validP(p);

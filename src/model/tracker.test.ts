@@ -36,6 +36,18 @@ const makePosition = (overrides: Partial<Parameters<typeof createTrackedPosition
 });
 
 describe("position tracker accounting", () => {
+  it("marks and partially withdraws LoopedUSDC using reciprocal price exposure", () => {
+    const position = makePosition({ side: "short", product: "2.5x-looped", amount: 10_000 });
+    for (const price of [1_000, 2_000, 4_000]) {
+      expect(trackerBaselineV4AtPrice(position, price)).toBe(10_000 * 2_000 / price);
+      expect(trackerCashbackAtPrice(position, price)).toBe(0);
+    }
+    const observed = setTrackerActualObservation(position, 12_000, 2_000, "2026-02-01T12:00:00.000Z");
+    const reduced = reduceTrackedPosition(observed, 3_000, 2_000, "withdrawal", "2026-03-01T12:00:00.000Z");
+    expect(trackerBaselineV4AtPrice(reduced, 4_000)).toBe(3_750);
+    expect(trackerProjectedActualV4AtPrice(reduced, 4_000, 2_000)).toBe(4_500);
+    expect(trackerWithdrawnCash(reduced)).toBe(3_000);
+  });
   it("marks saved USDC+ positions flat while preserving actual observations and withdrawals", () => {
     const original = makePosition({ side: "short", product: "2x", amount: 10_000 });
     const loaded = normaliseTrackerState({ ...createEmptyTrackerState(), positions: [original] }).positions[0];
