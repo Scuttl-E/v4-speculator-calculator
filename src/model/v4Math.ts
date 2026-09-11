@@ -10,8 +10,8 @@ export const clampV4Ltv = (ltv:number) => ltv >= .625 ? .75 : .5;
 export const payoffExponent = (ltv:number) => .5 / (1-ltv);
 export const MAX_V4_PAYOFF_EXPONENT = payoffExponent(MAX_V4_LTV);
 export const MAX_V4_LEVERAGE_FACTOR = peapodsLeverageFactor(MAX_V4_LTV);
-export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "2x" : mode === "2.5x-cashback" ? "2x Cashback" : "2.5x";
-export const shortModeLabel = (mode: ShortV4Mode) => longModeLabel(mode);
+export const longModeLabel = (mode: LongV4Mode) => mode === "2x" ? "TKN+" : mode === "2.5x-cashback" ? "SuperTKN" : "LoopedTKN";
+export const shortModeLabel = (mode: ShortV4Mode) => mode === "2x" ? "USDC+" : mode === "2.5x-cashback" ? "SuperUSDC" : "LoopedUSDC";
 export const validP = (p: number) => Math.max(0.000001, p);
 export const resolveCashbackRouting = (routing: CashbackMode, side: "long" | "short"): "cash" | "spot" =>
   routing === "native" ? (side === "long" ? "cash" : "spot") : routing;
@@ -41,6 +41,9 @@ export const longPositionValue = (p: number, mode: LongV4Mode) => {
   return p ** 2;
 };
 const shortRebalancedValue = (p: number, ltv: SupportedV4Ltv) => {
+  // USDC+: at 50% debt-to-total-LP value, TKN holdings and TKN debt cancel
+  // directional price exposure. Yield and costs are accounted for separately.
+  if (ltv === .5) return 1;
   p = validP(p); const m = 0.5 / (1 - ltv);
   return 0.5 + 0.5 * p + (0.5 * m) / p - 0.5 * m;
 };
@@ -118,5 +121,5 @@ export function findWorstComponentDrawdown(c:Config,range:AnalysisRange):Trough 
   return troughs.reduce((worst,current)=>current.drawdown<worst.drawdown?current:worst);
 }
 export function findDownsideTrough(c:Config,minP=.01):Trough {if(!Number.isFinite(minP)||minP<=0||minP>=1)throw new RangeError("Downside trough minimum must be between zero and entry");return findMinimumOnInterval(c,minP,1);}
-export function findDownsideBreakeven(c:Config,trough: Trough=findDownsideTrough(c)){let lastP=trough.p,last=portfolioValue(lastP,c)-1;for(let i=1;i<=4000;i++){const p=trough.p-(trough.p-.01)*i/4000,v=portfolioValue(p,c)-1;if(last<=0&&v>=0){let lo=p,hi=lastP;for(let j=0;j<40;j++){const mid=(lo+hi)/2;if(portfolioValue(mid,c)>=1)lo=mid;else hi=mid;}return(lo+hi)/2;}lastP=p;last=v;}return null;}
+export function findDownsideBreakeven(c:Config,trough: Trough=findDownsideTrough(c)){let lastP=trough.p,last=portfolioValue(lastP,c)-1;if(last>=0)return null;for(let i=1;i<=4000;i++){const p=trough.p-(trough.p-.01)*i/4000,v=portfolioValue(p,c)-1;if(last<=0&&v>=0){let lo=p,hi=lastP;for(let j=0;j<40;j++){const mid=(lo+hi)/2;if(portfolioValue(mid,c)>=1)lo=mid;else hi=mid;}return(lo+hi)/2;}lastP=p;last=v;}return null;}
 export function findUpsideBreakeven(c:Config,maxP=5){let lastP=1,last=0,hasDrawnDown=false;for(let i=1;i<=4000;i++){const p=1+(maxP-1)*i/4000,value=portfolioValue(p,c)-1;if(value<-1e-8)hasDrawnDown=true;if(hasDrawnDown&&last<=0&&value>=0){let lo=lastP,hi=p;for(let j=0;j<40;j++){const mid=(lo+hi)/2;if(portfolioValue(mid,c)<1)lo=mid;else hi=mid;}return(lo+hi)/2;}lastP=p;last=value;}return null;}

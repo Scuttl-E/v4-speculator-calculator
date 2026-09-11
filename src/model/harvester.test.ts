@@ -48,6 +48,17 @@ const snapshot = (patch: Partial<Config> = {}) => createHarvesterSnapshot({
 const point = (id: string, movePercent: number, activeAfter: number): HarvestPoint => ({ id, movePercent, activeAfter });
 
 describe("Harvester accounting", () => {
+  it("keeps USDC+ active equity and no-harvest wealth flat across price moves", () => {
+    const snap = snapshot({ longAllocation: 0, shortMode: "2x", deposit: 10_000 });
+    for (const p of [.5, 1, 2]) {
+      expect(originalActiveV4Value(snap, p)).toBe(10_000);
+      expect(originalExternalValue(snap, p)).toBe(0);
+    }
+    for (const move of [-50, 100]) {
+      const result = evaluateHarvestPlan(snap, "spot", move, []);
+      expect(result.final.remainingActiveV4).toBe(10_000);
+    }
+  });
   it("values mixed Native cashback separately from reciprocal Short exposure", () => {
     const snap = snapshot({ deposit: 10_000, longAllocation: .4, longMode: "2.5x-cashback", shortMode: "2.5x-cashback", cashbackMode: "native" });
     expect(originalActiveV4LegValues(snap, 2)).toMatchObject({ long: 8_000, short: 1_500 });

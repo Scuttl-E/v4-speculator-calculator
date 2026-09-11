@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
-import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   TRACKER_ASSETS,
   TRACKER_PRODUCTS,
@@ -13,7 +13,7 @@ import {
   setTrackerActualObservation,
   trackerBaselineV4AtPrice,
   trackerCashbackAtPrice,
-  trackerEffectiveCurrentValue,
+  trackerPositionCurveValues,
   trackerAllAssetsSummary,
   trackerAssetSummary,
   createEmptyTrackerState,
@@ -50,6 +50,11 @@ interface TrackerChartRange {
   maxMove: number;
 }
 
+interface TrackerChartTriggers {
+  up: number | null;
+  down: number | null;
+}
+
 const DEFAULT_TRACKER_CHART_RANGE: TrackerChartRange = { minMove: -80, maxMove: 200 };
 const DETAIL_TRACKER_CHART_RANGE: TrackerChartRange = { minMove: -50, maxMove: 50 };
 
@@ -63,7 +68,7 @@ const nowLocalDateTime = () => {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 };
 const compactDateTime = (value: string) => new Date(value).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
-const positionDisplayLabel = (side: TrackerSide, product: TrackerProduct) => `${side.toUpperCase()} ${product === "2x" ? "2x" : product === "2.5x-cashback" ? "2x CASHBACK" : "2.5x"}`;
+const positionDisplayLabel = (side: TrackerSide, product: TrackerProduct) => trackerProductLabel(side, product);
 
 const wealthViewLabel = (view: TrackerWealthView) => view === "total" ? "TOTAL" : view === "v4-cb" ? "V4 + CB" : "V4 ONLY";
 
@@ -78,8 +83,8 @@ function TrackerTooltip({ active, payload, label, positions, wealthView }: {
   const row = payload[0]?.payload as TrackerCurvePoint | undefined;
   if (!row) return null;
   const visible = positions.filter((position) => position.chartVisible);
-  const originalCapital = positions.reduce((sum, position) => sum + position.originalEntryCapital, 0);
-  const remainingCapital = positions.reduce((sum, position) => sum + position.originalEntryCapital * position.remainingFraction, 0);
+  const originalCapital = positions.reduce((sum, position) => sum + position.funding.freshExternalCapital, 0);
+  const remainingCapital = positions.reduce((sum, position) => sum + position.funding.freshExternalCapital * position.remainingFraction, 0);
   return <div className="tracker-tooltip">
     <div className="tracker-tooltip-head"><b>{label == null ? "—" : `${label >= 0 ? "+" : ""}${label.toFixed(1)}%`}</b><span>{preciseMoney(row.absolutePrice)}</span></div>
     <section>
@@ -89,7 +94,7 @@ function TrackerTooltip({ active, payload, label, positions, wealthView }: {
       <span>Active V4 <strong>{money(row.baselineV4)} / {money(row.actualV4)}</strong></span>
       <span>Cashback <strong>{money(row.cashback)}</strong></span>
       <span>Withdrawn Cash <strong>{money(row.withdrawnCash)}</strong></span>
-      <span>Original / Remaining Capital <strong>{money(originalCapital)} / {money(remainingCapital)}</strong></span>
+      <span>Original / Remaining Cash In <strong>{money(originalCapital)} / {money(remainingCapital)}</strong></span>
     </section>
     {visible.slice(0, 2).map((position) => {
       const values = row.positions[position.id];
@@ -110,6 +115,37 @@ function TrackerTooltip({ active, payload, label, positions, wealthView }: {
   </div>;
 }
 
+function TriggerCallout({ direction, point, cashIn, xPercent, left }: {
+  direction: "up" | "down";
+  point: TrackerCurvePoint;
+  cashIn: number;
+  xPercent: number;
+  left: string;
+}) {
+  const currentTotal = point.combinedActual;
+  const profit = currentTotal - cashIn;
+  const label = direction === "up" ? "UPSIDE TRIGGER" : "DOWNSIDE TRIGGER";
+  const placeLeftOfTrigger = direction === "down" ? xPercent >= 40 : xPercent > 55;
+  return <div className={`tracker-tooltip tracker-trigger-callout ${direction} ${placeLeftOfTrigger ? "align-right" : "align-left"}`} style={{ left }}>
+    <div className="tracker-tooltip-head"><b>{label}</b><span>{point.move >= 0 ? "+" : ""}{point.move.toFixed(1)}%</span></div>
+    <section>
+      <small>TRIGGER OUTCOME</small>
+      <span>Cash In <strong>{money(cashIn)}</strong></span>
+      <span>Current Total <strong>{money(currentTotal)}</strong></span>
+      <span>Profit <strong className={profit >= 0 ? "positive" : "negative"}>{signedMoney(profit)}</strong></span>
+    </section>
+  </div>;
+}
+
+function OpeningPositionsCallout({ positions }: { positions: readonly TrackedPosition[] }) {
+  return <div className="tracker-tooltip tracker-opening-positions">
+    <div className="tracker-tooltip-head"><b>OPENING POSITIONS</b><span>{positions.length}</span></div>
+    <section>
+      {positions.map((position) => <span key={position.id}><small>{positionDisplayLabel(position.side, position.product)} · {position.assetSymbol}</small><strong>{money(position.originalEntryCapital)}</strong></span>)}
+    </section>
+  </div>;
+}
+
 const TrackerChartPanel = memo(function TrackerChartPanel({
   assetSymbol,
   currentPrice,
@@ -122,10 +158,14 @@ const TrackerChartPanel = memo(function TrackerChartPanel({
   setShowCombinedChart,
   showCapitalIn,
   setShowCapitalIn,
+  showOpeningPositions,
+  setShowOpeningPositions,
   expanded,
   onToggleExpanded,
   chartRange,
   onChartRangeChange,
+  chartTriggers,
+  onChartTriggerChange,
 }: {
   assetSymbol: TrackerAsset;
   currentPrice: number;
@@ -138,10 +178,14 @@ const TrackerChartPanel = memo(function TrackerChartPanel({
   setShowCombinedChart: Dispatch<SetStateAction<boolean>>;
   showCapitalIn: boolean;
   setShowCapitalIn: Dispatch<SetStateAction<boolean>>;
+  showOpeningPositions: boolean;
+  setShowOpeningPositions: Dispatch<SetStateAction<boolean>>;
   expanded: boolean;
   onToggleExpanded: () => void;
   chartRange: TrackerChartRange;
   onChartRangeChange: (boundary: keyof TrackerChartRange, value: string) => void;
+  chartTriggers: TrackerChartTriggers;
+  onChartTriggerChange: (direction: keyof TrackerChartTriggers, value: string) => void;
 }) {
   const sampleCount = Math.max(2, Math.round((chartRange.maxMove - chartRange.minMove) * 10) + 1);
   const curve = useMemo(
@@ -156,9 +200,23 @@ const TrackerChartPanel = memo(function TrackerChartPanel({
   }, [chartRange.minMove, chartRange.maxMove]);
   const detailGuides = [-25, -10, 10, 25].filter((move) => move > chartRange.minMove && move < chartRange.maxMove);
   const visiblePositions = positions.filter((position) => position.chartVisible);
+  const triggerPoint = (move: number | null) => move === null ? null : curve.find((point) => Math.abs(point.move - move) < 1e-6) ?? null;
+  const upTriggerPoint = triggerPoint(chartTriggers.up);
+  const downTriggerPoint = triggerPoint(chartTriggers.down);
+  const triggerTotal = (point: TrackerCurvePoint) => positions.reduce(
+    (sum, position) => sum + trackerPositionCurveValues(position, point.absolutePrice, currentPrice, "total", cashbackTranches).actualWealth,
+    0,
+  );
+  const upTriggerTotal = upTriggerPoint === null ? null : { ...upTriggerPoint, combinedActual: triggerTotal(upTriggerPoint) };
+  const downTriggerTotal = downTriggerPoint === null ? null : { ...downTriggerPoint, combinedActual: triggerTotal(downTriggerPoint) };
+  const triggerPercent = (move: number) => (move - chartRange.minMove) / (chartRange.maxMove - chartRange.minMove) * 100;
+  const triggerLeft = (move: number) => {
+    const fraction = triggerPercent(move) / 100;
+    return `calc(${fraction * 100}% + ${94 - 122 * fraction}px)`;
+  };
 
   return <section className={`tracker-chart-panel${expanded ? " expanded" : ""}`}>
-    <div className="tracker-chart-head"><div><small>COMBINED PORTFOLIO RESPONSE · {chartRange.minMove.toFixed(1)}% TO {chartRange.maxMove >= 0 ? "+" : ""}{chartRange.maxMove.toFixed(1)}%</small><b>{assetSymbol} BASELINE vs ACTUAL</b><span>0% = current price {currentPrice > 0 ? preciseMoney(currentPrice) : "not set"} · hover resolution 0.1%</span></div><div className="tracker-chart-actions"><div className="tracker-wealth-view" aria-label="Wealth View">{(["total", "v4-cb", "v4-only"] as const).map((view) => <button key={view} type="button" className={wealthView === view ? "on" : ""} onClick={() => setWealthView(view)}>{wealthViewLabel(view)}</button>)}</div><div className="tracker-chart-range-tools" aria-label="Chart range"><label>FROM <input aria-label="Chart range from" type="number" min="-99.9" max={(chartRange.maxMove - .1).toFixed(1)} step="0.1" value={chartRange.minMove} onChange={(event) => onChartRangeChange("minMove", event.target.value)} />%</label><label>TO <input aria-label="Chart range to" type="number" min={(chartRange.minMove + .1).toFixed(1)} max="500" step="0.1" value={chartRange.maxMove} onChange={(event) => onChartRangeChange("maxMove", event.target.value)} />%</label></div><div className="tracker-chart-legend"><button type="button" className={`tracker-chart-toggle${showCombinedChart ? " on" : ""}`} aria-pressed={showCombinedChart} onClick={() => setShowCombinedChart((visible) => !visible)}><i />COMBINED {showCombinedChart ? "ON" : "OFF"}</button><span className="baseline">BASELINE</span><span className="actual">ACTUAL</span><button type="button" className={`tracker-chart-toggle capital${showCapitalIn ? " on" : ""}`} aria-pressed={showCapitalIn} onClick={() => setShowCapitalIn((visible) => !visible)}><i />CAPITAL IN</button><span>INDIVIDUALS {visiblePositions.length}</span><button type="button" className="tracker-chart-expand" aria-label={expanded ? "Close enlarged chart" : "Enlarge chart"} onClick={onToggleExpanded}>{expanded ? "CLOSE DETAIL" : "ENLARGE"}</button></div></div></div>
+    <div className="tracker-chart-head"><div><small>COMBINED PORTFOLIO RESPONSE · {chartRange.minMove.toFixed(1)}% TO {chartRange.maxMove >= 0 ? "+" : ""}{chartRange.maxMove.toFixed(1)}%</small><b>{assetSymbol} BASELINE vs ACTUAL</b><span>0% = current price {currentPrice > 0 ? preciseMoney(currentPrice) : "not set"} · hover resolution 0.1%</span></div><div className="tracker-chart-actions"><div className="tracker-wealth-view" aria-label="Wealth View">{(["total", "v4-cb", "v4-only"] as const).map((view) => <button key={view} type="button" className={wealthView === view ? "on" : ""} onClick={() => setWealthView(view)}>{wealthViewLabel(view)}</button>)}</div><div className="tracker-chart-range-tools" aria-label="Chart range"><label>FROM <input aria-label="Chart range from" type="number" min="-99.9" max={(chartRange.maxMove - .1).toFixed(1)} step="0.1" value={chartRange.minMove} onChange={(event) => onChartRangeChange("minMove", event.target.value)} />%</label><label>TO <input aria-label="Chart range to" type="number" min={(chartRange.minMove + .1).toFixed(1)} max="500" step="0.1" value={chartRange.maxMove} onChange={(event) => onChartRangeChange("maxMove", event.target.value)} />%</label></div><div className="tracker-chart-trigger-tools" aria-label="Chart triggers"><label>UP TRIGGER <span><em>+</em><input aria-label="Up Trigger" type="number" min="0" max={Math.max(0, chartRange.maxMove)} step="0.1" value={chartTriggers.up ?? ""} onChange={(event) => onChartTriggerChange("up", event.target.value)} /></span>%</label><label>DOWN TRIGGER <span><em>−</em><input aria-label="Down Trigger" type="number" min="0" max={Math.max(0, -chartRange.minMove)} step="0.1" value={chartTriggers.down === null ? "" : Math.abs(chartTriggers.down)} onChange={(event) => onChartTriggerChange("down", event.target.value)} /></span>%</label></div><div className="tracker-chart-legend"><button type="button" className={`tracker-chart-toggle${showCombinedChart ? " on" : ""}`} aria-pressed={showCombinedChart} onClick={() => setShowCombinedChart((visible) => !visible)}><i />COMBINED {showCombinedChart ? "ON" : "OFF"}</button><span className="baseline">BASELINE</span><span className="actual">ACTUAL</span><button type="button" className={`tracker-chart-toggle capital${showCapitalIn ? " on" : ""}`} aria-pressed={showCapitalIn} onClick={() => setShowCapitalIn((visible) => !visible)}><i />CAPITAL IN</button>{expanded && <button type="button" className={`tracker-chart-toggle openings${showOpeningPositions ? " on" : ""}`} aria-pressed={showOpeningPositions} onClick={() => setShowOpeningPositions((visible) => !visible)}><i />OPENINGS {showOpeningPositions ? "ON" : "OFF"}</button>}<span>INDIVIDUALS {visiblePositions.length}</span><button type="button" className="tracker-chart-expand" aria-label={expanded ? "Close enlarged chart" : "Enlarge chart"} onClick={onToggleExpanded}>{expanded ? "CLOSE DETAIL" : "ENLARGE"}</button></div></div></div>
     <div className="tracker-chart">{currentPrice <= 0 || positions.length === 0 ? <div className="tracker-chart-empty">{positions.length === 0 ? "Add a position to begin tracking." : `Enter the current ${assetSymbol} price to build the chart.`}</div> : <ResponsiveContainer><ComposedChart data={curve} margin={{ top: 22, right: 28, bottom: 18, left: 24 }}>
       <CartesianGrid stroke="#312f2c" strokeOpacity={.62} vertical />
       <XAxis dataKey="move" type="number" domain={[chartRange.minMove, chartRange.maxMove]} ticks={axisTicks} tickFormatter={(value) => `${value > 0 ? "+" : ""}${value}%`} stroke="#4f4a45" tick={{ fill: "#aaa097", fontSize: 13 }} label={{ value: `${assetSymbol} move from current price`, position: "insideBottom", offset: -10, fill: "#9e958c", fontSize: 13 }} />
@@ -166,11 +224,19 @@ const TrackerChartPanel = memo(function TrackerChartPanel({
       <Tooltip content={<TrackerTooltip positions={positions} wealthView={wealthView} />} />
       {detailGuides.map((move) => <ReferenceLine key={move} x={move} stroke="#a79b8d" strokeOpacity={.24} strokeWidth={1} strokeDasharray="3 5" />)}
       {chartRange.minMove <= 0 && chartRange.maxMove >= 0 && <ReferenceLine x={0} stroke="#8c7c70" strokeWidth={1.2} label={{ value: "CURRENT", fill: "#c3b1a1", fontSize: 11 }} />}
+      {chartTriggers.up !== null && <ReferenceLine x={chartTriggers.up} stroke="#db9b5f" strokeWidth={1.25} strokeDasharray="5 4" label={{ value: `UP +${chartTriggers.up.toFixed(1)}%`, position: "insideTopLeft", fill: "#e6ad78", fontSize: 10 }} />}
+      {chartTriggers.down !== null && <ReferenceLine x={chartTriggers.down} stroke="#83a7c5" strokeWidth={1.25} strokeDasharray="5 4" label={{ value: `DOWN ${chartTriggers.down.toFixed(1)}%`, position: "insideTopRight", fill: "#a8c5dc", fontSize: 10 }} />}
       {showCapitalIn && freshExternalCapital > 0 && <ReferenceLine y={freshExternalCapital} stroke="#b7aa9d" strokeWidth={1.25} strokeDasharray="6 5" label={{ value: "CAPITAL IN", position: "insideTopRight", fill: "#a99b8e", fontSize: 11 }} />}
       {showCombinedChart && <Line className="tracker-line-baseline" dataKey="combinedBaseline" name="Combined Baseline" stroke="#e18a4a" strokeWidth={2} dot={false} isAnimationActive={false} />}
       {showCombinedChart && <Line className="tracker-line-actual" dataKey="combinedActual" name="Combined Actual" stroke="#69a67a" strokeWidth={2} dot={false} isAnimationActive={false} />}
       {visiblePositions.map((position) => <Line key={position.id} dataKey={(row: TrackerCurvePoint) => row.positions[position.id]?.actualWealth} name={position.id} stroke={position.side === "long" ? "#75a883" : "#c47169"} strokeWidth={visiblePositions.length === 1 ? 1.6 : 1.1} strokeOpacity={visiblePositions.length === 1 ? .9 : .55} dot={false} isAnimationActive={false} />)}
-    </ComposedChart></ResponsiveContainer>}</div>
+      {showCombinedChart && upTriggerPoint && <ReferenceDot x={chartTriggers.up!} y={upTriggerPoint.combinedActual} r={5} fill="#db9b5f" stroke="#fff1df" strokeWidth={1.5} />}
+      {showCombinedChart && downTriggerPoint && <ReferenceDot x={chartTriggers.down!} y={downTriggerPoint.combinedActual} r={5} fill="#83a7c5" stroke="#edf7ff" strokeWidth={1.5} />}
+    </ComposedChart></ResponsiveContainer>}
+      {upTriggerTotal && <TriggerCallout direction="up" point={upTriggerTotal} cashIn={freshExternalCapital} xPercent={triggerPercent(upTriggerTotal.move)} left={triggerLeft(upTriggerTotal.move)} />}
+      {downTriggerTotal && <TriggerCallout direction="down" point={downTriggerTotal} cashIn={freshExternalCapital} xPercent={triggerPercent(downTriggerTotal.move)} left={triggerLeft(downTriggerTotal.move)} />}
+      {expanded && showOpeningPositions && <OpeningPositionsCallout positions={positions} />}
+    </div>
   </section>;
 });
 
@@ -203,8 +269,10 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
   const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
   const [showCombinedChart, setShowCombinedChart] = useState(true);
   const [showCapitalIn, setShowCapitalIn] = useState(true);
+  const [showOpeningPositions, setShowOpeningPositions] = useState(true);
   const [chartExpanded, setChartExpanded] = useState(false);
   const [chartRange, setChartRange] = useState<TrackerChartRange>(DEFAULT_TRACKER_CHART_RANGE);
+  const [chartTriggers, setChartTriggers] = useState<TrackerChartTriggers>({ up: null, down: null });
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
 
   const openExpandedChart = useCallback(() => {
@@ -263,6 +331,13 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
   }, [chartExpanded, closeExpandedChart]);
 
   useEffect(() => {
+    setChartTriggers((current) => ({
+      up: current.up === null ? null : Math.min(current.up, Math.max(0, chartRange.maxMove)),
+      down: current.down === null ? null : chartRange.minMove < 0 ? -Math.min(Math.abs(current.down), -chartRange.minMove) : null,
+    }));
+  }, [chartRange]);
+
+  useEffect(() => {
     setActualDraft(expanded?.actualCurrentValue == null ? "" : String(expanded.actualCurrentValue));
     setWithdrawalDraft("");
     setManagementError(null);
@@ -294,6 +369,18 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
     setChartRange((current) => boundary === "minMove"
       ? { minMove: Math.max(-99.9, Math.min(value, current.maxMove - .1)), maxMove: current.maxMove }
       : { minMove: current.minMove, maxMove: Math.min(500, Math.max(value, current.minMove + .1)) });
+  };
+
+  const updateChartTrigger = (direction: keyof TrackerChartTriggers, rawValue: string) => {
+    if (!rawValue.trim()) {
+      setChartTriggers((current) => ({ ...current, [direction]: null }));
+      return;
+    }
+    const requested = Number(rawValue);
+    if (!Number.isFinite(requested)) return;
+    const magnitude = Math.round(Math.abs(requested) * 10) / 10;
+    const limit = direction === "up" ? Math.max(0, chartRange.maxMove) : Math.max(0, -chartRange.minMove);
+    setChartTriggers((current) => ({ ...current, [direction]: limit > 0 ? direction === "up" ? Math.min(magnitude, limit) : -Math.min(magnitude, limit) : null }));
   };
 
   const selectProduct = (value: string) => {
@@ -465,7 +552,7 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
     if (state.positions.length > 0) setPendingDeletion({ kind: "all" });
   };
 
-  const productOptions = (optionSide: TrackerSide) => TRACKER_PRODUCTS.map((value) => <option className={optionSide} key={`${optionSide}:${value}`} value={`${optionSide}:${value}`}>{trackerProductShortLabel(value)}</option>);
+  const productOptions = (optionSide: TrackerSide) => TRACKER_PRODUCTS.map((value) => <option className={optionSide} key={`${optionSide}:${value}`} value={`${optionSide}:${value}`}>{trackerProductShortLabel(optionSide, value)}</option>);
 
   return createPortal(<div className="tracker-backdrop">
     <section className="tracker-workspace" aria-label="V4 Position Tracker">
@@ -528,7 +615,6 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
             {positions.map((position) => {
               const isExpanded = position.id === expanded?.id;
               const baselineV4Now = currentPrice > 0 ? trackerBaselineV4AtPrice(position, currentPrice) : null;
-              const effectiveV4Now = position.actualCurrentValue !== null ? position.actualCurrentValue : currentPrice > 0 ? trackerEffectiveCurrentValue(position, currentPrice) : null;
               const positionCashbackTranches = state.cashbackTranches.filter((tranche) => tranche.sourcePositionId === position.id);
               const cashbackGenerated = positionCashbackTranches.reduce((sum, tranche) => sum + tranche.originalUsdAmount, 0);
               const cashbackUsed = positionCashbackTranches.reduce((sum, tranche) => sum + tranche.deployedUsdAmount, 0);
@@ -537,10 +623,8 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
               return <article key={position.id} className={`${position.chartVisible ? "chart-on" : ""}${isExpanded ? " expanded" : ""}`}>
                 <div className="tracker-position-line">
                   <button type="button" className="tracker-position-toggle" aria-pressed={position.chartVisible} onClick={() => updatePosition(position.id, (current) => ({ ...current, chartVisible: !current.chartVisible, updatedAt: new Date().toISOString() }))}>
-                    <span className={`tracker-position-badge ${position.side}`}>{positionDisplayLabel(position.side, position.product)}</span>
-                    <b className="tracker-position-asset">{position.assetSymbol}</b>
-                    <strong className="tracker-position-amount">{position.side === "long" ? `${compactNumber(position.originalInputAmount)} ${position.assetSymbol}` : money(position.originalInputAmount)}</strong>
-                    <span className="tracker-position-current"><small>CURRENT V4</small><b>{effectiveV4Now === null ? "—" : money(effectiveV4Now)}</b></span>
+                    <span className="tracker-position-identity"><span className={`tracker-position-badge ${position.side}`}>{positionDisplayLabel(position.side, position.product)}</span><b className="tracker-position-asset">{position.assetSymbol}</b></span>
+                    <span className="tracker-position-entered"><small>POSITION ENTERED</small><b>{position.side === "long" ? `${compactNumber(position.originalInputAmount)} ${position.assetSymbol}` : money(position.originalInputAmount)}</b></span>
                   </button>
                   <button type="button" className="tracker-disclosure" aria-label={`${isExpanded ? "Collapse" : "Expand"} ${trackerProductLabel(position.side, position.product)}`} aria-expanded={isExpanded} onClick={() => setExpandedPositionId(isExpanded ? null : position.id)}>{isExpanded ? "⌄" : "›"}</button>
                 </div>
@@ -588,10 +672,14 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
           setShowCombinedChart={setShowCombinedChart}
           showCapitalIn={showCapitalIn}
           setShowCapitalIn={setShowCapitalIn}
+          showOpeningPositions={showOpeningPositions}
+          setShowOpeningPositions={setShowOpeningPositions}
           expanded={false}
           onToggleExpanded={openExpandedChart}
           chartRange={chartRange}
           onChartRangeChange={updateChartRange}
+          chartTriggers={chartTriggers}
+          onChartTriggerChange={updateChartTrigger}
         />
 
         <section className="tracker-portfolio-summary">
@@ -665,10 +753,14 @@ export function PositionTrackerOverlay({ state, onChange, onClose }: PositionTra
           setShowCombinedChart={setShowCombinedChart}
           showCapitalIn={showCapitalIn}
           setShowCapitalIn={setShowCapitalIn}
+          showOpeningPositions={showOpeningPositions}
+          setShowOpeningPositions={setShowOpeningPositions}
           expanded
           onToggleExpanded={closeExpandedChart}
           chartRange={chartRange}
           onChartRangeChange={updateChartRange}
+          chartTriggers={chartTriggers}
+          onChartTriggerChange={updateChartTrigger}
         />
       </div>}
       {pendingDeletion && <div className="tracker-confirm-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingDeletion(null); }}>

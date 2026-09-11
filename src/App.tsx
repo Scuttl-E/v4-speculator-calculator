@@ -2262,7 +2262,7 @@ export default function App() {
                 <em>%</em>
               </label>
             </div>
-            <p>V4 products remain capped at 2.5x.</p>
+            <p>Choose from TKN+, SuperTKN and LoopedTKN, or USDC+, SuperUSDC and LoopedUSDC.</p>
           </section>
         </div>
       )}
@@ -2360,7 +2360,7 @@ export default function App() {
                   comparator is simply deposit × <var>p</var>. Long and Short products
                   are discrete. <var>LF</var> describes gross position formation, not a
                   direct return multiplier; <var>m</var><sub>S</sub> scales the Short
-                  inverse-price sleeve.
+                  inverse-price sleeve for LoopedUSDC only.
                 </p>
               </section>
 
@@ -2374,10 +2374,10 @@ export default function App() {
                     </div>
                   </div>
                   <div className="equation-stack">
-                    <code>L<sub>2x</sub>(p) = p</code>
-                    <code>L<sub>cashback,native/cash</sub>(p) = 0.5 + 0.5p<sup>2</sup></code>
-                    <code>L<sub>cashback,spot</sub>(p) = 0.5p + 0.5p<sup>2</sup></code>
-                    <code>L<sub>2.5x</sub>(p) = p<sup>2</sup></code>
+                    <code>L<sub>TKN+</sub>(p) = p</code>
+                    <code>L<sub>SuperTKN,native/cash</sub>(p) = 0.5 + 0.5p<sup>2</sup></code>
+                    <code>L<sub>SuperTKN,spot</sub>(p) = 0.5p + 0.5p<sup>2</sup></code>
+                    <code>L<sub>LoopedTKN</sub>(p) = p<sup>2</sup></code>
                   </div>
                 </section>
 
@@ -2391,10 +2391,10 @@ export default function App() {
   </div>
 
   <div className="equation-stack">
-    <code>S<sub>2x</sub>(p) = S<sub>m=1</sub>(p)</code>
-    <code>S<sub>cashback,cash</sub>(p) = 0.5 + 0.5 / p</code>
-    <code>S<sub>cashback,native/spot</sub>(p) = 0.5p + 0.5 / p</code>
-    <code>S<sub>2.5x</sub>(p) = S<sub>m=2</sub>(p)</code>
+    <code>S<sub>USDC+</sub>(p) = 1</code>
+    <code>S<sub>SuperUSDC,cash</sub>(p) = 0.5 + 0.5 / p</code>
+    <code>S<sub>SuperUSDC,native/spot</sub>(p) = 0.5p + 0.5 / p</code>
+    <code>S<sub>LoopedUSDC</sub>(p) = S<sub>m=2</sub>(p)</code>
     <CalculationUnderReviewWarning className="maths-review-warning" />
   </div>
 </section>
@@ -2435,7 +2435,7 @@ export default function App() {
       </li>
 
       <li>
-        “Short” identifies the inverse/rebalanced product family. Spot-routed Cashback
+        USDC+ is price-neutral before yield and costs: its TKN holdings and TKN debt cancel at 50% debt-to-total-LP value. SuperUSDC and LoopedUSDC retain their inverse/rebalanced curves. Spot-routed Cashback
         can partially offset its directional Short exposure.
       </li>
 
@@ -2798,7 +2798,7 @@ export default function App() {
               <section>
                 <div className="section-label">
                   <b>LEVERAGE</b>
-                  <span>Up to 2.5x</span>
+                  <span>V4 products</span>
                 </div>
                 <label className="field-label">LONG PRODUCT</label>
                 <div className="segments wide cashback-segments product-mode-segments">
@@ -2829,15 +2829,15 @@ export default function App() {
                     {leverageLimitsExpanded && <div className="leverage-limit-editor">
                       <label className="field-label">LONG</label>
                       <div className="segments wide cashback-segments product-mode-segments">
-                        <button className={longLtvLimit < cashbackLtvLimit ? "on" : ""} onClick={() => setLongLtvLimit(twoXLtvLimit)}>2x</button>
+                        <button className={longLtvLimit < cashbackLtvLimit ? "on" : ""} onClick={() => setLongLtvLimit(twoXLtvLimit)}>{longModeLabel("2x")}</button>
                         <button className={longLtvLimit >= cashbackLtvLimit && longLtvLimit < maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(cashbackLtvLimit)}>{longModeLabel("2.5x-cashback")}</button>
-                        <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>2.5x</button>
+                        <button className={longLtvLimit >= maxLtv ? "on" : ""} onClick={() => setLongLtvLimit(maxLtv)}>{longModeLabel("2.5x-looped")}</button>
                       </div>
                       <label className="field-label">SHORT</label>
                       <div className="segments wide cashback-segments product-mode-segments">
-                        <button className={shortLtvLimit < cashbackLtvLimit ? "on" : ""} onClick={() => setShortLtvLimit(twoXLtvLimit)}>2x</button>
-                        <button className={shortLtvLimit >= cashbackLtvLimit && shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(cashbackLtvLimit)}>{longModeLabel("2.5x-cashback")}</button>
-                        <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>2.5x</button>
+                        <button className={shortLtvLimit < cashbackLtvLimit ? "on" : ""} onClick={() => setShortLtvLimit(twoXLtvLimit)}>{shortModeLabel("2x")}</button>
+                        <button className={shortLtvLimit >= cashbackLtvLimit && shortLtvLimit < maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(cashbackLtvLimit)}>{shortModeLabel("2.5x-cashback")}</button>
+                        <button className={shortLtvLimit >= maxLtv ? "on" : ""} onClick={() => setShortLtvLimit(maxLtv)}>{shortModeLabel("2.5x-looped")}</button>
                       </div>
                       <button type="button" className="reset-leverage-limits" onClick={() => { setLongLtvLimit(maxLtv); setShortLtvLimit(maxLtv); setLeverageLimitsExpanded(false); }}>RESET TO AUTO</button>
                     </div>}

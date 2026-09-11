@@ -16,6 +16,9 @@ import {
   trackerEffectiveCurrentValue,
   trackerPositionCurveValues,
   trackerProjectedActualV4AtPrice,
+  trackerProductLabel,
+  trackerProductShortLabel,
+  trackerProductBadge,
   trackerWithdrawnCash,
   type TrackerAsset,
 } from "./tracker";
@@ -33,6 +36,31 @@ const makePosition = (overrides: Partial<Parameters<typeof createTrackedPosition
 });
 
 describe("position tracker accounting", () => {
+  it("marks saved USDC+ positions flat while preserving actual observations and withdrawals", () => {
+    const original = makePosition({ side: "short", product: "2x", amount: 10_000 });
+    const loaded = normaliseTrackerState({ ...createEmptyTrackerState(), positions: [original] }).positions[0];
+    expect(loaded.product).toBe("2x");
+    for (const price of [1_000, 2_000, 4_000]) {
+      expect(trackerBaselineV4AtPrice(loaded, price)).toBe(10_000);
+      expect(trackerCashbackAtPrice(loaded, price)).toBe(0);
+    }
+    const observed = setTrackerActualObservation(loaded, 10_500, 2_000, "2026-02-01T12:00:00.000Z");
+    const reduced = reduceTrackedPosition(observed, 2_100, 2_000, "withdrawal", "2026-03-01T12:00:00.000Z");
+    const curve = buildTrackerCurve([reduced], 2_000, "total", -50, 100, 3);
+    for (const point of curve) {
+      expect(point.baselineV4).toBe(8_000);
+      expect(point.actualV4).toBe(8_400);
+      expect(point.withdrawnCash).toBe(2_100);
+      expect(point.combinedActual).toBe(10_500);
+    }
+  });
+  it("exports side-aware labels for every saved product identifier", () => {
+    const modes = ["2x", "2.5x-cashback", "2.5x-looped"] as const;
+    for (const label of [trackerProductLabel, trackerProductShortLabel, trackerProductBadge]) {
+      expect(modes.map((mode) => label("long", mode))).toEqual(["TKN+", "SuperTKN", "LoopedTKN"]);
+      expect(modes.map((mode) => label("short", mode))).toEqual(["USDC+", "SuperUSDC", "LoopedUSDC"]);
+    }
+  });
   it("defaults to Native and preserves cash and asset tranches when saved and loaded", () => {
     let state = createEmptyTrackerState();
     for (const side of ["long", "short"] as const) {

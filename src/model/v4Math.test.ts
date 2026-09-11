@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisRangeFromPercent, findWorstComponentDrawdown, findWorstDrawdown, longModeLabel, longValue, portfolioComponents, portfolioValue, shortModeLabel, shortPositionValue, shortValue } from "./v4Math";
+import { analysisRangeFromPercent, dollarValue, findDownsideBreakeven, findUpsideBreakeven, findWorstComponentDrawdown, findWorstDrawdown, longModeLabel, longPositionValue, longValue, portfolioComponents, portfolioReturn, portfolioValue, shortModeLabel, shortPositionValue, shortValue } from "./v4Math";
 import type { Config } from "./types";
 
 const config = (longMode: Config["longMode"], longAllocation = 1): Config => ({
@@ -9,15 +9,48 @@ const config = (longMode: Config["longMode"], longAllocation = 1): Config => ({
 });
 
 describe("V4 product labels", () => {
-  it("uses the user-facing leverage terminology for Long and Short", () => {
-    const expected = ["2x", "2x Cashback", "2.5x"];
+  it("uses the product names without changing stored product identifiers", () => {
     const modes = ["2x", "2.5x-cashback", "2.5x-looped"] as const;
-    expect(modes.map(longModeLabel)).toEqual(expected);
-    expect(modes.map(shortModeLabel)).toEqual(expected);
+    expect(modes.map(longModeLabel)).toEqual(["TKN+", "SuperTKN", "LoopedTKN"]);
+    expect(modes.map(shortModeLabel)).toEqual(["USDC+", "SuperUSDC", "LoopedUSDC"]);
   });
 });
 
 describe("V4 discrete Short products", () => {
+  it.each([.5, 1, 2])("keeps USDC+ price-neutral through named, numeric and retained valuations at p=%s", (p) => {
+    const usdc = config("2x", 0);
+    expect(shortValue(p, "2x")).toBe(1);
+    expect(shortValue(p, .5)).toBe(1);
+    expect(shortPositionValue(p, "2x")).toBe(1);
+    expect(portfolioValue(p, usdc)).toBe(1);
+    expect(dollarValue(p, usdc)).toBe(usdc.deposit);
+    expect(portfolioReturn(p, usdc)).toBe(0);
+    expect(portfolioComponents(p, usdc).cashbackValue).toBe(0);
+  });
+  it("gives USDC+ no price-only drawdown", () => {
+    const usdc = config("2x", 0);
+    const range = analysisRangeFromPercent(-50, 100);
+    expect(findWorstComponentDrawdown(usdc, range).drawdown).toBe(0);
+    expect(findWorstDrawdown(usdc, range).drawdown).toBe(0);
+    expect(findDownsideBreakeven(usdc)).toBeNull();
+    expect(findUpsideBreakeven(usdc)).toBeNull();
+  });
+  it.each([.5, 1, 2])("preserves every other product and numeric looped equation at p=%s", (p) => {
+    const loopedShort = .5 * p + 1 / p - .5;
+    expect(longValue(p, "2x")).toBe(p);
+    expect(longPositionValue(p, "2x")).toBe(p);
+    expect(longPositionValue(p, "2.5x-cashback")).toBe(p ** 2);
+    expect(longPositionValue(p, "2.5x-looped")).toBe(p ** 2);
+    expect(shortPositionValue(p, "2.5x-cashback")).toBe(1 / p);
+    expect(shortPositionValue(p, "2.5x-looped")).toBe(loopedShort);
+    expect(shortValue(p, .75)).toBe(loopedShort);
+    for (const route of ["native", "cash", "spot"] as const) {
+      expect(longValue(p, "2.5x-cashback", route)).toBe(.5 * p ** 2 + .5 * (route === "spot" ? p : 1));
+      expect(shortValue(p, "2.5x-cashback", route)).toBe(.5 / p + .5 * (route === "cash" ? 1 : p));
+      expect(longValue(p, "2.5x-looped", route)).toBe(p ** 2);
+      expect(shortValue(p, "2.5x-looped", route)).toBe(loopedShort);
+    }
+  });
   it("matches the supplied Native Short Cashback curve at half and double price", () => {
     expect(shortValue(.5, "2.5x-cashback")).toBe(1.25);
     expect(shortValue(2, "2.5x-cashback")).toBe(1.25);
@@ -124,7 +157,7 @@ describe("V4 discrete Long products", () => {
       .toBeCloseTo(-.9999, 12);
   });
   it("uses the worse isolated leg for risk instead of allowing legs to mask each other", () => {
-    const mixed = config("2x", .5);
+    const mixed = { ...config("2x", .5), shortMode: "2.5x-looped" as const };
     const range = analysisRangeFromPercent(-80, 200);
     expect(findWorstComponentDrawdown(mixed, range).drawdown)
       .toBeLessThan(findWorstDrawdown(mixed, range).drawdown);

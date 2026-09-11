@@ -19,10 +19,10 @@ V4 Speculator can:
 
 - combine independently selected Long V4 and Short V4 products;
 - allocate capital continuously between the Long and Short sides;
-- model the `2x`, `2x Cashback`, and `2.5x` products on either side;
+- model TKN+, SuperTKN and LoopedTKN on the Long side, and USDC+, SuperUSDC and LoopedUSDC on the Short side;
 - route Cashback to fixed cash or a spot-asset holding;
 - let the optimiser exclude, require, or automatically assess Cashback products;
-- constrain Long and Short products independently to `2x` only or the complete product set through `2.5x`;
+- constrain each side to its basic product, include its Cashback product, or allow its complete product set;
 - enforce maximum isolated-leg drawdown across a configurable analysis range;
 - optimise for bullish, bearish, parity, and full-range benchmark objectives;
 - compare V4 with spot, leveraged lending positions, and perpetual futures;
@@ -68,17 +68,17 @@ Long and Short positions can each use the same three configurations. The product
 
 At a high level, the Cashback model starts with 100% of the user's capital supplied as one side of the LP and 150% of that value borrowed in the paired asset. 100% of the borrowed asset is paired with the supplied asset to form the LP, while the additional 50% is paid out as Cashback. The same entry accounting is used for both Long and Short Cashback products; their payoff curves differ after entry.
 
-### 2x
+### TKN+ and USDC+
 
-`2x` is the standard V4 position. The user's starting capital supplies one side of the LP and the protocol effectively borrows the paired side needed to create the position. The full starting capital remains committed to V4 and no Cashback is taken out.
+`TKN+` and `USDC+` are the basic Long and Short positions. The user's starting capital supplies one side of the LP and the protocol effectively borrows the paired side needed to create the position. The full starting capital remains committed to V4 and no Cashback is taken out.
 
 **Example:** `$10,000 starting capital → $20,000 gross V4 exposure`
 
-The position therefore has a `2x` leverage factor: twice as much gross exposure as the capital supplied by the user.
+This gross exposure does not imply a 2x return. TKN+ follows the token price. USDC+ is price-neutral before yield and costs: a maintained 50/50 LP with TKN borrowing at 50% debt-to-total-LP value has equal TKN holdings and TKN debt. Its price-only value remains the starting net equity.
 
-### 2x Cashback
+### SuperTKN and SuperUSDC
 
-`2x Cashback` models the user supplying 100% of the starting capital as one side of the LP and borrowing 150% of its value in the paired asset. 100% of the borrowed asset is used to complete the LP, while the additional 50% borrow is paid out to the user as Cashback.
+`SuperTKN` and `SuperUSDC` model the user supplying 100% of the starting capital as one side of the LP and borrowing 150% of its value in the paired asset. 100% of the borrowed asset is used to complete the LP, while the additional 50% borrow is paid out to the user as Cashback.
 
 In the calculator, that Cashback therefore equals 50% of the starting deposit. At entry, 50% of the original net value remains inside V4 and 50% sits outside as Cashback, while total net wealth remains equal to the original deposit.
 
@@ -88,22 +88,22 @@ Cash routing keeps the Cashback value fixed after entry. Spot routing gives that
 
 The Cashback is created once. It is not recursively reinvested, multiplied again, or counted both inside and outside V4.
 
-### 2.5x
+### LoopedTKN and LoopedUSDC
 
-`2.5x` uses the same additional gross `0.5x` inside the V4 position instead of returning it as Cashback. This increases the gross working position and leaves no external Cashback.
+`LoopedTKN` and `LoopedUSDC` use the same additional gross `0.5x` inside the V4 position instead of returning it as Cashback. This increases the gross working position and leaves no external Cashback.
 
 **Example:** `$10,000 starting capital → $25,000 gross V4 exposure`
 
-The complete `2.5x` exposure remains working inside V4.
+The complete looped exposure remains working inside V4.
 
-Gross exposure is not additional net wealth. Borrowed financing and the position's internal liabilities offset its gross assets, and every modelled product is normalised to the original deposit at entry. In the `$10,000` Cashback example, total modelled wealth at entry remains `$10,000`: `$5,000` is external Cashback and `$5,000` is the net value still inside V4, even though the gross working exposure is larger. For `2.5x`, the complete `$10,000` of net entry value remains inside V4.
+Gross exposure is not additional net wealth. Borrowed financing and the position's internal liabilities offset its gross assets, and every modelled product is normalised to the original deposit at entry. In the `$10,000` Cashback example, total modelled wealth at entry remains `$10,000`: `$5,000` is external Cashback and `$5,000` is the net value still inside V4, even though the gross working exposure is larger. For either looped product, the complete `$10,000` of net entry value remains inside V4.
 
 ### The key difference
 
-`2x Cashback` and `2.5x` are two different uses of the additional gross `0.5x` made available during position formation:
+The Cashback and looped products are two different uses of the additional gross `0.5x` made available during position formation:
 
-- `2x Cashback` returns it to the user; and
-- `2.5x` keeps it working inside V4.
+- `SuperTKN` / `SuperUSDC` return it to the user; and
+- `LoopedTKN` / `LoopedUSDC` keep it working inside V4.
 
 It is never used in both places at once.
 
@@ -124,17 +124,17 @@ The product formation leverage factor is:
 
 The Long values are modelled as:
 
-- `2x: p`
-- `2x Cashback: 0.5p² + 0.5R(p)`
-- `2.5x: p²`
+- `TKN+: p`
+- `SuperTKN: 0.5p² + 0.5R(p)`
+- `LoopedTKN: p²`
 
-The Short model uses the inverse-exposure parameter:
+LoopedUSDC retains the inverse-exposure parameter:
 
 `m = 0.5 ÷ (1 - Short LTV)`
 
-This gives `m = 1` for the modelled `2x` Short and `m = 2` for the modelled `2.5x` Short. The parameter `m` is not an exponent: it scales the inverse-price sleeve in the Short equation. `2x Cashback` is modelled separately using an inverse-square retained V4 sleeve.
+LoopedUSDC continues to use `m = 2`. This parameter scales its inverse-price sleeve; it is not an exponent and does not apply to USDC+. SuperUSDC retains its existing reciprocal-price V4 sleeve.
 
-The Short model uses the rebalanced curve:
+The LoopedUSDC model uses the rebalanced curve:
 
 `Sₘ(p) = 0.5 + 0.5p + 0.5m ÷ p - 0.5m`
 
@@ -146,16 +146,16 @@ This decomposition shows the modelled positive-price sleeve, the inverse-price s
 
 The Short values are modelled as:
 
-- `2x: Sₘ₌₁(p)`
-- `2x Cashback: 0.5 / p² + 0.5R(p)`
-- `2.5x: Sₘ₌₂(p)`
+- `USDC+: 1` (price-only return: `0`)
+- `SuperUSDC: 0.5 / p + 0.5R(p)`
+- `LoopedUSDC: Sₘ₌₂(p)`
 
-This means Short Cashback resolves to:
+The existing SuperUSDC cashback routes resolve to:
 
-- `Cash: 0.5 + 0.5 / p²`
-- `Spot: 0.5p + 0.5 / p²`
+- `Cash: 0.5 + 0.5 / p`
+- `Spot: 0.5p + 0.5 / p`
 
-`Short` identifies the inverse/rebalanced product family rather than guaranteeing that the complete routed position has negative directional exposure at every price. In particular, routing Cashback to spot can offset part or all of the retained Short exposure.
+`Short` groups USDC+, SuperUSDC and LoopedUSDC. USDC+ is price-neutral; the other two retain their existing inverse/rebalanced curves. In particular, routing Cashback to spot can offset part or all of the retained Short exposure.
 
 If `a` is the proportion of starting capital allocated to Long, the combined normalised position is:
 
@@ -227,7 +227,7 @@ Optimise searches the permitted Long product, Short product, Cashback route, and
 
 Cashback product policy can be:
 
-- **Off:** exclude `2x Cashback` from both sides;
+- **Off:** exclude SuperTKN and SuperUSDC;
 - **Forced:** require at least one active Cashback product; or
 - **Auto:** compare Cashback and non-Cashback products.
 
@@ -311,10 +311,11 @@ Defines the underlying-price interval used for isolated-leg drawdown and other f
 
 Long and Short limits are automatic by default and remain collapsed when unused. Each side can be independently restricted to:
 
-- **2x** only; or
-- the complete product set through **2.5x**.
+- **TKN+** / **USDC+** only;
+- include **SuperTKN** / **SuperUSDC**; or
+- include the complete set through **LoopedTKN** / **LoopedUSDC**.
 
-Restricting a side to `2x` removes both `2x Cashback` and `2.5x` for that side. Cashback policy then determines whether `2x Cashback` is allowed among otherwise eligible products.
+Restricting a side to its basic product removes its Cashback and looped products. Cashback policy determines whether SuperTKN or SuperUSDC is allowed among the eligible products.
 
 ### Adverse-side breakeven
 
@@ -366,7 +367,7 @@ Shows:
 - Long and Short capital;
 - the selected product for each side;
 - external Cashback as cash or spot-asset quantity plus current dollar value; and
-- additional capital retained inside V4 by the `2.5x` product.
+- additional capital retained inside V4 by LoopedTKN or LoopedUSDC.
 
 ### Analytical panel
 
@@ -402,11 +403,11 @@ Outputs are therefore not net realised returns. The calculator deliberately sepa
 
 ### Long model
 
-The `2x` Long product tracks the underlying price in the current base model. `2x Cashback` and `2.5x` use the calibrated convex V4 curve, with Cashback partitioned once or retained fully inside V4 according to the selected product.
+TKN+ tracks the underlying price. SuperTKN and LoopedTKN retain their existing convex V4 curves, with Cashback partitioned once or retained fully inside V4 according to the selected product.
 
 ### Short model
 
-The Short equation approximates the gross structural response attributed to ideal rebalancing. It combines a positive-price sleeve with an inverse-price sleeve controlled by `m`, producing a convex curve whose directional exposure and trough depend on the selected product and Cashback route. The `2x` product uses `m = 1`; `2x Cashback` partitions the modelled `m = 2` structural curve once; and `2.5x` retains the complete `m = 2` curve inside V4. The calculation does not simulate the rebalancing path or its associated yield and costs.
+USDC+ has constant price-only value equal to its starting net equity, before yield and costs. SuperUSDC retains its reciprocal-price V4 sleeve and separate Cashback. LoopedUSDC retains the complete `m = 2` rebalanced curve. The calculation does not simulate the rebalancing path or its associated yield and costs.
 
 ### Risk and liquidation
 

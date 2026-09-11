@@ -94,11 +94,15 @@ describe("objective-specific analysis", () => {
   });
 
   it("reports a downside trough and percentage-point recovery before the bearish target", () => {
-    const result = createObjectiveAnalysis({ ...common, objective: "bearish" });
+    const result = createObjectiveAnalysis({ ...common, config: { ...config, shortMode: "2.5x-looped", shortLtv: .75 }, objective: "bearish" });
     expect(result?.kind).toBe("bearish");
     if (!result || result.kind !== "bearish") return;
     expect(result.troughMove).toBeGreaterThan(result.targetMove);
     expect(result.recoveryPts).toBeCloseTo(result.targetReturn - result.troughReturn, 10);
+  });
+
+  it("does not report a downside recovery for price-neutral USDC+", () => {
+    expect(createObjectiveAnalysis({ ...common, config: { ...config, longAllocation: 0 }, objective: "bearish" })).toBeNull();
   });
 
   it("reports benchmark dominance using the active comparison mode", () => {

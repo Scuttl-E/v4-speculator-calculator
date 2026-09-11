@@ -6,7 +6,7 @@ export const isShortCashbackUnderReview = (shortMode?: ShortV4Mode) =>
 export function CalculationUnderReviewWarning({ className = "" }: { className?: string }) {
   return (
     <small className={`calculation-under-review ${className}`.trim()} role="note">
-      Short Cashback calculation updated. Pending confirmation.
+      SuperUSDC calculation updated. Pending confirmation.
     </small>
   );
 }

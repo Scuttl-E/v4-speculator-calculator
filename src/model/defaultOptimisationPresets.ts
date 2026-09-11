@@ -4,6 +4,7 @@ import {
 } from "./generatedDefaultOptimisationPresets";
 import type { ObjectiveAnalysis } from "./objectiveAnalysis";
 import type { ProductRoutingDecision } from "./productRoutingDecision";
+import { OPTIMISER_STATE_MODEL_VERSION } from "./optimisationState";
 import type { ComparisonMode, Objective, OptimiseOptions, OptimiseOutcome } from "./types";
 import { analysisRangeFromPercent, MAX_V4_LTV } from "./v4Math";
 
@@ -15,7 +16,7 @@ export interface DefaultOptimisationPreset {
   objectiveAnalysis: ObjectiveAnalysis | null;
 }
 
-export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION =
+export const DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION: string =
   GENERATED_DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION;
 export const DEFAULT_OPTIMISER_MAX_DRAWDOWN_PERCENT = 50;
 export const MAX_OPTIMISER_DRAWDOWN_PERCENT = 99;
@@ -87,7 +88,8 @@ const objectivesByMode: Record<ComparisonMode, readonly Objective[]> = {
 };
 
 export const DEFAULT_OPTIMISATION_PRESETS: DefaultOptimisationPreset[] =
-  GENERATED_DEFAULT_OPTIMISATION_PRESETS;
+  DEFAULT_OPTIMISATION_PRESET_MODEL_VERSION === OPTIMISER_STATE_MODEL_VERSION
+    ? GENERATED_DEFAULT_OPTIMISATION_PRESETS : [];
 
 export const DEFAULT_OPTIMISATION_PRESET_KEYS =
   (Object.entries(objectivesByMode) as Array<[ComparisonMode, readonly Objective[]]>)

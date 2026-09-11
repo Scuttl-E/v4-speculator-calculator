@@ -1,4 +1,4 @@
-import { longPositionValue, productCashOutRate, resolveCashbackRouting, shortPositionValue } from "./v4Math";
+import { longModeLabel, longPositionValue, productCashOutRate, resolveCashbackRouting, shortModeLabel, shortPositionValue } from "./v4Math";
 import type { CashbackMode, LongV4Mode, ShortV4Mode } from "./types";
 
 export const TRACKER_ASSETS = ["ETH", "BTC", "PEAS"] as const;
@@ -172,13 +172,13 @@ export interface TrackerAllAssetsSummary {
 
 export const TRACKER_PRODUCTS: readonly TrackerProduct[] = ["2x", "2.5x-cashback", "2.5x-looped"];
 
-export const trackerProductShortLabel = (product: TrackerProduct) =>
-  product === "2x" ? "2x" : product === "2.5x-cashback" ? "2x CB" : "2.5x";
+export const trackerProductShortLabel = (side: TrackerSide, product: TrackerProduct) =>
+  side === "long" ? longModeLabel(product) : shortModeLabel(product);
 
 export const trackerProductLabel = (side: TrackerSide, product: TrackerProduct) =>
-  `${trackerProductShortLabel(product)} ${side === "long" ? "Long" : "Short"}`;
+  trackerProductShortLabel(side, product);
 
-export const trackerProductBadge = (product: TrackerProduct) => trackerProductShortLabel(product);
+export const trackerProductBadge = (side: TrackerSide, product: TrackerProduct) => trackerProductShortLabel(side, product);
 
 export const isCashbackProduct = (product: TrackerProduct) => product === "2.5x-cashback";
 
